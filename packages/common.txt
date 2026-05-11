@@ -182,3 +182,4 @@ otf-font-awesome
 htop
 speedtest-cli
 tldr
+inetutils
