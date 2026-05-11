@@ -10,7 +10,7 @@ orca-slicer-bin
 spotube-bin
 teams-for-linux
 zoom
-trash
+# trash → use trash-cli from pacman (common.txt), not the AUR 'trash' package
 wakatime
 balena-etcher
 gearlever

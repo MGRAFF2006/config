@@ -14,8 +14,8 @@ done
 unset _f
 
 # Load machine-specific overrides
-# Priority: 1) hostname file, 2) MACHINE_TYPE env var, 3) auto-detect by hostname
-_machine_type="${MACHINE_TYPE:-$(hostname)}"
+# Priority: 1) MACHINE_TYPE env var, 2) $HOSTNAME (zsh built-in, no binary needed), 3) /etc/hostname
+_machine_type="${MACHINE_TYPE:-${HOSTNAME:-$(cat /etc/hostname 2>/dev/null)}}"
 
 # Auto-detection fallback: if hostname is the same on both (both 'archlinux'),
 # detect by presence of KDE/plasma

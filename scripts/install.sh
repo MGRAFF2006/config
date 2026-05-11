@@ -121,6 +121,11 @@ fi
 
 # ── Step 6: AUR common packages ──────────────
 header "Step 6: AUR Common Packages"
+# Remove conflicting AUR 'trash' package if present (pacman trash-cli is used instead)
+if pacman -Qi trash &>/dev/null 2>&1; then
+  info "Removing conflicting AUR 'trash' package (replaced by trash-cli)..."
+  sudo pacman -Rns --noconfirm trash 2>/dev/null || true
+fi
 info "Installing common AUR packages..."
 grep -v '^#' "$PKG_DIR/aur-common.txt" | grep -v '^$' | \
   xargs -r yay -S --needed --noconfirm || warn "Some AUR packages may have failed"
