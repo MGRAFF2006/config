@@ -1,0 +1,41 @@
+# Desktop (DWM) specific packages
+# Install with: sudo pacman -S --needed - < desktop-dwm.txt
+
+# X11 / DWM stack
+xorg-server
+xorg-xinit
+xorg-xev
+xorg-xinput
+libxft
+libxinerama
+imlib2
+
+# DWM helpers
+feh
+arandr
+flameshot
+dunst
+rofi
+rofi-calc
+rofi-emoji
+
+# Compositor (X11 blur/transparency for DWM)
+# picom-git via AUR
+
+# Bluetooth (standalone, no plasma)
+blueman
+
+# Theming tools (X11)
+lxappearance
+qt6ct
+
+# Audio routing
+qjackctl
+
+# Streaming (DWM/desktop as server makes sense)
+# sunshine-bin via AUR
+
+# Other desktop tools
+filezilla
+w3m
+imv

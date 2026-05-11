@@ -1,0 +1,7 @@
+# Git-ignored files
+reports/
+*.log
+.DS_Store
+*.swp
+*.swo
+*~

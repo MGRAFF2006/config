@@ -1,0 +1,38 @@
+/**
+ * Main Rofi Configuration
+ * Configured with Nord theme, clipboard history, emoji picker, calc, and unduck
+ */
+
+configuration {
+    modi: "combi,drun,calc,emoji,greenclip:greenclip print,unduck:~/.local/bin/rofi-unduck.sh";
+    combi-modes: "drun,calc,emoji,greenclip,unduck";
+    
+    // General Settings
+    show-icons: true;
+    icon-theme: "Papirus";
+    terminal: "alacritty";
+    drun-display-format: "{name}";
+    disable-history: false;
+    sidebar-mode: true;
+    
+    // Mode Display Names
+    display-combi: "🌟 Hub";
+    display-drun: "🚀 Apps";
+    display-calc: "🧮 Calc";
+    display-emoji: "😀 Emoji";
+    display-greenclip: "📋 Clipboard";
+    display-unduck: "🦆 Unduck";
+
+    // Text-based mode switching setup
+    kb-mode-complete: "Tab";
+    kb-row-tab: "";
+    kb-element-next: ""; 
+    kb-row-select: "Control+space";
+
+    // Matching behavior
+    matching: "fuzzy";
+    sort: true;
+    sorting-method: "fzf";
+}
+
+@theme "themes/nord"

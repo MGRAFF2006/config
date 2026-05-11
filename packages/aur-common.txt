@@ -1,0 +1,30 @@
+# AUR packages common to both machines
+# Install with: yay -S --needed - < aur-common.txt
+
+yay-bin
+visual-studio-code-bin
+zen-browser-bin
+ausweisapp2
+localsend-bin
+orca-slicer-bin
+spotube-bin
+teams-for-linux
+zoom
+trash
+wakatime
+balena-etcher
+gearlever
+youtubedownloader
+prismlauncher
+unityhub
+satisfactory-mod-manager-bin
+mathematica
+open-ecard-git
+teamspeak
+uxplay-git
+sunshine-bin
+python-pdfplumber
+python-pynput
+python-chess
+pacseek
+onlyoffice-bin

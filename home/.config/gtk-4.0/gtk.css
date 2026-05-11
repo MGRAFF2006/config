@@ -1,0 +1,45 @@
+/*
+* GTK Colors
+* Generated with Matugen
+*/
+
+@media (prefers-color-scheme: light) {
+    @define-color accent_color #575f6b;
+    @define-color accent_fg_color #ffffff;
+    @define-color accent_bg_color #575f6b;
+    @define-color window_bg_color #fbf9fa;
+    @define-color window_fg_color #1b1b1d;
+    @define-color headerbar_bg_color #dcd9db;
+    @define-color headerbar_fg_color #1b1b1d;
+    @define-color popover_bg_color #dcd9db;
+    @define-color popover_fg_color #1b1b1d;
+    @define-color view_bg_color #fbf9fa;
+    @define-color view_fg_color #1b1b1d;
+    @define-color card_bg_color #fbf9fa;
+    @define-color card_fg_color #1b1b1d;
+    @define-color sidebar_bg_color @window_bg_color;
+    @define-color sidebar_fg_color @window_fg_color;
+    @define-color sidebar_border_color @window_bg_color;
+    @define-color sidebar_backdrop_color @window_bg_color;
+}
+
+@media (prefers-color-scheme: dark) {
+    @define-color accent_color #bfc7d5;
+    @define-color accent_fg_color #29313c;
+    @define-color accent_bg_color #bfc7d5;
+    @define-color window_bg_color #131314;
+    @define-color window_fg_color #e4e2e3;
+    @define-color headerbar_bg_color #131314;
+    @define-color headerbar_fg_color #e4e2e3;
+    @define-color popover_bg_color #131314;
+    @define-color popover_fg_color #e4e2e3;
+    @define-color view_bg_color #131314;
+    @define-color view_fg_color #e4e2e3;
+    @define-color card_bg_color #131314;
+    @define-color card_fg_color #e4e2e3;
+    @define-color sidebar_bg_color @window_bg_color;
+    @define-color sidebar_fg_color @window_fg_color;
+    @define-color sidebar_border_color @window_bg_color;
+    @define-color sidebar_backdrop_color @window_bg_color;
+}
+@import 'colors.css';

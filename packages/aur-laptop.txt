@@ -1,0 +1,4 @@
+# AUR packages for laptop (KDE) only
+# Install with: yay -S --needed - < aur-laptop.txt
+
+# Currently none — add laptop-only AUR packages here

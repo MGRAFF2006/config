@@ -1,0 +1,29 @@
+# Alacritty — Laptop (KDE/Wayland) overrides
+# Symlinked as machine.toml by link-home.sh on the laptop
+
+[window]
+dimensions = { columns = 120, lines = 35 }
+startup_mode = "Maximized"
+opacity = 0.65
+blur = true   # KDE Wayland compositor handles blur
+
+[font]
+size = 14.0
+offset = { x = 0, y = 0 }
+glyph_offset = { x = 0, y = 0 }
+
+[font.normal]
+family = "MesloLGS Nerd Font Mono"
+style = "Regular"
+
+[font.bold]
+family = "MesloLGS Nerd Font Mono"
+style = "Bold"
+
+[font.italic]
+family = "MesloLGS Nerd Font Mono"
+style = "Italic"
+
+[font.bold_italic]
+family = "MesloLGS Nerd Font Mono"
+style = "Bold Italic"

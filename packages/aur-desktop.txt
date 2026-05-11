@@ -1,0 +1,8 @@
+# AUR packages for desktop (DWM) only
+# Install with: yay -S --needed - < aur-desktop.txt
+
+picom-git
+bibata-cursor-theme-bin
+colorpicker-git
+aurutils
+rofi-greenclip

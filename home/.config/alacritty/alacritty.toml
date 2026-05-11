@@ -1,0 +1,120 @@
+# Alacritty — Base configuration (shared)
+# Machine-specific overrides: import laptop.toml or desktop.toml
+# This file is managed by ~/Documents/config
+
+[general]
+live_config_reload = true
+# Import machine-specific overrides — set by link-home.sh symlinking the right file
+import = ["~/.config/alacritty/machine.toml"]
+
+[env]
+TERM = "xterm-256color"
+
+[scrolling]
+history = 10000
+multiplier = 3
+
+[window]
+padding = { x = 10, y = 10 }
+dynamic_padding = true
+decorations = "full"
+title = "Alacritty"
+dynamic_title = true
+class = { instance = "Alacritty", general = "Alacritty" }
+
+[cursor]
+style = { shape = "Beam", blinking = "Never" }
+unfocused_hollow = true
+thickness = 0.15
+
+[mouse]
+hide_when_typing = false
+
+[hints]
+alphabet = "jfkdls;a"
+
+[[hints.enabled]]
+command = "xdg-open"
+hyperlinks = true
+post_processing = true
+persist = false
+mouse.enabled = true
+binding = { key = "U", mods = "Control|Shift" }
+regex = "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)[^\\u0000-\\u001F\\u007F-\\u009F<>\"\\s{-}\\^⟨⟩`]+"
+
+[keyboard]
+bindings = [
+  { key = "Paste",    action = "Paste" },
+  { key = "Copy",     action = "Copy" },
+  { key = "L",        mods = "Control",       action = "ClearLogNotice" },
+  { key = "PageUp",   mods = "Shift",         action = "ScrollPageUp",    mode = "~Alt" },
+  { key = "PageDown", mods = "Shift",         action = "ScrollPageDown",  mode = "~Alt" },
+  { key = "Home",     mods = "Shift",         action = "ScrollToTop",     mode = "~Alt" },
+  { key = "End",      mods = "Shift",         action = "ScrollToBottom",  mode = "~Alt" },
+  { key = "Plus",     mods = "Control",       action = "IncreaseFontSize" },
+  { key = "Minus",    mods = "Control",       action = "DecreaseFontSize" },
+  { key = "Key0",     mods = "Control",       action = "ResetFontSize" },
+  { key = "V",        mods = "Control|Shift", action = "Paste" },
+  { key = "C",        mods = "Control|Shift", action = "Copy" },
+  { key = "Insert",   mods = "Shift",         action = "PasteSelection" },
+]
+
+# ── Nord Color Theme ─────────────────────────
+[colors.primary]
+background = "#2E3440"
+foreground = "#D8DEE9"
+dim_foreground = "#A5ABB6"
+
+[colors.cursor]
+text = "#2E3440"
+cursor = "#D8DEE9"
+
+[colors.vi_mode_cursor]
+text = "#2E3440"
+cursor = "#D8DEE9"
+
+[colors.selection]
+text = "CellForeground"
+background = "#4C566A"
+
+[colors.search.matches]
+foreground = "CellBackground"
+background = "#88C0D0"
+
+[colors.search.focused_match]
+foreground = "CellBackground"
+background = "#434C5E"
+
+[colors.footer_bar]
+background = "#434C5E"
+foreground = "#D8DEE9"
+
+[colors.normal]
+black   = "#3B4252"
+red     = "#BF616A"
+green   = "#A3BE8C"
+yellow  = "#EBCB8B"
+blue    = "#81A1C1"
+magenta = "#B48EAD"
+cyan    = "#88C0D0"
+white   = "#E5E9F0"
+
+[colors.bright]
+black   = "#4C566A"
+red     = "#BF616A"
+green   = "#A3BE8C"
+yellow  = "#EBCB8B"
+blue    = "#81A1C1"
+magenta = "#B48EAD"
+cyan    = "#8FBCBB"
+white   = "#ECEFF4"
+
+[colors.dim]
+black   = "#373E4D"
+red     = "#94545D"
+green   = "#809575"
+yellow  = "#B29E75"
+blue    = "#68809A"
+magenta = "#8C738C"
+cyan    = "#6D96A5"
+white   = "#AEB3BB"

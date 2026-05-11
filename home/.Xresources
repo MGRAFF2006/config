@@ -1,0 +1,13 @@
+! ~/.Xresources — X11 resource configuration
+! Managed by ~/Documents/config
+
+! Cursor theme
+Xcursor.theme: Bibata-Modern-Ice
+Xcursor.size: 24
+
+! DPI (adjust for your monitor)
+Xft.dpi: 96
+Xft.antialias: true
+Xft.hinting: true
+Xft.hintstyle: hintslight
+Xft.rgba: rgb

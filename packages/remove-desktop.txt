@@ -1,0 +1,54 @@
+# Packages to remove from desktop PC during cleanup
+# These are Hyprland remnants, KDE meta, and unused software
+# Run: sudo pacman -Rns $(cat remove-desktop.txt | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
+
+# Hyprland / AGS suite
+illogical-impulse-audio
+illogical-impulse-backlight
+illogical-impulse-basic
+illogical-impulse-fonts-themes
+illogical-impulse-hyprland
+illogical-impulse-microtex-git
+illogical-impulse-microtex-git-debug
+illogical-impulse-portal
+illogical-impulse-python
+illogical-impulse-quickshell-git
+illogical-impulse-screencapture
+illogical-impulse-toolkit
+illogical-impulse-widgets
+nwg-dock-hyprland
+hyprshade
+
+# Wayland-compositor-specific (replaced by X11/picom for DWM)
+swaync
+waybar
+waypaper
+uwsm
+grimblast-git
+
+# KDE / GNOME
+plasma-meta
+plasma-browser-integration
+sddm-kcm
+kde-applications-meta
+nwg-look
+kvantum
+loupe
+nautilus
+nautilus-open-any-terminal
+gnome-calculator
+gnome-text-editor
+mate-polkit
+
+# Removed software
+easyeffects
+goodnotes-electron
+lutris
+zed
+synfigstudio
+phoronix-test-suite
+geekbench
+geekbench-ai
+y-cruncher
+weylus-bin
+microsoft-whiteboard-nativefier

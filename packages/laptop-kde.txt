@@ -1,0 +1,25 @@
+# Laptop (KDE Plasma) specific packages
+# Install with: sudo pacman -S --needed - < laptop-kde.txt
+
+# KDE Plasma desktop
+plasma-meta
+plasma-workspace
+sddm
+sddm-kcm
+xdg-utils
+
+# KDE apps
+dolphin
+ark
+kate
+konsole
+spectacle
+kdeconnect
+plasma-browser-integration
+plasma-nm
+
+# Laptop-specific utilities
+power-profiles-daemon
+
+# Wayland clipboard (KDE/Wayland)
+wl-clipboard

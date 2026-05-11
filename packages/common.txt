@@ -1,0 +1,184 @@
+# Common packages — installed on both laptop and desktop
+# Install with: sudo pacman -S --needed - < common.txt
+
+# Base
+base
+base-devel
+linux
+linux-firmware
+linux-headers
+amd-ucode
+grub
+efibootmgr
+dosfstools
+btrfs-progs
+zram-generator
+smartmontools
+
+# Network
+networkmanager
+iwd
+wireless_tools
+bluez
+bluez-utils
+network-manager-applet
+
+# Audio
+pipewire
+pipewire-alsa
+pipewire-jack
+pipewire-pulse
+wireplumber
+libpulse
+gst-plugin-pipewire
+alsa-utils
+alsa-firmware
+sof-firmware
+alsa-plugins
+pavucontrol
+
+# GPU (AMD — common to both machines)
+xf86-video-amdgpu
+vulkan-radeon
+lib32-vulkan-radeon
+vulkan-intel
+intel-media-driver
+libva-intel-driver
+amdgpu_top
+
+# Power
+power-profiles-daemon
+
+# Terminal / CLI tools
+alacritty
+bat
+btop
+htop
+fzf
+tree
+ncdu
+wget
+fastfetch
+nano
+screen
+man-db
+man-pages
+bash-completion
+reflector
+wl-clipboard
+xclip
+eza
+fd
+lazygit
+git-delta
+duf
+dust
+tldr
+glow
+tmux
+yazi
+ripgrep
+zsh
+zsh-completions
+starship
+zoxide
+
+# Dev
+git
+github-cli
+docker
+docker-compose
+python-pip
+bun
+nodejs
+go
+neovim
+shellcheck
+
+# Editors / IDEs
+obsidian
+
+# Browsers
+chromium
+
+# Communication
+discord
+thunderbird
+signal-desktop
+teams-for-linux
+zoom
+
+# Media / Creative
+vlc
+audacity
+gimp
+krita
+blender
+sox
+obs-studio
+handbrake
+ardour
+ffmpegthumbnailer
+tumbler
+
+# 3D Printing
+# orca-slicer-bin via AUR
+
+# Documents
+calibre
+anki
+onlyoffice-bin
+
+# Security
+bitwarden
+wireguard-tools
+ufw
+
+# Utilities
+qbittorrent
+scrcpy
+jupyter-notebook
+syncthing
+localsend-bin
+flatpak
+trash-cli
+unzip
+plocate
+
+# Gaming
+steam
+prismlauncher
+wine
+goverlay
+
+# Virtualization
+qemu-desktop
+qemu-emulators-full
+libvirt
+virt-manager
+dnsmasq
+
+# ML / AI
+ollama
+
+# Chess
+scid
+python-chess
+
+# File manager (shared)
+gvfs
+
+# Fonts
+ttf-dejavu
+ttf-fira-code
+ttf-fira-sans
+ttf-firacode-nerd
+noto-fonts-cjk
+noto-fonts-emoji
+noto-fonts-extra
+otf-font-awesome
+
+# System info
+htop
+speedtest-cli
+tldr
