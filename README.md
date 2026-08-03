@@ -86,11 +86,17 @@ Machine-specific overrides go in `~/.config/zshrc.d/<hostname>.zsh`.
 
 | Folder | Direction |
 |---|---|
-| `~/Documents/` | ↔ bidirectional |
+| `~/Documents/` | ↔ bidirectional (ignores `/config` via `.stignore`) |
 | `~/Projects/` | ↔ bidirectional |
 | `~/Documents/config/` | ↔ bidirectional |
-| `~/.config/nvim/` | ↔ bidirectional |
-| `~/.config/alacritty/` | ↔ bidirectional |
+
+`~/.config/nvim/` and `~/.config/alacritty/` are NOT separate Syncthing folders
+anymore — they are symlinked into this repo by `link-home.sh` and sync as part
+of the `config` folder. Never sync a path via Syncthing that is also a symlink
+into this repo (it creates self-referencing symlink loops).
+
+`~/Documents/.stignore` on each machine must contain `/config` so the nested
+config repo isn't double-synced (`.stignore` files are per-device, not synced).
 
 ## Manual Steps After Install
 
