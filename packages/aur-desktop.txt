@@ -6,3 +6,4 @@ bibata-cursor-theme-bin
 colorpicker-git
 aurutils
 rofi-greenclip
+mathematica

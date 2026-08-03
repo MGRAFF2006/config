@@ -18,7 +18,6 @@ youtubedownloader
 prismlauncher
 unityhub
 satisfactory-mod-manager-bin
-mathematica
 open-ecard-git
 teamspeak
 uxplay-git
@@ -26,5 +25,6 @@ sunshine-bin
 python-pdfplumber
 python-pynput
 python-chess
+scid
 pacseek
 onlyoffice-bin

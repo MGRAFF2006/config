@@ -5,3 +5,14 @@ reports/
 *.swp
 *.swo
 *~
+
+# Syncthing folder markers
+.stfolder/
+**/.stfolder/
+
+# link-home.sh generated symlink target
+home/.config/alacritty/machine.toml
+
+# editor/backup leftovers
+*.old
+*.save

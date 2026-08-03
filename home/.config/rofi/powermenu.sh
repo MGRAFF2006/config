@@ -36,9 +36,10 @@ run_cmd() {
 			systemctl reboot
 			;;
 		--suspend)
-			mpc -q pause
-			amixer set Master mute
-			systemctl suspend
+			# PipeWire: mute default sink via wpctl (amixer 'Master' doesn't exist on PipeWire)
+			command -v playerctl >/dev/null 2>&1 && playerctl pause 2>/dev/null || true
+			command -v wpctl >/dev/null 2>&1 && wpctl set-mute @DEFAULT_AUDIO_SINK@ 1 2>/dev/null || true
+			"$HOME/dwm/scripts/suspend.sh"
 			;;
 		--logout)
 			case "$DESKTOP_SESSION" in

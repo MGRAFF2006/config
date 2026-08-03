@@ -1,38 +1,123 @@
 /**
- * Main Rofi Configuration
- * Configured with Nord theme, clipboard history, emoji picker, calc, and unduck
+ * Rofi Configuration - Raycast-inspired Hub
+ * All-in-one launcher with !bang prefixes for mode switching
+ *
+ * PREFIXES (type in Hub mode):
+ *   !d  or !drun       -> Apps only
+ *   !c  or !calc       -> Calculator (live eval)
+ *   !w  or !window     -> Window switcher
+ *   !s  or !ssh        -> SSH connections
+ *   !e  or !emoji      -> Emoji picker
+ *   !g  or !greenclip  -> Clipboard history
+ *   !u  or !unduck     -> Web search (!bangs)
+ *   !sn or !snippets   -> Snippets & quicklinks
+ *   !b  or !bookmarks  -> Firefox bookmarks
+ *   !k  or !kill       -> Kill process
+ *   !ob or !obsidian   -> Obsidian vault search
+ *   !bw or !bitwarden  -> Bitwarden passwords
+ *   !re or !recent     -> Recent files
+ *
+ * Tab cycles through all modes (including system tools)
  */
 
 configuration {
-    modi: "combi,drun,calc,emoji,greenclip:greenclip print,unduck:~/.local/bin/rofi-unduck.sh";
-    combi-modes: "drun,calc,emoji,greenclip,unduck";
-    
-    // General Settings
+    /* --- Core Modi --- */
+    modi: "combi,drun,window,filebrowser,ssh,calc,emoji,greenclip:greenclip print,unduck:~/.local/bin/rofi-unduck.sh,bookmarks:~/.local/bin/rofi-bookmarks.sh,kill:~/.local/bin/rofi-kill.sh,recent:~/.local/bin/rofi-recent.sh,obsidian:~/.local/bin/rofi-obsidian.sh,bitwarden:~/.local/bin/rofi-bitwarden.sh,snippets:~/.local/bin/rofi-snippets.sh,wifi:~/.local/bin/rofi-wifi.sh,bluetooth:~/.local/bin/rofi-bluetooth.sh,docker:~/.local/bin/rofi-docker.sh,power:~/.local/bin/rofi-power-profile.sh,dunst:~/.local/bin/rofi-dunst.sh,systemd:~/.local/bin/rofi-systemd.sh,tmux:~/.local/bin/rofi-tmux.sh,screen:~/.local/bin/rofi-screenlayout.sh,sysinfo:~/.local/bin/rofi-sysinfo.sh,timer:~/.local/bin/rofi-timer.sh,color:~/.local/bin/rofi-color.sh,notes:~/.local/bin/rofi-notes.sh,wallpaper:~/.local/bin/rofi-wallpaper.sh,man:~/.local/bin/rofi-man.sh,keys";
+
+    /* --- Combi Hub (Raycast-style unified search) --- */
+    combi-modes: "drun,calc,window,ssh,emoji,greenclip,unduck,snippets,bookmarks,kill,recent,obsidian,bitwarden";
+    combi-display-format: "<span size='small' alpha='50%'>{mode}</span> {text}";
+
+    /* --- General Settings --- */
     show-icons: true;
     icon-theme: "Papirus";
     terminal: "alacritty";
-    drun-display-format: "{name}";
+    drun-display-format: "{name} <span size='small' alpha='60%'>{comment}</span>";
     disable-history: false;
-    sidebar-mode: true;
-    
-    // Mode Display Names
-    display-combi: "🌟 Hub";
-    display-drun: "🚀 Apps";
-    display-calc: "🧮 Calc";
-    display-emoji: "😀 Emoji";
-    display-greenclip: "📋 Clipboard";
-    display-unduck: "🦆 Unduck";
+    sidebar-mode: false;
+    click-to-exit: true;
+    scroll-method: 1;
 
-    // Text-based mode switching setup
+    /* --- Display Names (used as !bang prefix targets) --- */
+    display-combi: " Hub";
+    display-drun: " Apps";
+    display-window: " Windows";
+    display-filebrowser: " Files";
+    display-ssh: " SSH";
+    display-calc: " Calc";
+    display-emoji: " Emoji";
+    display-greenclip: " Clipboard";
+    display-unduck: "󰍉 Search";
+    display-bookmarks: "󰃃 Bookmarks";
+    display-kill: " Kill";
+    display-recent: " Recent";
+    display-obsidian: "󰎚 Obsidian";
+    display-bitwarden: "󰌾 Bitwarden";
+    display-snippets: "󰅍 Snippets";
+    display-wifi: "󰤨 WiFi";
+    display-bluetooth: "󰂯 Bluetooth";
+    display-docker: "󰡨 Docker";
+    display-power: "󰓅 Power";
+    display-dunst: "󰂚 Notifications";
+    display-systemd: " Services";
+    display-tmux: " Tmux";
+    display-screen: "󰹑 Screen";
+    display-sysinfo: "󰍛 System";
+    display-timer: "󰔛 Timer";
+    display-color: " Color";
+    display-notes: "󰏫 Notes";
+    display-wallpaper: "󰸉 Wallpaper";
+    display-man: "󰈙 Man";
+    display-keys: " Keys";
+
+    /* --- Calculator (live eval like Raycast) --- */
+    calc {
+        hint-result: "= ";
+        hint-welcome: "Type an expression...";
+        terse: false;
+        calc-command: "echo -n '{result}' | xclip -selection clipboard";
+        calc-command-history: true;
+        automatic-save-to-history: true;
+        reuse-result: true;
+    }
+
+    /* --- Keybindings (Raycast-style navigation) --- */
     kb-mode-complete: "Tab";
     kb-row-tab: "";
-    kb-element-next: ""; 
+    kb-element-next: "";
     kb-row-select: "Control+space";
+    kb-mode-next: "Control+Tab";
+    kb-mode-previous: "Control+ISO_Left_Tab";
+    kb-remove-to-eol: "";
+    kb-accept-entry: "Return,KP_Enter";
+    kb-accept-custom: "Control+Return";
+    kb-cancel: "Escape,Control+bracketleft";
 
-    // Matching behavior
+    /* --- Matching --- */
     matching: "fuzzy";
     sort: true;
     sorting-method: "fzf";
+    tokenize: true;
+
+    /* --- File Browser --- */
+    filebrowser {
+        directory: "/home/humunkulud";
+        sorting-method: "mtime";
+        directories-first: true;
+    }
+
+    /* --- Window Mode --- */
+    window-format: "{w} {c} {t:40}";
+    window-thumbnail: false;
+
+    /* --- SSH --- */
+    ssh-command: "alacritty -e ssh {host}";
+
+    /* --- Timeout --- */
+    timeout {
+        action: "kb-cancel";
+        delay: 0;
+    }
 }
 
 @theme "themes/nord"

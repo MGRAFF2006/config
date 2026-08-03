@@ -1,6 +1,7 @@
 /**
- * Nord theme for Rofi
- * Matches the official Nord color palette
+ * Nord Clean Theme for Rofi
+ * Minimal, solid, fast -- no transparency gimmicks
+ * Nord palette matched to dwm bar
  */
 
 * {
@@ -16,181 +17,164 @@
     nord9:  #81a1c1;
     nord10: #5e81ac;
     nord11: #bf616a;
-    nord12: #d08770;
-    nord13: #ebcb8b;
     nord14: #a3be8c;
     nord15: #b48ead;
 
-    background:                  @nord0;
-    background-color:            @background;
-    foreground:                  @nord4;
-    border-color:                @nord3;
-    separatorcolor:              @nord3;
-    scrollbar-handle:            @nord3;
+    bg:     @nord0;
+    bg-alt: @nord1;
+    fg:     @nord4;
+    fg-dim: @nord3;
+    accent: @nord8;
+    urgent: @nord11;
 
-    normal-background:           @background;
-    normal-foreground:           @foreground;
-    alternate-normal-background: @nord1;
-    alternate-normal-foreground: @foreground;
-    selected-normal-background:  @nord8;
-    selected-normal-foreground:  @nord0;
-
-    active-background:           @nord3;
-    active-foreground:           @nord8;
-    alternate-active-background: @nord3;
-    alternate-active-foreground: @nord8;
-    selected-active-background:  @nord8;
-    selected-active-foreground:  @nord0;
-
-    urgent-background:           @nord11;
-    urgent-foreground:           @nord4;
-    alternate-urgent-background: @nord11;
-    alternate-urgent-foreground: @nord4;
-    selected-urgent-background:  @nord11;
-    selected-urgent-foreground:  @nord6;
+    background-color: transparent;
+    text-color:       @fg;
+    font:             "MesloLGS Nerd Font Mono 14";
 }
 
 window {
-    background-color: @background;
-    border:           2;
-    padding:          10;
-    width:            800px;
-    border-radius:    8px;
-    border-color:     @nord3;
+    location:         center;
+    anchor:           center;
+    width:            640px;
+    background-color: @bg;
+    border:           2px;
+    border-color:     @nord2;
+    border-radius:    0px;
+    padding:          0;
 }
 
 mainbox {
-    border:  0;
-    padding: 0;
+    background-color: @bg;
+    children:         [ inputbar, listview, mode-switcher ];
+    spacing:          0;
+    padding:          0;
 }
 
-message {
-    border:       1px dash 0px 0px ;
-    border-color: @separatorcolor;
-    padding:      1px ;
-}
-
-textbox {
-    text-color: @foreground;
-}
-
-listview {
-    fixed-height: 0;
-    border:       2px dash 0px 0px ;
-    border-color: @separatorcolor;
-    spacing:      2px ;
-    scrollbar:    true;
-    padding:      8px 0px 0px ;
-    lines:        8;
-}
-
-element {
-    border:  0;
-    padding: 8px;
-    border-radius: 4px;
-}
-
-element-text, element-icon {
-    background-color: inherit;
-    text-color:       inherit;
-}
-
-element.normal.normal {
-    background-color: @normal-background;
-    text-color:       @normal-foreground;
-}
-
-element.normal.urgent {
-    background-color: @urgent-background;
-    text-color:       @urgent-foreground;
-}
-
-element.normal.active {
-    background-color: @active-background;
-    text-color:       @active-foreground;
-}
-
-element.selected.normal {
-    background-color: @selected-normal-background;
-    text-color:       @selected-normal-foreground;
-}
-
-element.selected.urgent {
-    background-color: @selected-urgent-background;
-    text-color:       @selected-urgent-foreground;
-}
-
-element.selected.active {
-    background-color: @selected-active-background;
-    text-color:       @selected-active-foreground;
-}
-
-element.alternate.normal {
-    background-color: @alternate-normal-background;
-    text-color:       @alternate-normal-foreground;
-}
-
-element.alternate.urgent {
-    background-color: @alternate-urgent-background;
-    text-color:       @alternate-urgent-foreground;
-}
-
-element.alternate.active {
-    background-color: @alternate-active-background;
-    text-color:       @alternate-active-foreground;
-}
-
-scrollbar {
-    width:        4px ;
-    border:       0;
-    handle-width: 8px ;
-    padding:      0;
-    handle-color: @scrollbar-handle;
-}
-
-mode-switcher {
-    border:       2px dash 0px 0px ;
-    border-color: @separatorcolor;
-}
-
-button {
-    text-color: @nord4;
-    padding:    5px;
-}
-
-button.selected {
-    background-color: @selected-normal-background;
-    text-color:       @selected-normal-foreground;
-}
+/* --- Input --- */
 
 inputbar {
-    spacing:    0;
-    text-color: @normal-foreground;
-    padding:    10px ;
-}
-
-case-indicator {
-    spacing:    0;
-    text-color: @normal-foreground;
-}
-
-entry {
-    spacing:    0;
-    text-color: @normal-foreground;
-    placeholder-color: @nord3;
-    placeholder: "Search...";
+    background-color: @bg-alt;
+    text-color:       @fg;
+    padding:          12px 16px;
+    spacing:          10px;
+    children:         [ prompt, entry ];
 }
 
 prompt {
-    spacing:    0;
-    text-color: @nord8;
-    padding:    0px 10px 0px 0px;
-    font:       "sans-serif bold 12";
+    background-color: inherit;
+    text-color:       @accent;
 }
 
-textbox-prompt-colon {
-    expand:     false;
-    str:        " >";
-    margin:     0px 0.3em 0em 0em ;
-    text-color: @nord8;
+entry {
+    background-color: inherit;
+    text-color:       @fg;
+    placeholder:      "Search...";
+    placeholder-color: @fg-dim;
+    cursor-color:     @accent;
+}
+
+/* --- List --- */
+
+listview {
+    background-color: @bg;
+    columns:          1;
+    lines:            10;
+    spacing:          0;
+    padding:          4px 0;
+    scrollbar:        false;
+    fixed-height:     true;
+    border:           0;
+    cycle:            true;
+    dynamic:          true;
+    require-input:    true;
+}
+
+element {
+    background-color: transparent;
+    text-color:       @fg;
+    padding:          8px 16px;
+    spacing:          10px;
+}
+
+element selected.normal {
+    background-color: @nord2;
+    text-color:       @nord6;
+}
+
+element normal.normal,
+element alternate.normal {
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+element normal.urgent,
+element alternate.urgent {
+    text-color: @urgent;
+}
+
+element selected.urgent {
+    background-color: @urgent;
+    text-color:       @nord6;
+}
+
+element normal.active,
+element alternate.active {
+    text-color: @accent;
+}
+
+element selected.active {
+    background-color: @nord2;
+    text-color:       @accent;
+}
+
+element-icon {
+    background-color: inherit;
+    text-color:       inherit;
+    size:             22px;
+}
+
+element-text {
+    background-color: inherit;
+    text-color:       inherit;
+    highlight:        bold;
+}
+
+/* --- Mode Switcher --- */
+
+mode-switcher {
+    background-color: @bg-alt;
+    border:           0;
+    padding:          6px 10px;
+    spacing:          6px;
+}
+
+button {
+    background-color: transparent;
+    text-color:       @fg-dim;
+    padding:          4px 10px;
+    font:             "MesloLGS Nerd Font Mono 11";
+}
+
+button selected {
+    background-color: @nord2;
+    text-color:       @accent;
+}
+
+/* --- Message --- */
+
+message {
+    background-color: @bg;
+    padding:          8px 16px;
+}
+
+textbox {
+    background-color: inherit;
+    text-color:       @fg-dim;
+    font:             "MesloLGS Nerd Font Mono 11";
+}
+
+scrollbar {
+    background-color: @bg;
+    handle-color:     @nord3;
+    handle-width:     4px;
 }

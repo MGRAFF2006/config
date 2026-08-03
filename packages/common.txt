@@ -17,8 +17,6 @@ smartmontools
 
 # Network
 networkmanager
-iwd
-wireless_tools
 bluez
 bluez-utils
 network-manager-applet
@@ -32,8 +30,6 @@ wireplumber
 libpulse
 gst-plugin-pipewire
 alsa-utils
-alsa-firmware
-sof-firmware
 alsa-plugins
 pavucontrol
 
@@ -41,9 +37,6 @@ pavucontrol
 xf86-video-amdgpu
 vulkan-radeon
 lib32-vulkan-radeon
-vulkan-intel
-intel-media-driver
-libva-intel-driver
 amdgpu_top
 
 # Power
@@ -65,7 +58,6 @@ man-db
 man-pages
 bash-completion
 reflector
-wl-clipboard
 xclip
 eza
 fd
@@ -162,8 +154,6 @@ dnsmasq
 ollama
 
 # Chess
-scid
-python-chess
 
 # File manager (shared)
 gvfs

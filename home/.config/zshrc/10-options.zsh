@@ -2,9 +2,13 @@
 # 10-options.zsh — Shell options & history
 # ─────────────────────────────────────────────
 
-# Completions
+# Completions — use cached zcompdump, rebuild at most once per day
 autoload -Uz compinit
-compinit
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
+  compinit
+else
+  compinit -C
+fi
 
 # Case-insensitive tab completion
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'

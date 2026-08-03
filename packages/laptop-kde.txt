@@ -21,5 +21,14 @@ plasma-nm
 # Laptop-specific utilities
 power-profiles-daemon
 
+# Laptop hardware (WiFi, Intel iGPU, laptop audio firmware)
+iwd
+wireless_tools
+sof-firmware
+alsa-firmware
+vulkan-intel
+intel-media-driver
+libva-intel-driver
+
 # Wayland clipboard (KDE/Wayland)
 wl-clipboard
