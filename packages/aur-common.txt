@@ -28,3 +28,15 @@ python-chess
 scid
 pacseek
 onlyoffice-bin
+
+# Shared user apps (2026-08 alignment)
+superslicer-bin
+goodnotes-electron
+sumatrapdf
+adb-wifi
+wireguard-ui
+cursor-cli
+t3code-bin
+github-desktop-bin
+linutil
+synergy

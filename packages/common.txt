@@ -173,3 +173,15 @@ htop
 speedtest-cli
 tldr
 inetutils
+
+# Shared user apps (2026-08 alignment)
+xournalpp
+putty
+picocom
+nvtop
+mullvad-vpn
+opencode
+filezilla
+pinta
+love
+bitwarden-cli
