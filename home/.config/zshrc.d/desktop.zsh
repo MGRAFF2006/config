@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────
-# archlinux.zsh — Desktop (DWM) overrides
-# Sourced only on hostname: archlinux
+# desktop.zsh — Desktop (DWM) overrides
+# Sourced only on hostname: desktop
 # ─────────────────────────────────────────────
 
 # Monitor resolution shortcuts (DWM multi-monitor)

@@ -15,17 +15,8 @@ unset _f
 
 # Load machine-specific overrides
 # Priority: 1) MACHINE_TYPE env var, 2) $HOST (zsh built-in), 3) /etc/hostname fallback
+# Hostnames are distinct since 2026-08: 'laptop' (KDE) and 'desktop' (DWM)
 _machine_type="${MACHINE_TYPE:-${HOST:-$(cat /etc/hostname 2>/dev/null)}}"
-
-# Auto-detection fallback: if hostname is the same on both (both 'archlinux'),
-# detect by presence of KDE/plasma
-if [[ "$_machine_type" == "archlinux" ]]; then
-  if command -v plasmashell &>/dev/null || [[ -d /usr/lib/plasma-workspace ]]; then
-    _machine_type="laptop"
-  else
-    _machine_type="archlinux"  # desktop/DWM
-  fi
-fi
 
 _host_config="$XDG_CONFIG_HOME/zshrc.d/${_machine_type}.zsh"
 [[ -f $_host_config ]] && source "$_host_config"

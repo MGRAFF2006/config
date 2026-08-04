@@ -6,8 +6,8 @@ Single source of truth for both machines. Synced bidirectionally via Syncthing.
 
 | Hostname | Role | WM | Shell |
 |---|---|---|---|
-| `archlinux` | Desktop (stationary) | DWM | ZSH + Starship |
-| `laptop` (your hostname) | Laptop (portable) | KDE Plasma | ZSH + Starship |
+| `desktop` | Desktop (stationary) | DWM | ZSH + Starship |
+| `laptop` | Laptop (portable) | KDE Plasma | ZSH + Starship |
 
 ## Fresh Install Bootstrap
 

@@ -12,11 +12,11 @@ backup_root="$HOME/.local/share/config-link-backups/$(date +%Y%m%d-%H%M%S)"
 MACHINE="${1:-}"
 if [[ -z "$MACHINE" ]]; then
   hostname_val="$(hostname)"
-  if [[ "$hostname_val" == *"archlinux"* ]]; then
-    MACHINE="desktop"
-  else
-    MACHINE="laptop"
-  fi
+  case "$hostname_val" in
+    desktop*) MACHINE="desktop" ;;
+    laptop*)  MACHINE="laptop" ;;
+    *)        echo "Unknown hostname '$hostname_val' - pass laptop|desktop explicitly" >&2; exit 1 ;;
+  esac
   echo "Auto-detected machine type: $MACHINE (hostname: $hostname_val)"
 fi
 

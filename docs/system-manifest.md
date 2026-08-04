@@ -1,7 +1,7 @@
 # System Manifest - humunkulud's Arch Linux
 
 Generated: 2026-05-04
-Machine: Laptop (archlinux)
+Machine: Laptop (laptop)
 
 ## System Overview
 
