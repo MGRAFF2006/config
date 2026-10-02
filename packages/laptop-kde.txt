@@ -32,3 +32,6 @@ libva-intel-driver
 
 # Wayland clipboard (KDE/Wayland)
 wl-clipboard
+
+# Font selected by the Alacritty machine profile
+ttf-meslo-nerd

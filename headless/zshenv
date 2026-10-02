@@ -1,0 +1,2 @@
+# Noninteractive SSH and interactive shells use the same tool entry points.
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$HOME/.cargo/bin:$PATH"

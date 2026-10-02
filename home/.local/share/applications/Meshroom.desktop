@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Meshroom
+Comment=Meshroom is a free, open-source 3D Reconstruction Software based on the AliceVision framework.
+Exec=env ALICEVISION_ROOT=/usr ALICEVISION_SENSOR_DB=/usr/share/aliceVision/cameraSensors.db ALICEVISION_VOCTREE=/usr/share/aliceVision/vlfeat_K80L3.SIFT.tree /usr/lib/meshroom/meshroom-ui
+Icon=/usr/share/meshroom/meshroom.svg
+Terminal=false
+Categories=Graphics;3DGraphics;

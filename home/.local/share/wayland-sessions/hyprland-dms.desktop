@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Hyprland (DMS debug)
+Comment=Same as Hyprland — logged starter for greeter debugging (prefer plain Hyprland)
+Exec=/home/humunkulud/.local/bin/hyprland-dms-session
+TryExec=/home/humunkulud/.local/bin/hyprland-dms-session
+Type=Application
+DesktopNames=Hyprland
+Keywords=tiling;wayland;compositor;dms;

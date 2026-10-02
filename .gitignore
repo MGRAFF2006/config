@@ -16,3 +16,23 @@ home/.config/alacritty/machine.toml
 # editor/backup leftovers
 *.old
 *.save
+
+# Hyprland/DMS local backups (created by dms setup / migration)
+home/.config/hypr/.dms-backups/
+
+# Python and local build output
+__pycache__/
+*.py[cod]
+*.pkg.tar.*
+*.src.tar.*
+/packages/aur-builds/**/src/
+/packages/aur-builds/**/pkg/
+
+# Credentials and local overrides stay on each machine
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+**/id_ed25519*
+**/id_rsa*

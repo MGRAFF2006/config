@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Restore the mouse position after the Wacom pen leaves proximity."""
+
+import json
+import os
+from pathlib import Path
+import select
+import socket
+import struct
+import time
+
+
+DEVICE_NAME = "Wacom Movink 13 Pen"
+EV_KEY = 0x01
+BTN_TOOL_MIN = 0x140
+BTN_TOOL_MAX = 0x14F
+EVENT = struct.Struct("@llHHi")
+POLL_SECONDS = 0.125
+
+
+def find_device() -> Path | None:
+    for name_file in Path("/sys/class/input").glob("event*/device/name"):
+        try:
+            if name_file.read_text().strip() == DEVICE_NAME:
+                return Path("/dev/input") / name_file.parents[1].name
+        except OSError:
+            continue
+    return None
+
+
+def hypr_request(command: str) -> str | None:
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    signature = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if not signature:
+        return None
+    socket_path = Path(runtime_dir) / "hypr" / signature / ".socket.sock"
+
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(1)
+            connection.connect(str(socket_path))
+            connection.sendall(command.encode())
+            connection.shutdown(socket.SHUT_WR)
+            chunks = []
+            while chunk := connection.recv(4096):
+                chunks.append(chunk)
+        return b"".join(chunks).decode()
+    except (OSError, UnicodeError):
+        return None
+
+
+def cursor_position() -> tuple[int, int] | None:
+    try:
+        response = hypr_request("j/cursorpos")
+        if response is None:
+            return None
+        position = json.loads(response)
+        return round(position["x"]), round(position["y"])
+    except (KeyError, ValueError):
+        return None
+
+
+def restore_cursor(position: tuple[int, int]) -> None:
+    x, y = position
+    hypr_request(f"dispatch hl.dsp.cursor.move({{ x = {x}, y = {y} }})")
+
+
+def monitor_device(device: Path) -> None:
+    fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+    buffer = b""
+    active_tools: set[int] = set()
+    saved_position = cursor_position()
+
+    try:
+        while True:
+            readable, _, _ = select.select([fd], [], [], POLL_SECONDS)
+
+            if not readable:
+                if not active_tools:
+                    saved_position = cursor_position() or saved_position
+                continue
+
+            data = os.read(fd, EVENT.size * 64)
+            if not data:
+                return
+            buffer += data
+
+            was_active = bool(active_tools)
+            while len(buffer) >= EVENT.size:
+                _, _, event_type, code, value = EVENT.unpack_from(buffer)
+                buffer = buffer[EVENT.size :]
+                if event_type != EV_KEY or not BTN_TOOL_MIN <= code <= BTN_TOOL_MAX:
+                    continue
+                if value:
+                    active_tools.add(code)
+                else:
+                    active_tools.discard(code)
+
+            if was_active and not active_tools and saved_position is not None:
+                restore_cursor(saved_position)
+    finally:
+        os.close(fd)
+
+
+def main() -> None:
+    while True:
+        device = find_device()
+        if device is None:
+            time.sleep(1)
+            continue
+        try:
+            monitor_device(device)
+        except OSError:
+            time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()

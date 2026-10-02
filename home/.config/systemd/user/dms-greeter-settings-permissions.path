@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch DMS settings used by the greeter
+
+[Path]
+PathChanged=%h/.config/DankMaterialShell/settings.json
+Unit=dms-greeter-settings-permissions.service
+
+[Install]
+WantedBy=default.target

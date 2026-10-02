@@ -1,0 +1,11 @@
+#%PAM-1.0
+# Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
+# Terminal sudo: Howdy first (blocking), then password only.
+# Do not include system-auth for *auth* — its leading pam_unix would
+# otherwise look like "password first" after a silent Howdy abort/timeout.
+
+auth       sufficient                   pam_howdy.so
+auth       required                     pam_unix.so          try_first_pass
+
+account    include                      system-auth
+session    include                      system-auth

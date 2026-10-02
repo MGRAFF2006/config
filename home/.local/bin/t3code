@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Wrapper: on campus Wi-Fi, *.t3coderelay.com is SNI-filtered. Use a PAC that
+# sends only those hosts through ssh-socks-desktop (127.0.0.1:1080).
+set -euo pipefail
+
+appdir='/opt/t3code-bin'
+export APPDIR="$appdir"
+
+if [[ -z "${CODEX_CLI_PATH-}" ]] && command -v codex >/dev/null 2>&1; then
+  export CODEX_CLI_PATH="$(command -v codex)"
+fi
+
+export PATH="$appdir:$appdir/usr/bin:$appdir/usr/sbin:$PATH"
+export XDG_DATA_DIRS="$appdir/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+export GSETTINGS_SCHEMA_DIR="$appdir/usr/share/glib-2.0/schemas${GSETTINGS_SCHEMA_DIR:+:$GSETTINGS_SCHEMA_DIR}"
+
+pac_file="${T3CODE_PROXY_PAC:-$HOME/.config/t3code-proxy/eduroam.pac}"
+extra_flags=()
+
+# Keep Electron's encrypted connection catalog readable when switching from
+# Plasma to Hyprland; otherwise it changes from KWallet to GNOME libsecret.
+password_store="${T3CODE_PASSWORD_STORE:-}"
+if [[ -z "$password_store" && "${XDG_CURRENT_DESKTOP-}" == *Hyprland* ]]; then
+  password_store=kwallet6
+fi
+if [[ -n "$password_store" ]]; then
+  extra_flags+=(--password-store="$password_store")
+fi
+
+if [[ -n "${WAYLAND_DISPLAY-}" || "${XDG_SESSION_TYPE-}" == "wayland" ]]; then
+  extra_flags+=(--enable-features=UseOzonePlatform --ozone-platform=wayland --ozone-platform-hint=wayland)
+else
+  extra_flags+=(--ozone-platform-hint=auto)
+fi
+
+# Only use the desktop tunnel where it is needed. Sending every Node/Effect
+# request through a reconnecting SSH tunnel resets long-lived HTTP/2 streams.
+proxy_mode="${T3CODE_PROXY_MODE:-auto}"
+use_t3_proxy=false
+case "$proxy_mode" in
+  always) use_t3_proxy=true ;;
+  never)  use_t3_proxy=false ;;
+  auto)
+    while IFS=: read -r connection_name connection_type; do
+      if [[ "${connection_name,,}" == "eduroam" && "$connection_type" == "802-11-wireless" ]]; then
+        use_t3_proxy=true
+        break
+      fi
+    done < <(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null || true)
+    ;;
+  *) echo "Invalid T3CODE_PROXY_MODE '$proxy_mode' (use auto|always|never)" >&2; exit 2 ;;
+esac
+
+if [[ "$use_t3_proxy" == true ]]; then
+  systemctl --user start ssh-socks-desktop.service 2>/dev/null || true
+  if [[ -f "$pac_file" ]]; then
+    extra_flags+=(--proxy-pac-url="file://${pac_file}")
+  fi
+  if [[ -z "${ALL_PROXY-}${HTTPS_PROXY-}${HTTP_PROXY-}" ]]; then
+    export ALL_PROXY="${T3CODE_SOCKS_PROXY:-socks5h://127.0.0.1:1080}"
+    export HTTPS_PROXY="$ALL_PROXY"
+    export HTTP_PROXY="$ALL_PROXY"
+  fi
+fi
+# Keep local T3 bootstrap / loopback direct (embedded server on 3774, etc.).
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1,.localhost"
+
+exec "$appdir/t3code" --no-sandbox "${extra_flags[@]}" "$@"

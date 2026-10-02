@@ -1,0 +1,17 @@
+#%PAM-1.0
+# Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
+# Password first so a correct secret skips Howdy. Do NOT use "sufficient"
+# before pam_kwallet5 — that skips wallet unlock (second Plasma prompt).
+
+auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=1 default=ignore]   pam_howdy.so
+auth       requisite                    pam_deny.so
+-auth      optional                     pam_kwallet5.so
+
+account    include                      system-login
+
+password   include                      system-login
+
+session    optional                     pam_keyinit.so force revoke
+session    include                      system-login
+-session   optional                     pam_kwallet5.so auto_start kwalletd=/usr/bin/ksecretd

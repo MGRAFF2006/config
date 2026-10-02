@@ -1,10 +1,9 @@
 # AUR packages common to both machines
 # Install with: yay -S --needed - < aur-common.txt
 
-yay-bin
+vm-curator
 visual-studio-code-bin
 zen-browser-bin
-ausweisapp2
 localsend-bin
 orca-slicer-bin
 spotube-bin
@@ -15,7 +14,6 @@ wakatime
 balena-etcher
 gearlever
 youtubedownloader
-prismlauncher
 unityhub
 satisfactory-mod-manager-bin
 open-ecard-git
@@ -35,8 +33,7 @@ goodnotes-electron
 sumatrapdf
 adb-wifi
 wireguard-ui
-cursor-cli
 t3code-bin
 github-desktop-bin
 linutil
-synergy
+# Legacy synergy is no longer in AUR; restore it manually from a reviewed source.

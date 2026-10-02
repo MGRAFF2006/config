@@ -1,0 +1,25 @@
+{
+  "id": "networkDiagnostics",
+  "name": "Network Diagnostics",
+  "description": "Dedicated network status, latency, DNS, traffic, and WiFi credentials",
+  "version": "1.0.0",
+  "author": "humunkulud",
+  "type": "widget",
+  "capabilities": [
+    "dankbar-widget",
+    "network",
+    "process"
+  ],
+  "component": "./NetworkDiagnostics.qml",
+  "icon": "network_check",
+  "requires_dms": ">=1.5.0",
+  "requires": [
+    "dms-network-status",
+    "nmcli",
+    "resolvectl"
+  ],
+  "permissions": [
+    "process",
+    "network"
+  ]
+}

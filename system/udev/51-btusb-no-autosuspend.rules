@@ -1,0 +1,3 @@
+# Realtek RTL8922AU (laptop): USB autosuspend drops the HCI link
+# within ~2s, so headphones connect and immediately fall off.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="d922", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"

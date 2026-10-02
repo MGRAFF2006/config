@@ -1,0 +1,7 @@
+interface:
+  display_name: "HTML"
+  short_description: "Create standalone HTML plans, reports, and tools"
+  default_prompt: "Use $html to create a self-contained HTML artifact from this brief, following my dark black-and-white default with color where useful."
+
+policy:
+  allow_implicit_invocation: true

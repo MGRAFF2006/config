@@ -17,6 +17,7 @@ smartmontools
 
 # Network
 networkmanager
+tailscale
 bluez
 bluez-utils
 network-manager-applet
@@ -78,11 +79,15 @@ zoxide
 # Dev
 git
 github-cli
+openssh
+rsync
+openai-codex
 docker
 docker-compose
 python-pip
 bun
 nodejs
+npm
 go
 neovim
 shellcheck
@@ -97,8 +102,6 @@ chromium
 discord
 thunderbird
 signal-desktop
-teams-for-linux
-zoom
 
 # Media / Creative
 vlc
@@ -119,25 +122,31 @@ tumbler
 # Documents
 calibre
 anki
-onlyoffice-bin
 
 # Security
+ausweisapp
 bitwarden
 wireguard-tools
 ufw
 
+# Printing
+cups
+cups-pdf
+system-config-printer
+
 # Utilities
+xdg-utils
 qbittorrent
 scrcpy
 jupyter-notebook
 syncthing
-localsend-bin
 flatpak
 trash-cli
 unzip
 plocate
 
 # Gaming
+moonlight-qt
 steam
 prismlauncher
 wine
@@ -149,6 +158,10 @@ qemu-emulators-full
 libvirt
 virt-manager
 dnsmasq
+edk2-ovmf
+swtpm
+virt-viewer
+passt
 
 # ML / AI
 ollama
@@ -169,9 +182,7 @@ noto-fonts-extra
 otf-font-awesome
 
 # System info
-htop
 speedtest-cli
-tldr
 inetutils
 
 # Shared user apps (2026-08 alignment)

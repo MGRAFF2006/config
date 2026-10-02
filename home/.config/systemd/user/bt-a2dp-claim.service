@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep connected Bluetooth audio available with the lid closed
+After=pipewire-pulse.service bluetooth.target
+Wants=pipewire-pulse.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/bt-a2dp-claim
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

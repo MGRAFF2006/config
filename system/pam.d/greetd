@@ -1,0 +1,19 @@
+#%PAM-1.0
+# Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
+# Password/PIN first — correct secret skips the camera. Howdy is fallback.
+# Use success=N (not "sufficient") so pam_kwallet5 still runs afterward.
+# Face-only login leaves AUTHTOK empty → wallet may still prompt (see docs).
+
+auth       required                     pam_securetty.so
+auth       requisite                    pam_nologin.so
+auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=1 default=ignore]   pam_howdy.so
+auth       requisite                    pam_deny.so
+-auth      optional                     pam_kwallet5.so
+
+account    include                      system-local-login
+
+password   include                      system-local-login
+
+session    include                      system-local-login
+-session   optional                     pam_kwallet5.so auto_start force_run kwalletd=/usr/bin/ksecretd

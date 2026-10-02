@@ -1,0 +1,46 @@
+name: Validate config
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate.yml'
+      - 'scripts/**'
+      - 'home/**'
+      - 'headless/**'
+      - 'system/**'
+      - 'packages/**'
+      - 'ssh/**'
+      - 'tailscale/**'
+      - 'agent/**'
+  pull_request:
+    paths:
+      - '.github/workflows/validate.yml'
+      - 'scripts/**'
+      - 'home/**'
+      - 'headless/**'
+      - 'system/**'
+      - 'packages/**'
+      - 'ssh/**'
+      - 'tailscale/**'
+      - 'agent/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: config-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install check tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck rsync tmux
+      - name: Check config and deployment
+        run: python3 scripts/check-config.py

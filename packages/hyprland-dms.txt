@@ -1,0 +1,56 @@
+# Optional Hyprland + Dank Material Shell stack (additive)
+# Does NOT replace KDE (laptop) or DWM (desktop). Install alongside, pick session in SDDM / startx.
+#
+# Install:  sudo pacman -S --needed - < packages/hyprland-dms.txt
+# Remove:   ~/Documents/config/scripts/remove-hyprland-dms.sh
+#
+# Start DMS from Hyprland autostart only (exec-once / hl.on) — do NOT
+# `systemctl --user enable dms` while Plasma remains a daily session,
+# or DMS would also start under KDE.
+
+# Compositor
+hyprland
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+
+# Shell (dms-shell pulls quickshell + dgop; -hyprland is the compositor flavor)
+dms-shell
+dms-shell-hyprland
+
+# Polkit: DMS embeds a Quickshell Polkit agent (themed modal). Do not also
+# start hyprpolkitagent / polkit-kde in the Hyprland session — one agent only.
+# Plasma keeps polkit-kde-agent. hyprpolkitagent stays installable as fallback
+# if DMS_DISABLE_POLKIT=1 is set.
+# hyprpolkitagent
+
+# Input / media / brightness (fn keys + DMS IPC fallbacks)
+brightnessctl
+playerctl
+
+# Screenshots / clipboard (Wayland)
+grim
+slurp
+hyprshot
+wl-clipboard
+
+# Modern GTK4 file manager (Super+E, themed by DMS)
+nautilus
+papirus-icon-theme
+catfish
+gvfs-mtp
+gvfs-smb
+
+# Optional DMS features
+qt6-multimedia
+matugen
+cava
+i2c-tools
+wtype
+inter-font
+cups-pk-helper
+
+# Login (official); greeter UI is AUR — see aur-laptop.txt
+greetd
+
+# AUR companions (install with yay — see aur-laptop.txt / install script notes):
+#   dsearch-bin dankcalendar-bin greetd-dms-greeter-bin

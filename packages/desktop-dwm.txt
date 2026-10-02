@@ -39,3 +39,6 @@ qjackctl
 filezilla
 w3m
 imv
+
+# Font selected by the Alacritty machine profile
+ttf-jetbrains-mono-nerd
