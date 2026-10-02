@@ -1,6 +1,12 @@
-# humunkulud's Config
+# Arch Linux, in one place
 
-Single source of truth for both machines. Synced bidirectionally via Syncthing.
+My personal setup for a portable laptop and a stationary desktop: versioned dotfiles, package lists, and scripts to put everything back where it belongs.
+
+**Zsh + Starship · Neovim · Alacritty · KDE Plasma / DWM**
+
+The configuration lives here; home-directory files are linked into it. Syncthing keeps the repository shared between machines.
+
+Start with [package lists](packages/), [home configuration](home/), or the [system manifest](docs/system-manifest.md).
 
 ## Machines
 
@@ -14,7 +20,7 @@ Single source of truth for both machines. Synced bidirectionally via Syncthing.
 On a fresh Arch Linux install:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/MGRAFF2006/config/main/scripts/install.sh | bash
+curl -sL https://raw.githubusercontent.com/MGRAFF2006/config/master/scripts/install.sh | bash
 ```
 
 Or manually:
