@@ -27,6 +27,7 @@ __pycache__/
 *.src.tar.*
 /packages/aur-builds/**/src/
 /packages/aur-builds/**/pkg/
+/packages/aur-builds/**/.SRCINFO
 
 # Credentials and local overrides stay on each machine
 .env
