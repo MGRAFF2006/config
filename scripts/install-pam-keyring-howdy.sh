@@ -4,7 +4,7 @@
 # Password/PIN first, Howdy fallback for login/lock; Howdy first for sudo.
 # Polkit stays password-only because graphical agents do not reliably handle
 # Howdy's separate PAM conversation before their password prompt.
-# Also: libjxl shim, howdy-test numpy fix, DMS greeterPamExternallyManaged.
+# Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
 #
 # Needs sudo. Idempotent.
 # Usage: ~/Documents/config/scripts/install-pam-keyring-howdy.sh
@@ -25,10 +25,7 @@ for required in greetd sddm dankshell sudo polkit-1; do
 done
 
 if [[ "${EUID}" -ne 0 ]]; then
-  if [[ -z "${SUDO_ASKPASS:-}" ]] && [[ -x /usr/bin/ksshaskpass ]]; then
-    export SUDO_ASKPASS=/usr/bin/ksshaskpass
-  fi
-  exec sudo -A -- "$0" "$@"
+  exec sudo bash "$0" "$@"
 fi
 
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -47,7 +44,10 @@ if [[ ! -e /usr/lib/security/pam_howdy.so && ! -e /lib/security/pam_howdy.so ]];
   exit 1
 fi
 
-"$repo_root/scripts/fix-howdy-libjxl.sh"
+if ! python3 -c 'import dlib'; then
+  printf 'python-dlib cannot load; rebuild it against the current libraries before changing PAM\n' >&2
+  exit 1
+fi
 
 # howdy test.py: sum(hist)[0] breaks on numpy 2.x (scalar). Match compare.py.
 howdy_test="/usr/lib/howdy/cli/test.py"

@@ -19,11 +19,7 @@ if [[ ! -f "$src_dir/dms-hypr.lua" || ! -f "$src_dir/config.toml" ]]; then
 fi
 
 if [[ "${EUID}" -ne 0 ]]; then
-  # Prefer GUI askpass on Hyprland/Plasma when available
-  if [[ -z "${SUDO_ASKPASS:-}" ]] && [[ -x /usr/bin/ksshaskpass ]]; then
-    export SUDO_ASKPASS=/usr/bin/ksshaskpass
-  fi
-  exec sudo -A -- "$0" "$@"
+  exec sudo bash "$0" "$@"
 fi
 
 install -d -m 755 /etc/greetd

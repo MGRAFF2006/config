@@ -1,62 +1,37 @@
 #!/usr/bin/env bash
-# remove-hyprland-dms.sh — Remove Hyprland + DMS packages; leave Plasma / DWM alone
-# Does not delete ~/Documents/config sources (only unlinks + removes packages).
+# Remove only packages introduced by the recorded optional-session installation.
+# User settings, links, credentials and PAM backups are retained.
 set -euo pipefail
-
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-pkg_file="$repo_root/packages/hyprland-dms.txt"
-
-info() { printf '[INFO]  %s\n' "$*"; }
-ok()   { printf '[OK]    %s\n' "$*"; }
-
-systemctl --user disable --now dms.service 2>/dev/null || true
-systemctl --user disable --now dms-greeter-settings-permissions.path 2>/dev/null || true
-rm -f "$HOME/.config/systemd/user/hyprland-session.target.wants/dms.service"
-rm -f "$HOME/.config/systemd/user/graphical-session.target.wants/dms.service"
-systemctl --user daemon-reload || true
-ok "Detached / disabled dms.service"
-
-if [[ -f "$pkg_file" ]]; then
-  mapfile -t wanted < <(grep -vE '^\s*(#|$)' "$pkg_file")
-  mapfile -t installed < <(pacman -Qq "${wanted[@]}" 2>/dev/null || true)
-  if ((${#installed[@]})); then
-    info "Removing: ${installed[*]}"
-    sudo pacman -Rns --noconfirm "${installed[@]}"
-    ok "Packages removed"
-  else
-    info "No listed hyprland-dms packages installed"
-  fi
+mode="${1:-remove}"
+case "$mode" in remove|--dry-run) ;; *) echo "Usage: $0 [--dry-run]" >&2; exit 2 ;; esac
+[[ $# -le 1 ]] || exit 2
+state_dir="${CONFIG_DEPLOY_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/config}"
+manifest="$state_dir/hyprland-dms-packages.txt"
+[[ -f "$manifest" ]] || {
+  echo "No installation record at $manifest. Switch to Plasma/DWM for a soft rollback; select any package removals manually." >&2
+  exit 1
+}
+installed="$(pacman -Qq)"
+packages=()
+while IFS= read -r package; do
+  [[ -n "$package" ]] || continue
+  [[ "$package" =~ ^[a-zA-Z0-9@._+:-]+$ ]] || { echo 'Invalid package record' >&2; exit 1; }
+  if grep -Fxq "$package" <<< "$installed"; then packages+=("$package"); fi
+done < "$manifest"
+if [[ "$mode" == --dry-run ]]; then
+  printf 'Packages introduced by this setup and still installed: %s\n' "${packages[*]:-none}"
+  echo 'Settings and config links will be retained. Active Hyprland/greetd must be left before removing packages.'
+  exit 0
 fi
-
-# Unlink hypr config if it points at the repo (optional cleanup)
-for path in \
-  "$HOME/.config/hypr" \
-  "$HOME/.config/systemd/user/hyprland-session.target" \
-  "$HOME/.config/systemd/user/dms-greeter-settings-permissions.service" \
-  "$HOME/.config/systemd/user/dms-greeter-settings-permissions.path"
-do
-  if [[ -L "$path" ]]; then
-    target="$(readlink -f "$path" || true)"
-    if [[ "$target" == "$repo_root"/* ]]; then
-      rm -f "$path"
-      info "Unlinked $path"
-    fi
-  fi
-done
-
-# Optional DMS user state (settings/cache) — keep by default
-if [[ "${REMOVE_DMS_STATE:-0}" == "1" ]]; then
-  rm -rf "$HOME/.config/DankMaterialShell" \
-    "$HOME/.local/state/DankMaterialShell" \
-    "$HOME/.cache/DankMaterialShell"
-  ok "Removed DMS user state"
-else
-  info "Kept DMS settings under ~/.config/DankMaterialShell (set REMOVE_DMS_STATE=1 to wipe)"
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *Hyprland* ]]; then
+  echo 'Log into Plasma/DWM before removing the running compositor' >&2; exit 1
 fi
-
-cat <<'EOF'
-
-Hyprland/DMS removed. Log into Plasma (laptop) or startx/dwm (desktop) as before.
-Config sources remain in ~/Documents/config if you want to retry later.
-
-EOF
+if systemctl is-active --quiet greetd.service || systemctl is-enabled --quiet greetd.service; then
+  echo 'Restore the fallback display manager and review the PAM backups before removing the active greeter' >&2; exit 1
+fi
+if ((${#packages[@]})); then
+  sudo pacman -R --noconfirm "${packages[@]}"
+fi
+rm -f -- "$manifest"
+echo "Recorded Hyprland/DMS packages removed. Configuration sources and local settings retained in $repo_root and your home."

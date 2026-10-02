@@ -27,38 +27,16 @@ if ! command -v rustup >/dev/null 2>&1; then
   sh "$temporary/rustup.sh" -y --profile minimal --no-modify-path --default-toolchain 1.99.0
 fi
 
-link() {
-  local source=$1 destination=$2
-  mkdir -p "$(dirname -- "$destination")"
-  if [[ -L $destination && $(readlink "$destination") == "$source" ]]; then return; fi
-  if [[ -e $destination || -L $destination ]]; then
-    mkdir -p "$HOME/.local/share/config-link-backups/homelab-dev"
-    mv "$destination" "$HOME/.local/share/config-link-backups/homelab-dev/$(basename "$destination").$(date +%s%N)"
-  fi
-  ln -s "$source" "$destination"
-}
-link "$repo/headless/zshenv" "$HOME/.zshenv"
-link "$repo/headless/mise.toml" "$HOME/.config/mise/config.toml"
-for entry in .zshrc .bashrc .config/zshrc .config/starship.toml .config/nvim; do
-  link "$repo/home/$entry" "$HOME/$entry"
-done
-link "$repo/home/.config/zshrc.d/homelab-dev.zsh" "$HOME/.config/zshrc.d/homelab-dev.zsh"
+bash "$repo/scripts/link-home.sh" homelab-dev
 mise trust "$repo/headless/mise.toml"
 mise install
 mise reshim
 uv python install 3.12
 sudo chsh -s /usr/bin/zsh humunkulud
-bash "$repo/scripts/install-agent-kit.sh"
 bash "$repo/scripts/install-agent-kit.sh" --check
 if [[ ! -f "$HOME/.ssh/id_ed25519_github" ]]; then
   ssh-keygen -q -t ed25519 -N '' -C homelab-dev -f "$HOME/.ssh/id_ed25519_github"
 fi
-include="Include $repo/ssh/homelab-dev-github.conf"
-touch "$HOME/.ssh/config"
-if ! grep -Fxq "$include" "$HOME/.ssh/config"; then
-  printf '\n%s\n' "$include" >> "$HOME/.ssh/config"
-fi
-chmod 600 "$HOME/.ssh/config"
 if ! ssh-keygen -F github.com >/dev/null; then
   curl -fsSL https://api.github.com/meta | python3 -c 'import json,sys; print("\n".join("github.com "+k for k in json.load(sys.stdin)["ssh_keys"]))' >> "$HOME/.ssh/known_hosts"
   chmod 600 "$HOME/.ssh/known_hosts"

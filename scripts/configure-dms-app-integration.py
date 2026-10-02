@@ -11,15 +11,15 @@ import shutil
 import subprocess
 
 
-HOME = Path.home()
-CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
-ZEN_ROOT = HOME / ".zen"
+APP_HOME = Path(os.environ.get("CONFIG_LINK_HOME", Path.home()))
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", APP_HOME / ".config"))
+ZEN_ROOT = APP_HOME / ".zen"
 ZEN_PROFILES = ZEN_ROOT / "profiles.ini"
 DMS_ZEN_CSS = CONFIG_HOME / "DankMaterialShell/zen.css"
 ZEN_USER_JS = CONFIG_HOME / "zen-browser/user.js"
 ZEN_USER_CONTENT = CONFIG_HOME / "zen-browser/userContent.css"
 KDE_GLOBALS = CONFIG_HOME / "kdeglobals"
-DMS_COLOR_SCHEME = HOME / ".local/share/color-schemes/DankMatugen.colors"
+DMS_COLOR_SCHEME = APP_HOME / ".local/share/color-schemes/DankMatugen.colors"
 DMS_GTK_APPLIER = CONFIG_HOME / "DankMaterialShell/shell/scripts/gtk.sh"
 FILE_MANAGER_DESKTOP = "org.gnome.Nautilus.desktop"
 
@@ -89,13 +89,8 @@ def configure_zen() -> None:
 
 
 def configure_desktop_defaults() -> None:
-    # Keep DMS responsible for regenerating and applying its GTK palette.
-    # Without this setting, GTK applications fall back to the static base
-    # theme even though the generated color templates exist.
-    run_if_available(
-        "dms", "ipc", "call", "settings", "set", "gtkThemingEnabled", "true"
-    )
-
+    # DMS reads the initialized settings when it starts; setup also works without
+    # an active shell/IPC endpoint on a fresh machine.
     for mime_type in ("inode/directory", "x-scheme-handler/file"):
         run_if_available("xdg-mime", "default", FILE_MANAGER_DESKTOP, mime_type)
 
@@ -128,7 +123,7 @@ def configure_desktop_defaults() -> None:
         "--notify",
         "zen.desktop",
     )
-    print("defaults: Nautilus for folders, Zen for web links, DMS colors for GTK/KDE applications")
+    print("defaults: Nautilus for folders and Zen for web links; start DMS to generate application colors")
 
 
 def main() -> int:

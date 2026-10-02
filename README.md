@@ -16,7 +16,9 @@ Start with [package lists](packages/), [home configuration](home/), or the [Flee
 | `laptop` | Laptop (portable) | Hyprland+DMS observed 2026-10-02; KDE Plasma available | ZSH + Starship |
 
 Optional Hyprland + Dank Material Shell: see [docs/hyprland-dms.md](docs/hyprland-dms.md).
-Install on laptop with `scripts/install-hyprland-dms.sh` (does not remove Plasma/DWM).
+Install on laptop with `bash scripts/install-hyprland-dms.sh laptop`; preview with `--dry-run`.
+The default installs the session alongside the existing login manager.
+`--with-greeter` explicitly applies the laptop-specific Howdy/PAM setup.
 
 ## Fast config deployment
 
@@ -30,7 +32,7 @@ bash scripts/link-home.sh laptop --check
 ```
 
 Use `desktop` for the other workstation. With no machine argument the linker
-uses `MACHINE_TYPE` or the live Tailscale identity; it never guesses from the
+uses `MACHINE_TYPE` or the live Tailscale identity (including `homelab-dev`); it never guesses from the
 local hostname. It accepts `CONFIG_LINK_HOME` for an isolated destination.
 Correct links are left alone. Replaced files, directories, and symlinks go to
 `~/.local/share/config-link-backups/<timestamp>-<unique suffix>/`, retaining their
@@ -38,7 +40,9 @@ relative paths. To restore one, remove its new link and move that backup back
 to the same path. Backups are created only when something is replaced.
 
 This is the quick path: no downloads, upgrades, service activation, MIME-default
-changes, or Git pulls. Run `systemctl --user daemon-reload` after changing unit
+changes, or Git pulls. Managed SSH includes are added with a backup while local
+keys and custom host entries are retained. A linked SSH config needs its includes
+managed in its own source. Run `systemctl --user daemon-reload` after changing unit
 files. Enable optional services deliberately; linking a unit does not enable it.
 For the existing laptop lid behavior, that command is
 `systemctl --user enable laptop-lid-awake.service`.
@@ -66,9 +70,11 @@ The installer uses its own checkout without pulling or changing branches.
 AUR compilation and application downloads determine fresh-install speed.
 Use tmux for these longer runs, for example `tmux new -s config-install`.
 
-Hyprland/DMS remains a separate setup with PAM and greeter changes; read
+Hyprland/DMS remains a separate setup; PAM and greeter changes are opt-in. Read
 [its guide](docs/hyprland-dms.md) first. Debian `homelab-dev` uses
 `scripts/setup-homelab-dev.sh`, not the Arch workstation installer.
+For a fast headless config update, run `bash scripts/link-home.sh homelab-dev`;
+`--dry-run` and `--check` work there too.
 
 ## Validation and maintenance
 
@@ -79,8 +85,9 @@ bash scripts/audit-system.sh laptop
 
 The check requires Python 3.11+, Bash, shellcheck, Git, SSH, rsync, and tmux.
 It validates shell/Python syntax, JSON/TOML, package list formatting, shellcheck,
-and deployment into temporary homes for both workstation profiles. It tests
-backups, repeated runs, dry runs, checks, and package-failure handling. It does
+and deployment into temporary homes for both workstation and the headless profiles.
+It tests SSH settings, Bluetooth system-file backups, DMS initialization, package
+journaling and rollback, repeated runs, previews, and package-failure handling. It does
 not validate PAM behavior, display sessions, remote hosts, or package availability.
 
 [GitHub Actions](.github/workflows/validate.yml) runs the same check on relevant
@@ -111,25 +118,28 @@ It is not yet a complete backup or a one-command reconstruction of either host.
 | --- | --- |
 | Shell, editor, terminal, agent kit | Deployable with the linker; Nord provides an Alacritty fallback before DMS generates its theme. |
 | Workstation packages | Official/AUR lists corrected; Tailscale, printing, Moonlight, npm and terminal fonts included. AusweisApp now uses the [official package](https://archlinux.org/packages/extra/x86_64/ausweisapp/). Legacy Synergy needs a separately reviewed source. |
-| Hyprland/DMS | Config, custom theme, plugin and helpers included. DMS settings/plugin layout still need initialization; output rules describe the laptop and Wacom displays and are not a desktop display profile. |
+| Hyprland/DMS | Config, custom theme, plugin and helpers included. Curated defaults and plugin layout are initialized on first setup; existing theme preferences survive reruns; output rules describe the laptop and Wacom displays and are not a desktop display profile. |
 | DWM / Rofi | `~/.xinitrc` depends on the external `~/dwm` checkout, its display/wallpaper/idle/suspend scripts and local picom config. Stored Rofi config references missing `rofi-*.sh` helpers and a missing powermenu theme. Capture those sources before calling desktop restore complete. |
-| Application settings | Browser preferences included. Generated GTK palettes and DMS runtime settings stay local; stored GTK files are snapshots. KDE shortcuts, academic tools/TeX, and creative-app presets are not fully captured. The laptop GPU is verified AMD; review the extra Intel driver entries before the next rebuild. Add only settings you intentionally want to restore, and optional package lists for heavy workloads. |
-| SSH / services | SSH fragments are stored; add the workstation and homelab `Include` lines below to the local SSH config. The T3 service drop-in is stored, but the base unit still needs provisioning. |
-| System changes | PAM/greeter have focused scripts. Bluetooth modprobe/udev files are stored but lack a general installer. Network profiles, firewall rules, backups and boot setup need separate review. |
-| AUR build recipes | Local recipes are useful, but eight directories contain nested `.git` repositories. Export recipe files into the parent repo or define explicit submodules before staging; plain `git add` can create embedded gitlinks without clone instructions. |
-| Version control | Much of the agent kit, Hyprland, system configs and helpers is currently untracked. A fresh clone cannot restore untracked/uncommitted work; review and commit it before relying on GitHub for recovery. |
+| Application settings | Browser preferences included. Generated GTK palettes and DMS runtime settings stay local; stored GTK files are snapshots. KDE shortcuts, academic tools/TeX, and creative-app presets are not fully captured. The laptop profile now targets the verified AMD GPU, and `packages/study.txt` captures its optional academic/TeX tools. Add only settings you intentionally want to restore, and optional package lists for heavy workloads. |
+| SSH / services | The linker installs SSH includes and the T3 PATH drop-in. T3 owns its generated base unit: with its CLI installed, run `t3 service install`, then reload user units. Provider logins and pairing remain local. |
+| System changes | PAM/greeter have focused scripts. Install the stored Bluetooth workaround with `bash scripts/install-bluetooth-config.sh`; `--dry-run`/`--check` are supported, and existing system files are backed up. It does not reload hardware or reboot. Network profiles, firewall rules, backups and boot setup need separate review. |
+| AUR build recipes | Recipe files are tracked directly by the parent repo; existing nested Git metadata stays local. No gitlinks or submodules are needed in a fresh clone. Optional GPU builds remain separate and require an online desktop; they were not rebuilt during this review. |
+| Version control | The deployment sources, agent kit, tests and AUR recipes are versioned. Other sessions may still have local edits; Git preserves committed recovery points and Syncthing transports live edits. |
 
 Keep SSH private keys, Bitwarden data, browser/mail profiles, provider logins,
 chat databases, NetworkManager secrets and Syncthing identity local. Restore
 those through existing backup/credential procedures. Do not sync whole app
 state directories just to capture a few settings.
 
-Add these lines near the start of your existing `~/.ssh/config`; retain its
-local key settings and other host entries:
+The linker adds the workstation/homelab SSH includes; the headless profile also
+adds its GitHub-key fragment. Keys themselves are never copied into the repo.
+For an SSH config managed by another symlink, add these directives to its source
+at global scope instead:
 
 ```sshconfig
 Include ~/Documents/config/ssh/workstations.conf
 Include ~/Documents/config/ssh/homelab.conf
+Host *
 ```
 
 The GitHub key fragment is specific to `homelab-dev` and installed by its setup

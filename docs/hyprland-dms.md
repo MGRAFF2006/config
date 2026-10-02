@@ -13,13 +13,18 @@ Nothing is removed; log out and pick **Plasma** / use `startx` anytime.
 ## Install (laptop)
 
 ```bash
-~/Documents/config/scripts/install-hyprland-dms.sh
-# AUR companions (filesystem search + calendar):
-yay -S --needed - < ~/Documents/config/packages/aur-laptop.txt
+cd ~/Documents/config
+bash scripts/install-hyprland-dms.sh laptop --dry-run
+bash scripts/install-hyprland-dms.sh laptop
+# Optional: apply the laptop camera/PAM/greeter files explicitly.
+# bash scripts/install-hyprland-dms.sh laptop --with-greeter
 ```
 
 Then **fully log out** (Leave → Log out — not Lock, not Switch user).
-At the **DMS greeter** pick **Hyprland**. Plasma stays listed.
+At your existing login manager pick **Hyprland**. Plasma stays listed.
+The default installer does not switch display managers or modify PAM.
+The `--with-greeter` option installs the managed laptop PAM and greetd files;
+review them before enabling greetd or disabling the current display manager.
 
 Your compositor config is already Lua (`~/.config/hypr/hyprland.lua`). The
 greeter’s own mini-Hyprland must also use Lua (`/etc/greetd/dms-hypr.lua`);
@@ -56,11 +61,12 @@ ls -lt ~/.local/state/hypr/session-*.log | head
 DMS defaults to Material **purple** + `scheme-tonal-spot`, which looks very
 saturated (neon borders, vivid terminal matugen palette).
 
-This kit pins a calmer **Nord** custom theme and `scheme-neutral`:
+First setup seeds a calmer **Nord** custom theme and `scheme-neutral`. Existing
+theme selections are preserved when the installer runs again:
 
 - `~/.config/DankMaterialShell/theme_nord.json`
 - `settings.json` → `currentThemeName=custom`, `matugenScheme=scheme-neutral`
-- Terminal matugen templates disabled (your Nord Alacritty stays)
+- Alacritty loads Nord as a fallback before DMS generates its terminal palette
 
 To change later: Super+, → Theme, or swap `theme_nord.json` / matugen scheme.
 
@@ -75,7 +81,7 @@ To change later: Super+, → Theme, or swap `theme_nord.json` / matugen scheme.
 `home/.config/DankMaterialShell/plugins/`. Apply the bar layout with:
 
 ```bash
-scripts/configure-dms-bar-panels.py
+python3 scripts/configure-dms-bar-panels.py --init
 dms restart
 ```
 
@@ -93,18 +99,21 @@ logind's lid-close suspend while a Bluetooth audio device is connected.
 
 On the laptop, `laptop-lid-awake.service` independently blocks lid-close suspend
 throughout the graphical session. Hyprland turns only `eDP-1` off on lid close
-and back on when opened. `scripts/link-home.sh laptop` installs and enables the
-service. Manual sleep remains available in the power menu. Suspend before
+and back on when opened. `scripts/link-home.sh laptop` links the unit; enable the desired behavior with
+`systemctl --user enable laptop-lid-awake.service`. Manual sleep remains available in the power menu. Suspend before
 putting the laptop in a bag; closing the lid alone leaves it fully awake.
 
-Install the DMS shell overrides with:
+Legacy DMS 1.5.x shell overrides (only when that version exposes its QML files):
 
 ```bash
 ~/Documents/config/scripts/install-dms-shell-overrides.sh
 dms restart
 ```
 
-Re-run after `dms-shell` pacman updates.
+These patches are version-specific and are not part of normal installation.
+Recent DMS packages embed QML and may leave only old patched files under
+`/usr/share/quickshell/dms`; the presence of that directory alone is not proof
+that patching it will affect the running shell.
 
 Zen consumes DMS's generated `~/.config/DankMaterialShell/zen.css` through its
 default profile. The managed `user.js` keeps native Wayland/GPU defaults while
@@ -168,8 +177,10 @@ Re-apply PAM after greeter/package changes:
 ~/Documents/config/scripts/install-pam-keyring-howdy.sh
 ```
 
-Howdy needs `python-dlib`. If `howdy test` fails on `libjxl.so.0.11`, run
-`scripts/fix-howdy-libjxl.sh` (or rebuild `python-dlib-git` with proxy off).
+Howdy needs a working `python-dlib`. Rebuild it against current libraries if
+its import fails after an upgrade. The PAM installer checks the import before
+changing authentication files; it no longer creates library ABI compatibility
+symlinks automatically. `fix-howdy-libjxl.sh` is a legacy, version-specific workaround.
 Verify face auth from a real session: `sudo howdy test`.
 
 Greeter: **greetd + DMS greeter**. Plasma stays selectable. Rollback DM: `dms greeter uninstall`.
@@ -182,19 +193,29 @@ DWM-style extras: [`home/.config/hypr/dms/binds-user.lua`](../home/.config/hypr/
 
 **Soft (keep packages):** log out → choose **Plasma** at the greeter.
 
-**Hard (remove Hyprland/DMS packages):**
+**Package rollback:** first log into Plasma/DWM, then preview and remove only
+packages introduced by the optional-session installer:
 
 ```bash
-~/Documents/config/scripts/remove-hyprland-dms.sh
-# optional wipe of DMS settings:
-# REMOVE_DMS_STATE=1 ~/Documents/config/scripts/remove-hyprland-dms.sh
+bash scripts/remove-hyprland-dms.sh --dry-run
+bash scripts/remove-hyprland-dms.sh
 ```
 
-Plasma packages and dwm on the desktop are never touched by these scripts.
+The installer records new packages in
+`~/.local/state/config/hyprland-dms-packages.txt` before package transactions,
+so a failed/partial installation can still be reviewed and rolled back. Reruns
+retain the original record. Shared packages already installed for Plasma stay.
+The remover retains settings and links, and refuses to remove a running
+Hyprland session or an active/enabled greetd login manager. Restore the fallback
+login manager and review `/etc/pam.d/*.backup-*` before removing a managed greeter.
+
+Installations made before package recording have no trustworthy removal list;
+the remover deliberately requires manual package selection in that case. A soft
+rollback by selecting Plasma/DWM works without any package removal.
 
 ## Promote to desktop (later)
 
-1. Run the same `install-hyprland-dms.sh` on `desktop` (Syncthing already has the configs).
+1. Run `bash scripts/install-hyprland-dms.sh desktop` (Syncthing already has the configs).
 2. Prefer SDDM (or a Wayland session entry) for Hyprland; keep `~/.xinitrc` / dwm as fallback.
 3. Re-check Sunshine / Looking Glass on Wayland before dropping dwm as daily driver.
 

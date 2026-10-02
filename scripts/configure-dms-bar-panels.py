@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -36,7 +37,7 @@ SESSION_PATH = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state
 def read_json(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return default
 
 
@@ -143,6 +144,8 @@ def configure_settings() -> None:
 
 
 def forget_internal_audio_devices() -> None:
+    if not SESSION_PATH.exists():
+        return
     session = read_json(SESSION_PATH, {})
     if not isinstance(session, dict):
         return
@@ -170,8 +173,21 @@ def enable_plugins() -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--init", action="store_true", help="Initialize absent settings from curated defaults")
+    args = parser.parse_args()
+    # Malformed existing files must fail before any writes, not become empty defaults.
+    for path in (SETTINGS_PATH, PLUGIN_SETTINGS_PATH, SESSION_PATH):
+        value = read_json(path, {})
+        if not isinstance(value, dict):
+            raise SystemExit(f"Invalid DMS object: {path}")
     if not SETTINGS_PATH.exists():
-        raise SystemExit(f"DMS settings not found: {SETTINGS_PATH}")
+        if not args.init:
+            raise SystemExit(f"DMS settings not found: {SETTINGS_PATH}; use --init for first setup")
+        defaults = Path(__file__).resolve().parents[1] / "home/.config/DankMaterialShell/settings.defaults.json"
+        settings = json.loads(defaults.read_text())
+        settings["customThemeFile"] = str(CONFIG_DIR / "theme_nord.json")
+        write_json_atomic(SETTINGS_PATH, settings)
     configure_settings()
     forget_internal_audio_devices()
     enable_plugins()

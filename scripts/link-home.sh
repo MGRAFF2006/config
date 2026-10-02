@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Link curated config only; package installation and service activation are separate.
-# Usage: bash scripts/link-home.sh [laptop|desktop] [--dry-run|--check]
+# Usage: bash scripts/link-home.sh [laptop|desktop|homelab-dev] [--dry-run|--check]
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,13 +10,13 @@ mode=install
 machine=""
 for arg in "$@"; do
   case "$arg" in
-    laptop|desktop)
+    laptop|desktop|homelab-dev)
       [[ -z "$machine" ]] || { echo "Specify one machine" >&2; exit 2; }
       machine="$arg" ;;
     --dry-run|--check)
       [[ "$mode" == install ]] || { echo "Specify one mode" >&2; exit 2; }
       mode="$arg" ;;
-    *) echo "Usage: $0 [laptop|desktop] [--dry-run|--check]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [laptop|desktop|homelab-dev] [--dry-run|--check]" >&2; exit 2 ;;
   esac
 done
 if [[ -z "$machine" ]]; then
@@ -26,10 +26,14 @@ if [[ -z "$machine" ]]; then
   fi
 fi
 case "$machine" in
-  laptop|desktop) ;;
-  *) echo "Pass laptop|desktop explicitly; Tailscale identity is unavailable or unsupported" >&2; exit 2 ;;
+  laptop|desktop|homelab-dev) ;;
+  *) echo "Pass laptop|desktop|homelab-dev explicitly; Tailscale identity is unavailable or unsupported" >&2; exit 2 ;;
 esac
 
+if [[ "$machine" == homelab-dev ]]; then
+  links=(.zshrc .bashrc .config/zshrc .config/starship.toml .config/nvim
+         .config/zshrc.d/homelab-dev.zsh)
+else
 links=(
   .zshrc .bashrc .gitconfig
   .config/zshrc .config/zshrc.d
@@ -72,11 +76,22 @@ else
     .config/sunshine/apps.json
   )
 fi
+fi
 # Validate every source before replacing any destination.
-for rel in "${links[@]}" ".config/alacritty/$machine.toml"; do
+if [[ "$machine" == homelab-dev ]]; then
+  for source in "$repo_root/headless/zshenv" "$repo_root/headless/mise.toml"; do
+    [[ -f "$source" ]] || { echo "Missing source: $source" >&2; exit 1; }
+  done
+else
+  [[ -f "$home_root/.config/alacritty/$machine.toml" ]] || { echo "Missing terminal profile" >&2; exit 1; }
+fi
+for rel in "${links[@]}"; do
   [[ -e "$home_root/$rel" ]] || { echo "Missing source: home/$rel" >&2; exit 1; }
 done
 
+for source in "$repo_root/systemd/user/t3code.service.d/path.conf" "$repo_root/scripts/configure-ssh.py" "$repo_root/ssh/workstations.conf" "$repo_root/ssh/homelab.conf"; do
+  [[ -f "$source" ]] || { echo "Missing source: $source" >&2; exit 1; }
+done
 [[ -f "$repo_root/scripts/install-agent-kit.sh" && -f "$repo_root/agent/GLOBAL.md" && -d "$repo_root/agent/skills" ]] || {
   echo "Missing agent kit sources" >&2; exit 1;
 }
@@ -114,10 +129,20 @@ link_file() {
 }
 
 for rel in "${links[@]}"; do link_file "$rel"; done
-link_file .config/alacritty/machine.toml "$home_root/.config/alacritty/$machine.toml"
+if [[ "$machine" == homelab-dev ]]; then
+  link_file .zshenv "$repo_root/headless/zshenv"
+  link_file .config/mise/config.toml "$repo_root/headless/mise.toml"
+else
+  link_file .config/alacritty/machine.toml "$home_root/.config/alacritty/$machine.toml"
+fi
 
 kit_args=()
 [[ "$mode" == install ]] || kit_args+=("$mode")
+link_file .config/systemd/user/t3code.service.d/path.conf "$repo_root/systemd/user/t3code.service.d/path.conf"
+if ! CONFIG_LINK_HOME="$target_home" python3 "$repo_root/scripts/configure-ssh.py" "$machine" "${kit_args[@]}"; then
+  failures=$((failures + 1))
+fi
+
 kit_codex_root="${CODEX_HOME:-$target_home/.codex}"
 kit_config_root="${XDG_CONFIG_HOME:-$target_home/.config}"
 # An isolated destination must not inherit paths pointing at the real home.

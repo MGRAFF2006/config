@@ -29,7 +29,7 @@ systemctl list-unit-files --state=enabled > "$report_dir/system-services.txt"
 lists=("$repo_root/packages/common.txt" "$repo_root/packages/$profile.txt"
        "$repo_root/packages/aur-common.txt" "$repo_root/packages/aur-$machine.txt")
 # Include the optional session only if its compositor is actually installed.
-if pacman -Q hyprland >/dev/null 2>&1; then lists+=("$repo_root/packages/hyprland-dms.txt"); fi
+if pacman -Q hyprland >/dev/null 2>&1; then lists+=("$repo_root/packages/hyprland-dms.txt" "$repo_root/packages/aur-hyprland-dms.txt"); fi
 awk '{sub(/#.*/, ""); if (NF) print $1}' "${lists[@]}" | LC_ALL=C sort -u > "$report_dir/desired.txt"
 LC_ALL=C sort -u "$report_dir/installed.txt" > "$report_dir/installed-sorted.txt"
 cat "$report_dir/explicit-native.txt" "$report_dir/explicit-foreign.txt" | LC_ALL=C sort -u > "$report_dir/explicit-sorted.txt"

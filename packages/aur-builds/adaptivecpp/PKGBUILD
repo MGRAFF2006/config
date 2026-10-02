@@ -1,0 +1,71 @@
+# Maintainer: Marco Julian Solanki <aur@solanki.mozmail.com>
+# Local AMD-focused variant: ROCm backend only (no nvidia-utils dependency).
+
+pkgname='adaptivecpp'
+pkgver=25.10.0
+pkgrel=2
+pkgdesc='AdaptiveCpp (ROCm/AMD backend; local AMD desktop build)'
+arch=('x86_64')
+url='https://github.com/AdaptiveCpp/AdaptiveCpp'
+license=('BSD-2-Clause')
+options=('!debug')
+# Use system opencl-headers (needed by rocm-opencl-runtime); do not bundle/conflict.
+conflicts=('adaptivecpp-git')
+source=("${pkgname}::git+${url}.git#tag=v${pkgver}")
+sha512sums=('SKIP')
+_llvm_version_major=20
+
+depends=(
+    "clang${_llvm_version_major}"
+    'glibc'
+    'hip-runtime-amd'
+    'libgcc'
+    'libgomp'
+    'libstdc++'
+    "llvm${_llvm_version_major}-libs"
+    'numactl'
+    'ocl-icd'
+    'python'
+)
+makedepends=(
+    'boost'
+    'cmake'
+    'doxygen'
+    'git'
+    "lld${_llvm_version_major}"
+    "llvm${_llvm_version_major}"
+    'openmp'
+    'rocm-llvm'
+)
+
+build() {
+    cmake -Wno-dev \
+        -B build \
+        -S "${pkgname}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX='/usr' \
+        -DCMAKE_SKIP_INSTALL_RPATH=YES \
+        -DLLVM_ROOT="/usr/lib/llvm${_llvm_version_major}" \
+        -DROCM_PATH=/opt/rocm \
+        -DACPP_LLD_PATH="/usr/lib/llvm${_llvm_version_major}/bin/lld" \
+        -DACPP_COMPILER_FEATURE_PROFILE=full \
+        -DWITH_CUDA_BACKEND=OFF \
+        -DWITH_ROCM_BACKEND=ON \
+        -DWITH_LEVEL_ZERO_BACKEND=OFF \
+        -DWITH_OPENCL_BACKEND=ON
+
+    cmake --build build --parallel "$(nproc)"
+}
+
+package() {
+    DESTDIR="${pkgdir}" cmake --install build
+    install -Dm644 "${pkgname}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    cd "${pkgdir}" && ln -svr usr/lib/hipSYCL/llvm-to-backend/*.so usr/lib
+
+    # Keep system opencl-headers; AdaptiveCpp's bundled copies conflict with it.
+    rm -rf "${pkgdir}/usr/include/CL"
+    rm -rf "${pkgdir}/usr/share/cmake/OpenCLHeaders"
+    rm -rf "${pkgdir}/usr/share/cmake/OpenCLHeadersCpp"
+    rm -f "${pkgdir}/usr/share/pkgconfig/OpenCL-Headers.pc"
+    rm -f "${pkgdir}/usr/share/pkgconfig/OpenCL-CLHPP.pc"
+}

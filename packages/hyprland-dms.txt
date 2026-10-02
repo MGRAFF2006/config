@@ -52,5 +52,9 @@ cups-pk-helper
 # Login (official); greeter UI is AUR — see aur-laptop.txt
 greetd
 
+# Secret Service and the optional managed PAM stack
+kwallet
+kwallet-pam
+
 # AUR companions (install with yay — see aur-laptop.txt / install script notes):
 #   dsearch-bin dankcalendar-bin greetd-dms-greeter-bin

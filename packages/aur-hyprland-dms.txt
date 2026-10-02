@@ -1,0 +1,4 @@
+# DMS companion applications; shared by either workstation profile.
+dsearch-bin
+dankcalendar-bin
+greetd-dms-greeter-bin
