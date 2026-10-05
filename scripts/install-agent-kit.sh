@@ -15,8 +15,17 @@ esac
 
 backup_root=""
 failures=0
+ensure_local_destination() {
+  local parent
+  parent="$(realpath -m -- "$(dirname -- "$1")")"
+  case "$parent/" in
+    "$repo_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
+  esac
+}
+
 backup_path() {
   local dst="$1" relative
+  ensure_local_destination "$dst"
   if [[ -z "$backup_root" ]]; then
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
@@ -41,6 +50,7 @@ link_path() {
       failures=$((failures + 1)) ;;
     --dry-run) echo "LINK $dst -> $src (back up existing destination)" ;;
     install)
+      ensure_local_destination "$dst"
       mkdir -p -- "$(dirname -- "$dst")"
       if [[ -e "$dst" || -L "$dst" ]]; then backup_path "$dst"; fi
       ln -s -- "$src" "$dst"

@@ -117,6 +117,34 @@ def main():
         run()
         assert (custom / "AGENTS.md").resolve() == agent / "GLOBAL.md"
         run("--check")
+        # Shared parent links must never move a source into a home backup.
+        for relative, shared in ((".claude/skills", "agent/skills"),
+                                 (".codex/skills", "agent/skills"),
+                                 (".config/opencode", "agent")):
+            fixture = root / relative.replace("/", "-")
+            shared_repo = fixture / "repo"
+            isolated_home = fixture / "home"
+            (shared_repo / "scripts").mkdir(parents=True)
+            shutil.copy2(source, shared_repo / "scripts" / source.name)
+            shutil.copytree(agent, shared_repo / "agent", symlinks=True)
+            destination = isolated_home / relative
+            destination.parent.mkdir(parents=True)
+            destination.symlink_to(shared_repo / shared, target_is_directory=True)
+            if relative == ".config/opencode":
+                (shared_repo / "agent/AGENTS.md").write_text("Keep shared instructions\n")
+            result = subprocess.run(
+                ["bash", str(shared_repo / "scripts" / source.name)],
+                env=dict(env, AGENT_KIT_HOME=str(isolated_home),
+                         CODEX_HOME=str(isolated_home / ".codex"),
+                         XDG_CONFIG_HOME=str(isolated_home / ".config")),
+                capture_output=True, text=True,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr
+            assert (shared_repo / "agent/skills/example/SKILL.md").read_text() == (agent / "skills/example/SKILL.md").read_text()
+            assert (shared_repo / "agent/GLOBAL.md").read_text() == (agent / "GLOBAL.md").read_text()
+            if relative == ".config/opencode":
+                assert (shared_repo / "agent/AGENTS.md").read_text() == "Keep shared instructions\n"
     print("PASS: dry run, backups, idempotency, shared instruction and skill updates, migration, local tool state, and readiness checks")
 
 
