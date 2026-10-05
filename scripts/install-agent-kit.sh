@@ -2,7 +2,7 @@
 # Symlink shared instructions and skills; leave authentication and runtime state local.
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 agent_home="${AGENT_KIT_HOME:-$HOME}"
 codex_root="${CODEX_HOME:-$agent_home/.codex}"
 config_root="${XDG_CONFIG_HOME:-$agent_home/.config}"
@@ -27,6 +27,7 @@ backup_path() {
   local dst="$1" relative
   ensure_local_destination "$dst"
   if [[ -z "$backup_root" ]]; then
+    ensure_local_destination "$agent_home/.local/share/agent-kit-backups/new-backup"
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
