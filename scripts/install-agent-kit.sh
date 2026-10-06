@@ -3,9 +3,9 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-agent_home="${AGENT_KIT_HOME:-$HOME}"
-codex_root="${CODEX_HOME:-$agent_home/.codex}"
-config_root="${XDG_CONFIG_HOME:-$agent_home/.config}"
+agent_home="$(realpath -m -- "${AGENT_KIT_HOME:-$HOME}")"
+codex_root="$(realpath -m -- "${CODEX_HOME:-$agent_home/.codex}")"
+config_root="$(realpath -m -- "${XDG_CONFIG_HOME:-$agent_home/.config}")"
 mode="${1:-install}"
 case "$mode" in
   install|--dry-run|--check) ;;
