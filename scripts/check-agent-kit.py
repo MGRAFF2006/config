@@ -60,10 +60,10 @@ def main():
         env.pop("CODEX_HOME", None)
         env.pop("XDG_CONFIG_HOME", None)
 
-        def run(*arguments, expected=0):
+        def run(*arguments, expected=0, cwd=None):
             result = subprocess.run(
                 ["bash", str(scripts / source.name), *arguments],
-                env=env, capture_output=True, text=True,
+                env=env, capture_output=True, text=True, cwd=cwd,
             )
             assert result.returncode == expected, result.stdout + result.stderr
             return result
@@ -117,6 +117,59 @@ def main():
         run()
         assert (custom / "AGENTS.md").resolve() == agent / "GLOBAL.md"
         run("--check")
+        # Shared parent links must never move a source into a home backup.
+        for relative, shared, aliased in ((".claude/skills", "agent/skills", False),
+                                          (".codex/skills", "agent/skills", False),
+                                          (".config/opencode", "agent", False),
+                                          (".local/share/agent-kit-backups", "agent", False),
+                                          (".claude/skills", "agent/skills", True)):
+            fixture = root / (relative.replace("/", "-") + ("-aliased" if aliased else ""))
+            shared_repo = fixture / "repo"
+            isolated_home = fixture / "home"
+            (shared_repo / "scripts").mkdir(parents=True)
+            shutil.copy2(source, shared_repo / "scripts" / source.name)
+            shutil.copytree(agent, shared_repo / "agent", symlinks=True)
+            destination = isolated_home / relative
+            destination.parent.mkdir(parents=True)
+            destination.symlink_to(shared_repo / shared, target_is_directory=True)
+            if relative == ".config/opencode":
+                (shared_repo / "agent/AGENTS.md").write_text("Keep shared instructions\n")
+            if relative == ".local/share/agent-kit-backups":
+                (isolated_home / "AGENTS.md").write_text("Keep local instructions\n")
+            checkout = shared_repo
+            if aliased:
+                checkout = fixture / "linked checkout"
+                checkout.symlink_to(shared_repo, target_is_directory=True)
+            result = subprocess.run(
+                ["bash", str(checkout / "scripts" / source.name)],
+                env=dict(env, AGENT_KIT_HOME=str(isolated_home),
+                         CODEX_HOME=str(isolated_home / ".codex"),
+                         XDG_CONFIG_HOME=str(isolated_home / ".config")),
+                capture_output=True, text=True,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr
+            assert (shared_repo / "agent/skills/example/SKILL.md").read_text() == (agent / "skills/example/SKILL.md").read_text()
+            assert (shared_repo / "agent/GLOBAL.md").read_text() == (agent / "GLOBAL.md").read_text()
+            if relative == ".config/opencode":
+                assert (shared_repo / "agent/AGENTS.md").read_text() == "Keep shared instructions\n"
+            if relative == ".local/share/agent-kit-backups":
+                assert (isolated_home / "AGENTS.md").read_text() == "Keep local instructions\n"
+                assert sorted(path.name for path in (shared_repo / "agent").iterdir()) == sorted(path.name for path in agent.iterdir())
+        # External relative roots cannot escape the printed backup directory.
+        deep = root / "a/b/c/d/e/f/g/h"
+        deep.mkdir(parents=True)
+        relative_codex = "../" * 7 + "repo with spaces/agent/local"
+        external = (deep / relative_codex).resolve()
+        external.mkdir(parents=True)
+        (external / "AGENTS.md").write_text("Keep external instructions\n")
+        env["CODEX_HOME"] = relative_codex
+        run(cwd=deep)
+        assert not (agent / "local").exists()
+        assert (external / "AGENTS.md").resolve() == agent / "GLOBAL.md"
+        saved = home / ".local/share/agent-kit-backups"
+        assert any(path.read_text() == "Keep external instructions\n"
+                   for path in saved.glob("*/external/**/AGENTS.md"))
     print("PASS: dry run, backups, idempotency, shared instruction and skill updates, migration, local tool state, and readiness checks")
 
 

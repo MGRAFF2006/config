@@ -2,10 +2,10 @@
 # Symlink shared instructions and skills; leave authentication and runtime state local.
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-agent_home="${AGENT_KIT_HOME:-$HOME}"
-codex_root="${CODEX_HOME:-$agent_home/.codex}"
-config_root="${XDG_CONFIG_HOME:-$agent_home/.config}"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+agent_home="$(realpath -m -- "${AGENT_KIT_HOME:-$HOME}")"
+codex_root="$(realpath -m -- "${CODEX_HOME:-$agent_home/.codex}")"
+config_root="$(realpath -m -- "${XDG_CONFIG_HOME:-$agent_home/.config}")"
 mode="${1:-install}"
 case "$mode" in
   install|--dry-run|--check) ;;
@@ -15,9 +15,19 @@ esac
 
 backup_root=""
 failures=0
+ensure_local_destination() {
+  local parent
+  parent="$(realpath -m -- "$(dirname -- "$1")")"
+  case "$parent/" in
+    "$repo_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
+  esac
+}
+
 backup_path() {
   local dst="$1" relative
+  ensure_local_destination "$dst"
   if [[ -z "$backup_root" ]]; then
+    ensure_local_destination "$agent_home/.local/share/agent-kit-backups/new-backup"
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
@@ -41,6 +51,7 @@ link_path() {
       failures=$((failures + 1)) ;;
     --dry-run) echo "LINK $dst -> $src (back up existing destination)" ;;
     install)
+      ensure_local_destination "$dst"
       mkdir -p -- "$(dirname -- "$dst")"
       if [[ -e "$dst" || -L "$dst" ]]; then backup_path "$dst"; fi
       ln -s -- "$src" "$dst"
