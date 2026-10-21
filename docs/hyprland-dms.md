@@ -89,7 +89,9 @@ The network panel uses DMS's live NetworkManager state for the connection
 summary and bar icon. Its Networks tab provides the stock Wi-Fi/Ethernet
 controls; Connection & diagnostics shows copyable IPv4/IPv6 details, traffic,
 and separate router/public-IP/DNS measurements. Internet access comes from
-NetworkManager's cached connectivity assessment. A missed ping is “No reply”,
+NetworkManager's cached connectivity assessment for the whole device. Public-IP
+and DNS probes follow the system route, including VPNs; router ping is bound
+to the displayed interface. A missed ping is “No reply”,
 not “Offline”; an unavailable DNS lookup is labelled separately. Unknown or
 stale measurements never override the active connection. The helper samples
 the displayed interface, clears traffic history on connection changes, and

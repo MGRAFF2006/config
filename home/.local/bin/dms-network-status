@@ -149,10 +149,13 @@ def connectivity() -> str:
     return state if code == 0 and state in ("full", "limited", "portal", "none") else "unknown"
 
 
-def ping_ms(host: str) -> float | None:
+def ping_ms(host: str, interface: str = "") -> float | None:
     if not host:
         return None
-    output, code = run(["/usr/bin/ping", "-n", "-c", "1", "-W", "1", host], timeout=2)
+    command = ["/usr/bin/ping", "-n", "-c", "1", "-W", "1"]
+    if interface:
+        command.extend(["-I", interface])
+    output, code = run([*command, host], timeout=2)
     if code != 0:
         return None
     match = re.search(r"time[=<]([\d.]+)\s*ms", output)
@@ -237,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         probe_gateway += "%" + device
     internet_target = "1.1.1.1" if details.get("IP4.ADDRESS") else "2606:4700:4700::1111"
     with ThreadPoolExecutor(max_workers=3) as probes:
-        gateway_probe = probes.submit(ping_ms, probe_gateway)
+        gateway_probe = probes.submit(ping_ms, probe_gateway, device)
         internet_probe = probes.submit(ping_ms, internet_target)
         dns_probe = probes.submit(dns_ms)
         gateway_ping, internet_ping, dns_lookup = gateway_probe.result(), internet_probe.result(), dns_probe.result()

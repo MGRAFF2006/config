@@ -23,7 +23,7 @@ PluginComponent {
     readonly property bool sampleMatches: linkConnected && networkData.connected === true && networkData.interface === interfaceName
     readonly property bool sampleFresh: sampleMatches && updatedAt > 0 && clockTime - updatedAt < 25000
     readonly property string connectivity: sampleFresh ? (networkData.connectivity || "unknown") : "unknown"
-    readonly property string internetStatus: !stateReady ? "Waiting for network status" : !linkConnected ? "No active network connection" : connectivity === "full" ? "Internet available" : connectivity === "portal" ? "Network sign-in may be required" : connectivity === "limited" ? "Limited internet access reported" : connectivity === "none" ? "No internet access reported" : "Internet access not checked"
+    readonly property string internetStatus: !stateReady ? "Waiting for network status" : !linkConnected ? "No active network connection" : connectivity === "full" ? "Internet available on this device" : connectivity === "portal" ? "Network sign-in may be required" : connectivity === "limited" ? "Limited internet access reported on this device" : connectivity === "none" ? "No internet access reported on this device" : "Internet access not checked"
     readonly property bool internetWarning: linkConnected && ["portal", "limited", "none"].includes(connectivity)
     readonly property string barText: !stateReady ? "…" : !linkConnected ? (NetworkService.isConnecting ? "…" : "Disconnected") : sampleFresh && networkData.internetPingMs !== null && networkData.internetPingMs !== undefined ? latency(networkData.internetPingMs) : wired ? "Ethernet" : "Wi-Fi"
 
@@ -325,7 +325,7 @@ PluginComponent {
                     }
                     StyledText {
                         width: parent.width
-                        text: "A missed ping can mean filtering or packet loss. It does not mean your network is disconnected."
+                        text: "Public IP and DNS measurements follow your system route, including any VPN. Router ping and traffic refer to this connection. A missed probe does not mean you are disconnected."
                         color: Theme.surfaceVariantText
                         font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.WordWrap

@@ -65,6 +65,8 @@ def main():
     assert result["interface"] == "enp1s0", "Prefer the default route over Wi-Fi"
     assert result["gatewayPingMs"] is None and result["internetPingMs"] is None
     assert result["dnsLookupMs"] is None
+    assert ["/usr/bin/ping", "-n", "-c", "1", "-W", "1", "-I", "enp1s0", "192.0.2.1"] in commands
+    assert all("-I" not in command for command in commands if command[-1] == "1.1.1.1")
 
     result = sample("--interface", "wlan0")
     assert result["connected"] is True and result["interface"] == "wlan0"
@@ -97,8 +99,9 @@ def main():
     assert result["addresses"] == ["2001:db8::10/64"]
     assert result["dnsServers"] == ["2001:db8::53"]
     assert result["gateway"] == "fe80::1"
-    assert ["/usr/bin/ping", "-n", "-c", "1", "-W", "1", "fe80::1%wlan0"] in commands
+    assert ["/usr/bin/ping", "-n", "-c", "1", "-W", "1", "-I", "wlan0", "fe80::1%wlan0"] in commands
     assert any(command[-1] == "2606:4700:4700::1111" for command in commands)
+    assert all("-I" not in command for command in commands if command[-1] == "2606:4700:4700::1111")
     details_code = 1
     result = sample()
     assert result["connected"] is True and "details" in result["error"]
