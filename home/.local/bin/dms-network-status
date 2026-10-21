@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Emit current NetworkManager diagnostics as one JSON object."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import time
+from typing import Any
+
+
+SAMPLE_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "dms-network-sample.json"
+
+
+def run(command: list[str], timeout: float = 3) -> tuple[str, int]:
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+            env=env,
+        )
+        return result.stdout.strip(), result.returncode
+    except (OSError, subprocess.TimeoutExpired):
+        return "", 1
+
+
+def split_escaped(value: str, separator: str = ":") -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for character in value:
+        if escaped:
+            current.append(character)
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == separator:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+    parts.append("".join(current))
+    return parts
+
+
+def active_device() -> tuple[str, str]:
+    output, _ = run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"])
+    candidates: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        fields = split_escaped(line)
+        if len(fields) < 3 or not fields[2].startswith("connected"):
+            continue
+        if fields[1] in ("wifi", "ethernet"):
+            candidates.append((fields[0], fields[1]))
+    candidates.sort(key=lambda item: 0 if item[1] == "wifi" else 1)
+    return candidates[0] if candidates else ("", "")
+
+
+def device_details(device: str) -> dict[str, list[str]]:
+    fields = "GENERAL.CONNECTION,GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS"
+    output, _ = run(["nmcli", "-t", "-f", fields, "device", "show", device])
+    result: dict[str, list[str]] = {}
+    for line in output.splitlines():
+        key_value = split_escaped(line)
+        if len(key_value) < 2:
+            continue
+        key = re.sub(r"\[\d+\]$", "", key_value[0])
+        result.setdefault(key, []).append(":".join(key_value[1:]))
+    return result
+
+
+def first(details: dict[str, list[str]], key: str) -> str:
+    values = details.get(key, [])
+    return values[0] if values else ""
+
+
+def wifi_details(device: str) -> dict[str, Any]:
+    output, _ = run(
+        [
+            "nmcli",
+            "-t",
+            "-f",
+            "IN-USE,SSID,SIGNAL,RATE,SECURITY",
+            "device",
+            "wifi",
+            "list",
+            "ifname",
+            device,
+            "--rescan",
+            "no",
+        ]
+    )
+    for line in output.splitlines():
+        fields = split_escaped(line)
+        if len(fields) >= 5 and fields[0] == "*":
+            return {
+                "ssid": fields[1],
+                "signal": int(fields[2] or 0),
+                "rate": fields[3],
+                "security": fields[4],
+            }
+    return {"ssid": "", "signal": 0, "rate": "", "security": ""}
+
+
+def wifi_password(connection: str) -> str:
+    if not connection:
+        return ""
+    output, code = run(
+        [
+            "nmcli",
+            "--show-secrets",
+            "-g",
+            "802-11-wireless-security.psk",
+            "connection",
+            "show",
+            connection,
+        ]
+    )
+    return output if code == 0 else ""
+
+
+def ping_ms(host: str) -> float | None:
+    if not host:
+        return None
+    output, code = run(["/usr/bin/ping", "-n", "-c", "1", "-W", "1", host], timeout=2)
+    if code != 0:
+        return None
+    match = re.search(r"time[=<]([\d.]+)\s*ms", output)
+    return round(float(match.group(1)), 1) if match else None
+
+
+def dns_ms() -> float | None:
+    started = time.monotonic()
+    _, code = run(["resolvectl", "query", "--legend=no", "--type=A", "example.com"], timeout=2)
+    if code != 0:
+        return None
+    return round((time.monotonic() - started) * 1000, 1)
+
+
+def network_rates(device: str) -> tuple[float, float]:
+    now = time.monotonic()
+    try:
+        rx = int((Path("/sys/class/net") / device / "statistics/rx_bytes").read_text())
+        tx = int((Path("/sys/class/net") / device / "statistics/tx_bytes").read_text())
+    except (OSError, ValueError):
+        return (0.0, 0.0)
+
+    previous: dict[str, Any] = {}
+    try:
+        value = json.loads(SAMPLE_PATH.read_text())
+        if isinstance(value, dict):
+            previous = value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    elapsed = now - float(previous.get("time", now))
+    if previous.get("device") == device and 0 < elapsed < 1:
+        return (float(previous.get("down", 0)), float(previous.get("up", 0)))
+    down = max(0.0, (rx - int(previous.get("rx", rx))) / elapsed) if elapsed > 0 else 0.0
+    up = max(0.0, (tx - int(previous.get("tx", tx))) / elapsed) if elapsed > 0 else 0.0
+
+    SAMPLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=SAMPLE_PATH.name + ".", dir=SAMPLE_PATH.parent)
+    try:
+        with os.fdopen(fd, "w") as file:
+            json.dump({"device": device, "time": now, "rx": rx, "tx": tx, "down": down, "up": up}, file)
+        os.replace(temporary, SAMPLE_PATH)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    return (down, up)
+
+
+def main() -> int:
+    device, connection_type = active_device()
+    if not device:
+        print(json.dumps({"connected": False}, separators=(",", ":")))
+        return 0
+
+    details = device_details(device)
+    connection = first(details, "GENERAL.CONNECTION")
+    wifi = wifi_details(device) if connection_type == "wifi" else {}
+    gateway = first(details, "IP4.GATEWAY")
+    down, up = network_rates(device)
+    result = {
+        "connected": True,
+        "type": connection_type,
+        "connection": connection,
+        "ssid": wifi.get("ssid", "") or connection,
+        "password": wifi_password(connection) if connection_type == "wifi" else "",
+        "signal": wifi.get("signal", 0),
+        "linkRate": wifi.get("rate", ""),
+        "security": wifi.get("security", ""),
+        "interface": device,
+        "mac": first(details, "GENERAL.HWADDR"),
+        "addresses": details.get("IP4.ADDRESS", []),
+        "gateway": gateway,
+        "dnsServers": details.get("IP4.DNS", []),
+        "gatewayPingMs": ping_ms(gateway),
+        "internetPingMs": ping_ms("1.1.1.1"),
+        "dnsLookupMs": dns_ms(),
+        "downloadBytesPerSecond": round(down),
+        "uploadBytesPerSecond": round(up),
+    }
+    print(json.dumps(result, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

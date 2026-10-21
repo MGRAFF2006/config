@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Logged Hyprland starter (optional session entry for SDDM / debugging).
+# Prefer stock "Hyprland" at the greeter — it already loads hyprland.lua + DMS.
+# Session desktop: ~/.local/share/wayland-sessions/hyprland-dms.desktop
+set -euo pipefail
+
+log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr"
+mkdir -p "$log_dir"
+log="$log_dir/session-$(date +%Y%m%d-%H%M%S).log"
+
+{
+  echo "=== hyprland-dms session start $(date -Is) ==="
+  echo "USER=$USER UID=$(id -u) VT=${XDG_VTNR:-?} SEAT=${XDG_SEAT:-?}"
+  echo "XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-}"
+  echo "XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-}"
+  echo "config: $HOME/.config/hypr/hyprland.lua"
+  ls -la "$HOME/.config/hypr/hyprland.lua" || true
+  command -v Hyprland || true
+  command -v start-hyprland || true
+  command -v dms || true
+  echo "=== existing sessions ==="
+  loginctl list-sessions --no-pager || true
+  echo "=== launching (log continues in hyprland journal; not redirecting compositor stdio) ==="
+} >>"$log" 2>&1 || true
+
+# Do not redirect compositor stdout/stderr — that can make greetd/SDDM think
+# the session died. start-hyprland auto-picks hyprland.lua when present.
+if [[ -x /usr/bin/start-hyprland ]]; then
+  exec /usr/bin/start-hyprland
+fi
+exec /usr/bin/Hyprland -c "$HOME/.config/hypr/hyprland.lua"

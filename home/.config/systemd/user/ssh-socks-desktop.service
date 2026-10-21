@@ -1,0 +1,21 @@
+[Unit]
+Description=SOCKS5 proxy to desktop (Tailscale SSH)
+Documentation=https://tailscale.com/kb/1080/cli/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Eduroam (and some campus nets) SNI-filter *.t3coderelay.com. T3 Code's
+# remote environment URL needs a path that exits off-campus — desktop works.
+ExecStart=/usr/bin/ssh -N -D 127.0.0.1:1080 \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o BatchMode=yes \
+  desktop
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

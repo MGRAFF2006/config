@@ -1,0 +1,6 @@
+[Unit]
+Description=Hyprland Session Target
+Documentation=man:systemd.special(7)
+Requires=graphical-session.target
+After=graphical-session.target
+StopWhenUnneeded=yes

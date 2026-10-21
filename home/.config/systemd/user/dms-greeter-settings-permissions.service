@@ -1,0 +1,8 @@
+[Unit]
+Description=Restore DMS greeter settings permissions
+ConditionPathExists=%h/.config/DankMaterialShell/settings.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/chgrp greeter %h/.config/DankMaterialShell/settings.json
+ExecStart=/usr/bin/chmod g+r %h/.config/DankMaterialShell/settings.json

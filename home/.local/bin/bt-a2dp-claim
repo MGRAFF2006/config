@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Keep connected Bluetooth audio usable and retry A2DP when needed.
+# Covers the multipoint case: phone already holds audio, BlueZ reports
+# Connected, ConnectProfile returns busy until the headset yields a slot.
+# While Bluetooth audio is connected, inhibit logind's automatic lid-close
+# suspend. Other Bluetooth devices do not keep the laptop awake.
+set -euo pipefail
+
+A2DP_SINK_UUID="0000110b-0000-1000-8000-00805f9b34fb"
+inhibitor_pid=""
+
+mac_to_path() {
+  printf '/org/bluez/hci0/dev_%s\n' "${1//:/_}"
+}
+
+has_audio_sink_uuid() {
+  bluetoothctl info "$1" 2>/dev/null | grep -q 'UUID: Audio Sink'
+}
+
+has_pw_sink() {
+  local id="${1//:/_}"
+  pactl list short sinks 2>/dev/null | grep -qi "bluez_output.${id}"
+}
+
+claim_a2dp() {
+  busctl call org.bluez "$(mac_to_path "$1")" \
+    org.bluez.Device1 ConnectProfile s "$A2DP_SINK_UUID" >/dev/null 2>&1 || true
+}
+
+hold_lid_open() {
+  if [[ -n "$inhibitor_pid" ]] && kill -0 "$inhibitor_pid" 2>/dev/null; then
+    return
+  fi
+  systemd-inhibit \
+    --what=handle-lid-switch \
+    --who="Bluetooth audio" \
+    --why="Keep Bluetooth audio connected while the lid is closed" \
+    --mode=block \
+    /usr/bin/sleep infinity &
+  inhibitor_pid=$!
+  printf 'Holding lid-close suspend while Bluetooth audio is connected\n'
+}
+
+release_lid() {
+  if [[ -n "$inhibitor_pid" ]] && kill -0 "$inhibitor_pid" 2>/dev/null; then
+    mapfile -t inhibitor_children < <(pgrep -P "$inhibitor_pid" 2>/dev/null || true)
+    if ((${#inhibitor_children[@]})); then
+      kill "${inhibitor_children[@]}" 2>/dev/null || true
+    fi
+    kill "$inhibitor_pid" 2>/dev/null || true
+    wait "$inhibitor_pid" 2>/dev/null || true
+    printf 'Released lid-close suspend inhibitor\n'
+  fi
+  inhibitor_pid=""
+}
+
+trap release_lid EXIT INT TERM HUP
+
+while true; do
+  audio_connected=0
+  while IFS= read -r line; do
+    mac="${line#Device }"
+    mac="${mac%% *}"
+    [[ "$mac" == *:* ]] || continue
+    has_audio_sink_uuid "$mac" || continue
+    audio_connected=1
+    has_pw_sink "$mac" && continue
+    claim_a2dp "$mac"
+  done < <(bluetoothctl devices Connected 2>/dev/null || true)
+  if ((audio_connected)); then
+    hold_lid_open
+  else
+    release_lid
+  fi
+  sleep 2
+done

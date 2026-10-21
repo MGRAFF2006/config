@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Neovim
+GenericName=Text Editor
+Comment=Edit text files in Alacritty
+Exec=alacritty -e nvim %F
+Terminal=false
+Type=Application
+Icon=nvim
+Categories=Utility;TextEditor;
+StartupNotify=false
+MimeType=text/plain;text/markdown;text/x-log;text/x-makefile;text/x-c;text/x-c++;text/x-chdr;text/x-csrc;text/x-c++hdr;text/x-c++src;text/x-python;text/x-java;text/x-rust;text/x-shellscript;text/x-yaml;application/x-shellscript;application/json;application/toml;application/yaml;text/javascript;application/javascript;text/typescript;text/x-typescript;

@@ -1,5 +1,9 @@
 # System Manifest - humunkulud's Arch Linux
 
+> Historical snapshot from 2026-05-04. Use [the README](../README.md), package lists
+> and [Fleet records](../agent/fleet/README.md) for current setup. Removal advice
+> below is dated and must be checked against current workloads and dependencies.
+
 Generated: 2026-05-04
 Machine: Laptop (laptop)
 
@@ -320,11 +324,9 @@ sudo pacman -S syncthing
 systemctl --user enable --now syncthing
 ```
 
-Recommended folders to sync:
-- `~/Projects/` (code)
-- `~/Documents/` (all docs)
-- `~/.config/nvim/` (editor config)
-- `~/.config/alacritty/` (terminal config)
-- `~/.bashrc`, `~/.inputrc`, `~/.gitconfig` (via dotfiles repo or Syncthing)
+Current folder layout: sync `~/Projects/`, `~/Documents/`, and
+`~/Documents/config/`. Put `/config` in `~/Documents/.stignore` on every device
+so the nested repo is not synced twice. Do not separately sync `~/.config/nvim/`
+or `~/.config/alacritty/`; their config is linked into the repo.
 
 Access Syncthing web UI at: http://localhost:8384

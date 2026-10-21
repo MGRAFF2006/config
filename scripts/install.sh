@@ -1,270 +1,96 @@
 #!/usr/bin/env bash
-# install.sh — Reproducible Arch Linux setup for humunkulud
-# Hosted at: https://github.com/MGRAFF2006/config
-#
-# Fresh install bootstrap:
-#   curl -sL https://raw.githubusercontent.com/MGRAFF2006/config/main/scripts/install.sh | bash
-#
-# Or clone first and run locally:
-#   git clone https://github.com/MGRAFF2006/config ~/Documents/config
-#   ~/Documents/config/scripts/install.sh
-#
+# Install workstation packages from a local checkout; never update the checkout.
+# Usage: bash scripts/install.sh [laptop|desktop] [--skip-aur] [--dry-run]
 set -euo pipefail
 
-# ── Colors ──────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
-
-info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
-success() { echo -e "${GREEN}[OK]${NC}    $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-header()  { echo -e "\n${BOLD}${BLUE}══════════════════════════════════════${NC}"; echo -e "${BOLD}${BLUE} $*${NC}"; echo -e "${BOLD}${BLUE}══════════════════════════════════════${NC}"; }
-
-REPO_URL="https://github.com/MGRAFF2006/config"
-REPO_DIR="$HOME/Documents/config"
-
-# ── Detect or ask for machine type ──────────
-header "humunkulud's Arch Setup"
-echo ""
-if [[ -n "${1:-}" ]]; then
-  MACHINE="$1"
-else
-  echo "Which machine are you setting up?"
-  echo "  1) laptop  — KDE Plasma, portable"
-  echo "  2) desktop — DWM, stationary"
-  echo ""
-  read -rp "Enter choice [1/2] or type 'laptop'/'desktop': " choice
-  case "$choice" in
-    1|laptop)  MACHINE="laptop" ;;
-    2|desktop) MACHINE="desktop" ;;
-    *) error "Unknown choice: $choice"; exit 1 ;;
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+machine=""
+skip_aur=false
+dry_run=false
+for arg in "$@"; do
+  case "$arg" in
+    laptop|desktop)
+      [[ -z "$machine" ]] || { echo "Specify one machine" >&2; exit 2; }
+      machine="$arg" ;;
+    --skip-aur) skip_aur=true ;;
+    --dry-run) dry_run=true ;;
+    *) echo "Usage: $0 [laptop|desktop] [--skip-aur] [--dry-run]" >&2; exit 2 ;;
   esac
+done
+if [[ -z "$machine" ]]; then
+  read -rp 'Machine [laptop/desktop]: ' machine
 fi
-success "Machine type: $MACHINE"
+case "$machine" in
+  laptop) native_profile=laptop-kde ;;
+  desktop) native_profile=desktop-dwm ;;
+  *) echo "Unknown machine: $machine" >&2; exit 2 ;;
+esac
 
-# ── Ensure Arch Linux ───────────────────────
-if ! grep -q "^ID=arch" /etc/os-release 2>/dev/null; then
-  error "This script is for Arch Linux only."
+read_packages() {
+  awk '{sub(/#.*/, ""); if (NF) print $1}' "$@" | sort -u
+}
+for file in common "$native_profile" aur-common "aur-$machine"; do
+  [[ -s "$repo_root/packages/$file.txt" ]] || { echo "Missing package list: $file.txt" >&2; exit 1; }
+done
+mapfile -t native < <(read_packages "$repo_root/packages/common.txt" "$repo_root/packages/$native_profile.txt")
+mapfile -t aur < <(read_packages "$repo_root/packages/aur-common.txt" "$repo_root/packages/aur-$machine.txt")
+if "$dry_run"; then
+  printf 'Official packages (%s): %s\n' "${#native[@]}" "${native[*]}"
+  if ! "$skip_aur"; then printf 'AUR packages (%s): %s\n' "${#aur[@]}" "${aur[*]}"; fi
+  exec bash "$repo_root/scripts/link-home.sh" "$machine" --dry-run
+fi
+
+[[ "$EUID" -ne 0 ]] || { echo "Run as your normal user, with sudo available" >&2; exit 1; }
+if ! grep -qx 'ID=arch' /etc/os-release; then
+  echo "This installer is for Arch Linux; use setup-homelab-dev.sh on the Debian VM" >&2
   exit 1
 fi
-
-# ── Step 1: Install yay ─────────────────────
-header "Step 1: AUR Helper (yay)"
-if ! command -v yay &>/dev/null; then
-  info "Installing yay..."
-  sudo pacman -S --needed --noconfirm git base-devel
-  tmpdir="$(mktemp -d)"
-  git clone https://aur.archlinux.org/yay-bin.git "$tmpdir/yay-bin"
-  (cd "$tmpdir/yay-bin" && makepkg -si --noconfirm)
-  rm -rf "$tmpdir"
-  success "yay installed"
-else
-  success "yay already installed"
+# Verify link sources before any package or service changes.
+bash "$repo_root/scripts/link-home.sh" "$machine" --dry-run >/dev/null
+# Arch supports complete upgrades rather than partial upgrades.
+sudo pacman -Syu --needed --noconfirm "${native[@]}"
+if ! "$skip_aur"; then
+  if ! command -v yay >/dev/null 2>&1; then
+    temporary="$(mktemp -d)"
+    trap 'rm -rf -- "$temporary"' EXIT
+    git clone https://aur.archlinux.org/yay-bin.git "$temporary/yay-bin"
+    (cd "$temporary/yay-bin" && makepkg -si --noconfirm)
+  fi
+  yay -S --needed --noconfirm "${aur[@]}"
 fi
 
-# ── Step 2: Clone config repo ────────────────
-header "Step 2: Config Repo"
-if [[ -d "$REPO_DIR/.git" ]]; then
-  info "Config repo already exists at $REPO_DIR — pulling latest..."
-  git -C "$REPO_DIR" pull --ff-only || warn "Could not auto-update repo (merge conflict?)"
-else
-  mkdir -p "$(dirname "$REPO_DIR")"
-  info "Cloning config repo to $REPO_DIR..."
-  git clone "$REPO_URL" "$REPO_DIR"
-  success "Config repo cloned"
-fi
-
-PKG_DIR="$REPO_DIR/packages"
-
-# ── Step 3: Create directory structure ───────
-header "Step 3: Directory Structure"
-dirs=(
-  "$HOME/Documents/3DPrinting"
-  "$HOME/Documents/Archive"
-  "$HOME/Documents/Finanzen"
-  "$HOME/Documents/Gaming"
-  "$HOME/Documents/JCH"
-  "$HOME/Documents/Studium"
-  "$HOME/Documents/config"
-  "$HOME/Projects"
-  "$HOME/Pictures"
-  "$HOME/Videos"
-  "$HOME/Music"
-)
-for d in "${dirs[@]}"; do
-  mkdir -p "$d"
-  info "  ensured: $d"
+bash "$repo_root/scripts/link-home.sh" "$machine"
+systemctl --user daemon-reload
+systemctl --user enable --now syncthing.service
+for service in NetworkManager bluetooth docker libvirtd cups tailscaled; do
+  sudo systemctl enable --now "$service.service"
 done
-success "Directory structure ready"
-
-# ── Step 4: Install common packages ──────────
-header "Step 4: Common Packages (pacman)"
-info "Installing common packages..."
-grep -v '^#' "$PKG_DIR/common.txt" | grep -v '^$' | \
-  sudo pacman -S --needed --noconfirm - || warn "Some packages may have failed (check above)"
-success "Common packages done"
-
-# ── Step 5: Machine-specific packages ────────
-header "Step 5: Machine-Specific Packages (pacman)"
-pkg_file="$PKG_DIR/${MACHINE}-dwm.txt"
-[[ "$MACHINE" == "laptop" ]] && pkg_file="$PKG_DIR/laptop-kde.txt"
-
-if [[ -f "$pkg_file" ]]; then
-  info "Installing packages from $pkg_file..."
-  grep -v '^#' "$pkg_file" | grep -v '^$' | \
-    sudo pacman -S --needed --noconfirm - || warn "Some machine-specific packages may have failed"
-  success "Machine-specific packages done"
-else
-  warn "No machine-specific package file found: $pkg_file"
+if [[ "$machine" == laptop ]]; then
+  sudo systemctl enable --now power-profiles-daemon.service
 fi
-
-# ── Step 6: AUR common packages ──────────────
-header "Step 6: AUR Common Packages"
-# Remove conflicting AUR 'trash' package if present (pacman trash-cli is used instead)
-if pacman -Qi trash &>/dev/null 2>&1; then
-  info "Removing conflicting AUR 'trash' package (replaced by trash-cli)..."
-  sudo pacman -Rns --noconfirm trash 2>/dev/null || true
+# Preserve an already selected display manager, including greetd.
+if [[ ! -e /etc/systemd/system/display-manager.service ]]; then
+  sudo systemctl enable sddm.service
 fi
-info "Installing common AUR packages..."
-grep -v '^#' "$PKG_DIR/aur-common.txt" | grep -v '^$' | \
-  xargs -r yay -S --needed --noconfirm || warn "Some AUR packages may have failed"
-success "AUR common packages done"
-
-# ── Step 7: AUR machine-specific packages ────
-header "Step 7: AUR Machine-Specific Packages"
-aur_file="$PKG_DIR/aur-${MACHINE}.txt"
-if [[ -f "$aur_file" ]] && grep -qv '^#' "$aur_file" 2>/dev/null; then
-  info "Installing machine-specific AUR packages from $aur_file..."
-  grep -v '^#' "$aur_file" | grep -v '^$' | \
-    xargs -r yay -S --needed --noconfirm || warn "Some machine-specific AUR packages may have failed"
-  success "Machine-specific AUR packages done"
-else
-  info "No machine-specific AUR packages for $MACHINE"
-fi
-
-# ── Step 8: Symlink config files ─────────────
-header "Step 8: Symlink Config Files"
-info "Running link-home.sh for $MACHINE..."
-bash "$REPO_DIR/scripts/link-home.sh" "$MACHINE"
-success "Config files linked"
-
-# ── Step 9: Set default shell to ZSH ─────────
-header "Step 9: Default Shell"
-if [[ "$SHELL" != "$(which zsh)" ]]; then
-  info "Changing default shell to zsh..."
-  chsh -s "$(which zsh)"
-  success "Default shell set to zsh (takes effect on next login)"
-else
-  success "ZSH already default shell"
-fi
-
-# ── Step 10: Minimal bash fallback ───────────
-header "Step 10: Bash Fallback"
-BASHRC="$HOME/.bashrc"
-BASHRC_CONTENT='# ~/.bashrc — minimal fallback, real config is in ZSH
-[[ $- != *i* ]] && return
-# Launch zsh if available and not already in zsh
-if command -v zsh &>/dev/null && [[ -z "${ZSH_VERSION}" ]]; then
-  exec zsh
-fi'
-
-if [[ -L "$BASHRC" ]]; then
-  info "Removing old .bashrc symlink (mybash)..."
-  rm -f "$BASHRC"
-  echo "$BASHRC_CONTENT" > "$BASHRC"
-  success "Minimal .bashrc written"
-elif [[ -f "$BASHRC" ]]; then
-  if grep -q "mybash\|zachbrowne\|fastfetch" "$BASHRC" 2>/dev/null; then
-    info "Replacing old bashrc with minimal version (backup at ~/.bashrc.bak)..."
-    cp "$BASHRC" "$HOME/.bashrc.bak"
-    echo "$BASHRC_CONTENT" > "$BASHRC"
-    success "Minimal .bashrc written (backup at ~/.bashrc.bak)"
-  else
-    info ".bashrc exists and looks custom — leaving it alone"
+for group in docker libvirt; do
+  if ! id -nG | tr ' ' '\n' | grep -qx "$group"; then
+    sudo usermod -aG "$group" "$(id -un)"
   fi
+done
+if [[ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "$(command -v zsh)" ]]; then
+  chsh -s "$(command -v zsh)"
 fi
+mkdir -p "$HOME/Documents" "$HOME/Projects" "$HOME/Pictures" "$HOME/Videos" "$HOME/Music"
 
-# ── Step 11: Enable systemd services ─────────
-header "Step 11: Systemd Services"
+cat <<'DONE'
+Workstation packages and config installed. Log out/in for shell and group changes.
 
-enable_user_service() {
-  local svc="$1"
-  if systemctl --user list-unit-files "$svc" &>/dev/null; then
-    systemctl --user enable --now "$svc" 2>/dev/null && success "  enabled: $svc" || warn "  failed: $svc"
-  else
-    warn "  not found: $svc"
-  fi
-}
-
-enable_system_service() {
-  local svc="$1"
-  if systemctl list-unit-files "$svc" &>/dev/null; then
-    sudo systemctl enable --now "$svc" 2>/dev/null && success "  enabled: $svc" || warn "  failed: $svc"
-  else
-    warn "  not found: $svc"
-  fi
-}
-
-info "Enabling common user services..."
-enable_user_service "syncthing.service"
-
-info "Enabling common system services..."
-enable_system_service "NetworkManager.service"
-enable_system_service "bluetooth.service"
-enable_system_service "docker.service"
-enable_system_service "libvirtd.service"
-enable_system_service "cups.service"
-enable_system_service "ufw.service"
-
-# Docker group
-if ! groups | grep -q docker; then
-  sudo usermod -aG docker "$USER"
-  info "Added $USER to docker group (log out to take effect)"
-fi
-
-# libvirt group
-if ! groups | grep -q libvirt; then
-  sudo usermod -aG libvirt "$USER"
-  info "Added $USER to libvirt group (log out to take effect)"
-fi
-
-if [[ "$MACHINE" == "laptop" ]]; then
-  info "Enabling laptop services..."
-  enable_system_service "sddm.service"
-  enable_system_service "power-profiles-daemon.service"
-fi
-
-if [[ "$MACHINE" == "desktop" ]]; then
-  info "Enabling desktop services..."
-  enable_system_service "sddm.service"
-fi
-
-# ── Step 12: Neovim setup ────────────────────
-header "Step 12: Neovim"
-if [[ -d "$HOME/.config/nvim" ]]; then
-  info "Neovim config linked. Run 'nvim' to trigger lazy.nvim plugin install."
-  success "Neovim config ready"
-else
-  warn "No nvim config found — link-home.sh may not have linked it"
-fi
-
-# ── Done! ────────────────────────────────────
-header "Setup Complete!"
-echo ""
-echo -e "${GREEN}${BOLD}Your $MACHINE is ready!${NC}"
-echo ""
-echo -e "  ${CYAN}Next steps:${NC}"
-echo -e "  1. Log out and back in (or reboot) for shell + group changes to take effect"
-echo -e "  2. Configure Syncthing: ${YELLOW}http://localhost:8384${NC}"
-echo -e "     → Add the other machine's device ID to start bidirectional sync"
-echo -e "  3. Sync folders to configure:"
-echo -e "     ~/Documents/  ~/Projects/  ~/Documents/config/"
-echo -e "     ~/.config/nvim/  ~/.config/alacritty/"
-echo -e "  4. Run 'nvim' to trigger plugin installation"
-if [[ "$MACHINE" == "desktop" ]]; then
-  echo -e "  5. Install MesloLGS or JetBrainsMono Nerd Font if not already present"
-  echo -e "     https://www.nerdfonts.com/font-downloads"
-  echo -e "  6. Build/install DWM: ~/dwm/  (or from suckless.org)"
-fi
-echo ""
+Next steps:
+- Configure Syncthing at http://localhost:8384 and authenticate Tailscale.
+- Sync Documents, Projects, and Documents/config; add /config to Documents/.stignore.
+  Do not separately sync ~/.config/nvim or ~/.config/alacritty (symlinked config).
+- Start nvim to install its plugins. Restore credentials from Bitwarden locally.
+- Review firewall rules before enabling ufw. Hyprland/DMS has a separate installer.
+- Desktop: restore the custom DWM checkout and its scripts before starting X.
+DONE
+if "$skip_aur"; then echo 'AUR installation was skipped; AUR applications still need to be installed.'; fi

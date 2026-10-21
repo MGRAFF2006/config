@@ -1,0 +1,9 @@
+#%PAM-1.0
+# Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
+# Keep graphical authorization password-only. DMS's Polkit agent cannot
+# reliably handle Howdy's separate conversation before the password prompt.
+
+auth       include                      system-auth
+account    include                      system-auth
+password   include                      system-auth
+session    include                      system-auth

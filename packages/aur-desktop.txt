@@ -7,3 +7,14 @@ colorpicker-git
 aurutils
 rofi-greenclip
 mathematica
+
+# Photogrammetry (Meshroom / AliceVision SYCL on AMD)
+adaptivecpp
+openmesh
+python-pyseq
+libe57format
+nanoflann
+metis
+# Built from packages/aur-builds (develop + SYCL), not plain AUR tags:
+# alice-vision
+# meshroom

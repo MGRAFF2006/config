@@ -1,0 +1,61 @@
+/* DMS-styled Zen start page: quiet, fast, and consistent with the shell. */
+@-moz-document url-prefix("about:newtab"), url-prefix("about:home") {
+  :root {
+    --newtab-background-color: #101418 !important;
+    --newtab-background-color-secondary: #1d2024 !important;
+    --newtab-text-primary-color: #e0e2e8 !important;
+    --newtab-primary-action-background: #42a5f5 !important;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 50% 18%, rgb(66 165 245 / 18%), transparent 34rem),
+      #101418 !important;
+  }
+
+  body::before {
+    content: "Welcome back, Mathis.";
+    position: fixed;
+    inset: 16vh 0 auto;
+    color: #e0e2e8;
+    font: 600 clamp(2rem, 4vw, 3.5rem) "Google Sans Flex", "Inter", sans-serif;
+    text-align: center;
+    letter-spacing: -0.04em;
+    pointer-events: none;
+  }
+
+  body::after {
+    content: "Search, open a favorite, or start something new.";
+    position: fixed;
+    inset: calc(16vh + 4.6rem) 0 auto;
+    color: #c2c7cf;
+    font: 500 1rem "Google Sans Flex", "Inter", sans-serif;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .outer-wrapper {
+    padding-top: min(34vh, 18rem) !important;
+  }
+
+  .logo-and-wordmark,
+  .icon-settings,
+  .discovery-stream.ds-layout {
+    display: none !important;
+  }
+
+  .search-wrapper .search-handoff-button,
+  .search-wrapper input {
+    background-color: #1d2024 !important;
+    border: 1px solid #41484d !important;
+    border-radius: 18px !important;
+    box-shadow: 0 12px 34px rgb(0 0 0 / 28%) !important;
+  }
+
+  .top-site-outer .tile {
+    background-color: #1d2024 !important;
+    border: 1px solid #41484d !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+  }
+}

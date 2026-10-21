@@ -1,0 +1,28 @@
+{
+  "currentThemeName": "custom",
+  "matugenScheme": "scheme-neutral",
+  "barConfigs": [
+    {
+      "id": "default",
+      "name": "Main Bar",
+      "enabled": true,
+      "position": 0,
+      "leftWidgets": [
+        "workspaceSwitcher",
+        "focusedWindow"
+      ],
+      "centerWidgets": [
+        "clock"
+      ],
+      "rightWidgets": [
+        "systemTray",
+        "clipboard",
+        "cpuUsage",
+        "memUsage",
+        "notificationButton",
+        "battery",
+        "controlCenterButton"
+      ]
+    }
+  ]
+}

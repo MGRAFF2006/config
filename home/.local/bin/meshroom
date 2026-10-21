@@ -1,0 +1,9 @@
+#!/bin/sh
+# Wrapper: Arch alice-vision ships the voctree file but does not export ALICEVISION_VOCTREE.
+# GUI launches via absolute /usr/bin/meshroom also get a desktop override; this covers PATH.
+export QSG_RENDER_LOOP="${QSG_RENDER_LOOP:-basic}"
+export QT3D_MAX_THREAD_COUNT="${QT3D_MAX_THREAD_COUNT:-1}"
+export ALICEVISION_ROOT="${ALICEVISION_ROOT:-/usr}"
+export ALICEVISION_SENSOR_DB="${ALICEVISION_SENSOR_DB:-/usr/share/aliceVision/cameraSensors.db}"
+export ALICEVISION_VOCTREE="${ALICEVISION_VOCTREE:-/usr/share/aliceVision/vlfeat_K80L3.SIFT.tree}"
+exec /usr/lib/meshroom/meshroom-ui "$@"

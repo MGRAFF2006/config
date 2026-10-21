@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the laptop awake when its lid closes
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch --mode=block --who=laptop-lid-awake --why="Lid close turns off the screen while agents continue" /usr/bin/sleep infinity
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

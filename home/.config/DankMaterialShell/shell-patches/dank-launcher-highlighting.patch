@@ -1,0 +1,139 @@
+diff --git a/Modals/DankLauncherV2/Controller.qml b/Modals/DankLauncherV2/Controller.qml
+--- a/Modals/DankLauncherV2/Controller.qml
++++ b/Modals/DankLauncherV2/Controller.qml
+@@ -1772,12 +1772,74 @@ Item {
+         if (!text)
+             return "";
+         var idx = text.toLowerCase().indexOf(lowerQuery);
+-        if (idx === -1)
+-            return _escapeRichText(text);
+-        var before = text.substring(0, idx);
+-        var match = text.substring(idx, idx + queryLen);
+-        var after = text.substring(idx + queryLen);
+-        return '<span style="color:' + baseColor + '">' + _escapeRichText(before) + '</span><span style="color:' + highlightColor + '; font-weight:600">' + _escapeRichText(match) + '</span><span style="color:' + baseColor + '">' + _escapeRichText(after) + '</span>';
++        if (idx !== -1) {
++            var before = text.substring(0, idx);
++            var match = text.substring(idx, idx + queryLen);
++            var after = text.substring(idx + queryLen);
++            return '<span style="color:' + baseColor + '">' + _escapeRichText(before) + '</span><span style="color:' + highlightColor + '; font-weight:600">' + _escapeRichText(match) + '</span><span style="color:' + baseColor + '">' + _escapeRichText(after) + '</span>';
++        }
++
++        var matched = _fuzzyMatchIndices(text.toLowerCase(), lowerQuery);
++        if (matched.length === 0)
++            return _escapeRichText(text);
++
++        var richText = "";
++        var runStart = 0;
++        var highlighted = matched[0];
++        for (var i = 1; i <= text.length; i++) {
++            var nextHighlighted = i < text.length && matched[i];
++            if (i < text.length && nextHighlighted === highlighted)
++                continue;
++            var color = highlighted ? highlightColor : baseColor;
++            var weight = highlighted ? "; font-weight:600" : "";
++            richText += '<span style="color:' + color + weight + '">' + _escapeRichText(text.substring(runStart, i)) + '</span>';
++            runStart = i;
++            highlighted = nextHighlighted;
++        }
++        return richText;
++    }
++
++    function _fuzzyMatchIndices(lowerText, lowerQuery) {
++        var query = lowerQuery.replace(/[\s\-_]+/g, "");
++        if (!query)
++            return [];
++
++        var text = lowerText.substring(0, 512);
++        var table = new Array(query.length + 1);
++        for (var i = 0; i <= query.length; i++) {
++            table[i] = new Array(text.length + 1);
++            for (var j = 0; j <= text.length; j++)
++                table[i][j] = 0;
++        }
++
++        for (var i = 1; i <= query.length; i++) {
++            for (var j = 1; j <= text.length; j++) {
++                if (query[i - 1] === text[j - 1])
++                    table[i][j] = table[i - 1][j - 1] + 1;
++                else
++                    table[i][j] = Math.max(table[i - 1][j], table[i][j - 1]);
++            }
++        }
++
++        var maxDistance = query.length === 3 ? 1 : query.length <= 6 ? 2 : 3;
++        if (table[query.length][text.length] < query.length - maxDistance)
++            return [];
++
++        var matched = new Array(lowerText.length);
++        var i = query.length;
++        var j = text.length;
++        while (i > 0 && j > 0) {
++            if (query[i - 1] === text[j - 1]) {
++                matched[j - 1] = true;
++                i--;
++                j--;
++            } else if (table[i - 1][j] >= table[i][j - 1]) {
++                i--;
++            } else {
++                j--;
++            }
++        }
++        return matched;
+     }
+ 
+     function _escapeRichText(text) {
+diff --git a/Modals/DankLauncherV2/GridItem.qml b/Modals/DankLauncherV2/GridItem.qml
+--- a/Modals/DankLauncherV2/GridItem.qml
++++ b/Modals/DankLauncherV2/GridItem.qml
+@@ -36,7 +36,9 @@ Rectangle {
+     readonly property int computedIconSize: Math.min(48, Math.max(32, width * 0.45))
+ 
+     radius: Theme.cornerRadius
+-    color: isSelected ? Theme.primaryPressed : isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
++    color: isSelected ? Theme.primarySelected : isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
++    border.width: isSelected ? 1 : 0
++    border.color: Theme.primary
+ 
+     DankRipple {
+         id: rippleLayer
+diff --git a/Modals/DankLauncherV2/ResultItem.qml b/Modals/DankLauncherV2/ResultItem.qml
+--- a/Modals/DankLauncherV2/ResultItem.qml
++++ b/Modals/DankLauncherV2/ResultItem.qml
+@@ -37,8 +37,10 @@ Rectangle {
+ 
+     width: parent?.width ?? 200
+     height: 52
+-    color: isSelected ? Theme.primaryPressed : isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
++    color: isSelected ? Theme.primarySelected : isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
+     radius: Theme.cornerRadius
++    border.width: isSelected ? 1 : 0
++    border.color: Theme.primary
+ 
+     DankRipple {
+         id: rippleLayer
+diff --git a/Modals/DankLauncherV2/SpotlightResultRow.qml b/Modals/DankLauncherV2/SpotlightResultRow.qml
+--- a/Modals/DankLauncherV2/SpotlightResultRow.qml
++++ b/Modals/DankLauncherV2/SpotlightResultRow.qml
+@@ -75,7 +75,9 @@ Rectangle {
+     width: parent?.width ?? 200
+     height: 64
+     radius: Theme.cornerRadius
+-    color: root.isSelected ? Theme.primaryPressed : root.isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
++    color: root.isSelected ? Theme.primarySelected : root.isHovered ? Theme.primaryHoverLight : Theme.withAlpha(Theme.primaryHoverLight, 0)
++    border.width: root.isSelected ? 1 : 0
++    border.color: Theme.primary
+ 
+     Behavior on color {
+         ColorAnimation {
+diff --git a/Modals/DankLauncherV2/TileItem.qml b/Modals/DankLauncherV2/TileItem.qml
+--- a/Modals/DankLauncherV2/TileItem.qml
++++ b/Modals/DankLauncherV2/TileItem.qml
+@@ -19,7 +19,7 @@ Rectangle {
+     signal rightClicked(real mouseX, real mouseY)
+ 
+     radius: Theme.cornerRadius
+-    color: isSelected ? Theme.primaryPressed : isHovered ? Theme.primaryPressed : Theme.withAlpha(Theme.primaryPressed, 0)
++    color: isSelected ? Theme.primarySelected : isHovered ? Theme.primaryPressed : Theme.withAlpha(Theme.primaryPressed, 0)
+     border.width: isSelected ? 2 : 0
+     border.color: Theme.primary
+ 

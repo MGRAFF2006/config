@@ -1,0 +1,95 @@
+# Maintainer: sfn (local develop build)
+# Based on AUR meshroom; tracks Meshroom develop to match laptop.
+
+pkgname=meshroom
+pkgver=2026.1.0.develop
+pkgrel=1
+pkgdesc="Meshroom 3D Reconstruction Software (develop)"
+arch=('x86_64')
+url="https://alicevision.org/#meshroom"
+license=('MPL-2.0')
+depends=('alice-vision' 'openimageio' 'python-psutil'
+         'pyside6' 'python-pyseq' 'python'
+         'shiboken6' 'qt6-base' 'qt6-positioning' 'qt6-location' 'qt6-charts' 'qt6-3d' 'qt6-declarative')
+makedepends=('git' 'cmake' 'python-idna' 'python-setuptools' 'boost' 'coin-or-lemon')
+optdepends=('vulkan-headers: vulkan acceleration support')
+source=("${pkgname}::git+https://github.com/alicevision/Meshroom.git#branch=develop"
+        "voctree::git+https://gitlab.com/alicevision/trainedVocabularyTreeData.git"
+        "git+https://github.com/alicevision/QtAliceVision.git#branch=develop"
+        "fix-qt-errors.patch"
+        "meshroom.sh"
+        "Meshroom.desktop"
+        "meshroom-launcher.sh")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            '3fc0237907ace26474cfba9ff6ab7f1f2d96c1bd56ecdb1a6361812657f0b3de'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+
+prepare() {
+  cd meshroom
+  # Stale AUR patch; develop already differs — ignore failures.
+  if [[ -f ../fix-qt-errors.patch ]]; then
+    patch -p1 -i ../fix-qt-errors.patch || true
+  fi
+
+  cd ../QtAliceVision
+  # Develop links Qt6::GuiPrivate but may omit find_package (Qt 6.11 needs it).
+  if ! grep -q 'COMPONENTS GuiPrivate' src/qtAliceVision/CMakeLists.txt; then
+    sed -e '/find_package(Qt6 REQUIRED COMPONENTS Gui)/a\find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)' \
+      -i src/qtAliceVision/CMakeLists.txt
+  fi
+}
+
+build() {
+  cd "${srcdir}"/QtAliceVision
+  cmake \
+    -Bbuild \
+    -DCMAKE_INSTALL_PREFIX="/usr/lib/qt" \
+    -DCMAKE_SKIP_INSTALL_RPATH=ON \
+    -DCMAKE_BUILD_TYPE=None
+
+  cmake --build build --parallel "$(nproc)"
+}
+
+package() {
+  install -vDm 644 "${srcdir}"/meshroom.sh -t "${pkgdir}"/etc/profile.d/
+
+  DESTDIR="${pkgdir}" cmake --install QtAliceVision/build
+
+  cd meshroom
+  local python_version
+  python_version=$(python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+  mkdir -p "${pkgdir}/usr/lib/python${python_version}"
+  cp -r meshroom "${pkgdir}/usr/lib/python${python_version}"
+
+  mkdir -p "${pkgdir}/usr/lib/meshroom" "${pkgdir}/usr/bin"
+  install -Dm755 "${srcdir}/meshroom-launcher.sh" "${pkgdir}/usr/bin/meshroom"
+  cat > "${pkgdir}/usr/lib/meshroom/meshroom-ui" <<'EOF'
+#!/usr/bin/python
+import signal
+import sys
+import meshroom
+from meshroom.common import Backend
+
+meshroom.setupEnvironment(backend=Backend.PYSIDE)
+
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+import meshroom.ui
+import meshroom.ui.app
+
+meshroom.ui.uiInstance = meshroom.ui.app.MeshroomApp(sys.argv)
+meshroom.ui.uiInstance.aboutToQuit.connect(meshroom.ui.uiInstance.terminateManual)
+meshroom.ui.uiInstance.exec()
+EOF
+  chmod 755 "${pkgdir}/usr/lib/meshroom/meshroom-ui"
+
+  install -m755 -t "${pkgdir}/usr/bin" bin/meshroom_*
+
+  install -Dm644 -t "${pkgdir}/usr/share/aliceVision" "${srcdir}/voctree/vlfeat_K80L3.SIFT.tree"
+
+  install -Dm644 meshroom/ui/img/meshroom.svg "${pkgdir}/usr/share/${pkgname}/meshroom.svg"
+  install -Dm644 "${srcdir}/Meshroom.desktop" "${pkgdir}/usr/share/applications/Meshroom.desktop"
+}
