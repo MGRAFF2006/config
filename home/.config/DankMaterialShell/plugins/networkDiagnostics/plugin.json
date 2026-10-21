@@ -1,8 +1,8 @@
 {
   "id": "networkDiagnostics",
   "name": "Network Diagnostics",
-  "description": "Dedicated network status, latency, DNS, traffic, and WiFi credentials",
-  "version": "1.0.0",
+  "description": "Stock DMS connection controls with latency, DNS and traffic diagnostics",
+  "version": "1.1.0",
   "author": "humunkulud",
   "type": "widget",
   "capabilities": [
@@ -12,7 +12,7 @@
   ],
   "component": "./NetworkDiagnostics.qml",
   "icon": "network_check",
-  "requires_dms": ">=1.5.0",
+  "requires_dms": ">=1.6.3",
   "requires": [
     "dms-network-status",
     "nmcli",
