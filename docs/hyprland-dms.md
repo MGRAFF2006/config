@@ -85,10 +85,16 @@ python3 scripts/configure-dms-bar-panels.py --init
 dms restart
 ```
 
-The network panel shows a five-minute download/upload graph, live
-router/internet ping, DNS lookup time, traffic, address/gateway/DNS/MAC
-details, Wi‑Fi signal/link rate, and the current saved Wi‑Fi password
-(intentionally always visible inside the opened panel).
+The network panel uses DMS's live NetworkManager state for the connection
+summary and bar icon. Its Networks tab provides the stock Wi-Fi/Ethernet
+controls; Connection & diagnostics shows copyable IPv4/IPv6 details, traffic,
+and separate router/public-IP/DNS measurements. Internet access comes from
+NetworkManager's cached connectivity assessment. A missed ping is “No reply”,
+not “Offline”; an unavailable DNS lookup is labelled separately. Unknown or
+stale measurements never override the active connection. The helper samples
+the displayed interface, clears traffic history on connection changes, and
+refreshes without overlapping requests. It never retrieves Wi-Fi passwords.
+Run `python3 scripts/check-dms-network-status.py` for the focused logic checks.
 
 Audio uses DMS's standard volume, output, and input controls directly against
 PipeWire/WirePlumber. There are no persistent virtual sinks or automatic
