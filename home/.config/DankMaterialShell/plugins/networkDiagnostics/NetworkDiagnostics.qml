@@ -4,6 +4,7 @@ import qs.Common
 import qs.Services
 import qs.Widgets
 import qs.Modules.Plugins
+import qs.Modules.ControlCenter.Details as NetworkDetails
 
 PluginComponent {
     id: root
@@ -11,6 +12,7 @@ PluginComponent {
     property var networkData: ({ "connected": false })
     property var trafficHistory: []
     property bool refreshing: false
+    property string refreshError: ""
     readonly property string statusCommand: (Quickshell.env("HOME") || "") + "/.local/bin/dms-network-status"
 
     function refresh() {
@@ -18,17 +20,20 @@ PluginComponent {
         const screenKey = parentScreen?.name || "default";
         Proc.runCommand("networkDiagnostics.status." + screenKey, [statusCommand], (stdout, exitCode) => {
             refreshing = false;
-            if (exitCode !== 0)
+            if (exitCode !== 0) {
+                refreshError = "Network diagnostics failed. Retry or check dms-network-status.";
                 return;
+            }
             try {
                 const next = JSON.parse(stdout);
                 networkData = next;
+                refreshError = "";
                 trafficHistory = trafficHistory.concat([{
                     "down": Number(next.downloadBytesPerSecond || 0),
                     "up": Number(next.uploadBytesPerSecond || 0)
                 }]).slice(-60);
             } catch (error) {
-                console.warn("NetworkDiagnostics: invalid status JSON:", error);
+                refreshError = "Network diagnostics returned invalid data. Check dms-network-status.";
             }
         }, 100);
     }
@@ -139,7 +144,7 @@ PluginComponent {
             }
 
             StyledText {
-                text: root.latency(root.networkData.internetPingMs)
+                text: root.refreshError ? "?" : root.latency(root.networkData.internetPingMs)
                 color: root.networkData.internetPingMs === null ? Theme.error : Theme.widgetTextColor
                 font.pixelSize: Theme.barTextSize(root.barThickness, root.barConfig?.fontScale, root.barConfig?.maximizeWidgetText)
                 anchors.verticalCenter: parent.verticalCenter
@@ -171,13 +176,62 @@ PluginComponent {
         PopoutComponent {
             id: popout
 
-            headerText: root.networkData.ssid || root.networkData.connection || "Network"
-            detailsText: root.networkData.connected ? (root.networkData.interface + " • " + (root.networkData.security || root.networkData.type)) : "No active connection"
+            property bool showDiagnostics: false
+            readonly property bool settingsVisible: PopoutService.settingsModal?.visible ?? false
+            onSettingsVisibleChanged: {
+                if (settingsVisible && closePopout) closePopout();
+            }
+            headerText: "Network"
+            headerActions: Component {
+                Row {
+                    spacing: Theme.spacingXS
+                    DankActionButton {
+                        iconName: NetworkService.wifiEnabled ? "wifi" : "wifi_off"
+                        enabled: NetworkService.wifiAvailable && !NetworkService.wifiToggling
+                        onClicked: NetworkService.toggleWifiRadio()
+                    }
+                    DankActionButton {
+                        iconName: "refresh"
+                        enabled: !NetworkService.isScanning && !root.refreshing
+                        onClicked: { NetworkService.scanWifi(); root.refresh(); }
+                    }
+                }
+            }
+            detailsText: root.networkData.connected ? ((root.networkData.ssid || root.networkData.connection || root.networkData.interface) + " • " + (root.networkData.security || root.networkData.type)) : "No active connection"
             showCloseButton: true
+
+            StyledText {
+                id: diagnosticsError
+                visible: root.refreshError.length > 0
+                width: parent.width
+                text: root.refreshError
+                color: Theme.error
+                wrapMode: Text.WordWrap
+            }
+
+            DankTabBar {
+                width: parent.width
+                model: [{"text": "Connections"}, {"text": "Diagnostics"}]
+                showIcons: false
+                tabHeight: 40
+                spacing: Theme.spacingS
+                currentIndex: popout.showDiagnostics ? 1 : 0
+                onTabClicked: index => popout.showDiagnostics = index === 1
+            }
+
+            Item { width: 1; height: Theme.spacingM }
+
+            NetworkDetails.NetworkDetail {
+                implicitHeight: height
+                width: parent.width
+                height: root.popoutHeight - popout.headerHeight - popout.detailsHeight - 72 - (diagnosticsError.visible ? diagnosticsError.height : 0)
+                visible: !popout.showDiagnostics
+            }
 
             Item {
                 width: parent.width
-                height: root.popoutHeight - popout.headerHeight - popout.detailsHeight
+                height: root.popoutHeight - popout.headerHeight - popout.detailsHeight - 72 - (diagnosticsError.visible ? diagnosticsError.height : 0)
+                visible: popout.showDiagnostics
 
                 DankFlickable {
                     anchors.fill: parent
@@ -210,12 +264,6 @@ PluginComponent {
                                     font.weight: Font.Medium
                                 }
 
-                                MetricRow {
-                                    label: "Password"
-                                    value: root.networkData.password || (root.networkData.type === "wifi" ? "Not stored" : "Not applicable")
-                                    icon: "key"
-                                    copyable: Boolean(root.networkData.password)
-                                }
                                 MetricRow {
                                     label: "Signal"
                                     value: root.networkData.type === "wifi" ? ((root.networkData.signal || 0) + "% • " + (root.networkData.linkRate || "unknown rate")) : "Wired"
@@ -445,7 +493,7 @@ PluginComponent {
 
                         StyledText {
                             width: parent.width
-                            text: root.refreshing ? "Refreshing…" : "Updates every 5 seconds"
+                            text: root.refreshError || (root.refreshing ? "Refreshing…" : "Updates every 5 seconds")
                             color: Theme.surfaceVariantText
                             font.pixelSize: Theme.fontSizeSmall
                             horizontalAlignment: Text.AlignHCenter
@@ -457,5 +505,5 @@ PluginComponent {
     }
 
     popoutWidth: 540
-    popoutHeight: 760
+    popoutHeight: 640
 }
