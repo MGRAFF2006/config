@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import qs.Common
 import qs.Services
@@ -9,119 +10,129 @@ import qs.Modules.ControlCenter.Details as NetworkDetails
 PluginComponent {
     id: root
 
-    property var networkData: ({ "connected": false })
+    Ref { service: NetworkService }
+
+    readonly property bool stateReady: NetworkService.stateInitialized && (NetworkService.usingLegacy || (DMSService.isConnected && DMSService.subscribeConnected))
+    readonly property bool linkConnected: stateReady && (NetworkService.wifiConnected || NetworkService.ethernetConnected)
+    readonly property bool wired: NetworkService.networkStatus === "ethernet" || (!NetworkService.wifiConnected && NetworkService.ethernetConnected)
+    readonly property string interfaceName: wired ? NetworkService.ethernetInterface : NetworkService.wifiInterface
+    readonly property string connectionName: wired ? (NetworkService.primaryConnection || "Ethernet") : NetworkService.currentWifiSSID
+    readonly property string connectionKey: [stateReady, linkConnected, wired, interfaceName, connectionName].join("|")
+    readonly property string connectionTitle: !stateReady ? "Checking connection…" : linkConnected ? (connectionName || (wired ? "Ethernet" : "Wi-Fi")) : NetworkService.isConnecting ? "Connecting…" : !NetworkService.wifiEnabled ? "Wi-Fi is off" : "Disconnected"
+    readonly property string connectionIcon: !stateReady ? "sync" : linkConnected ? (wired ? "lan" : NetworkService.wifiSignalIcon) : "wifi_off"
+    readonly property bool sampleMatches: linkConnected && networkData.connected === true && networkData.interface === interfaceName
+    readonly property bool sampleFresh: sampleMatches && updatedAt > 0 && clockTime - updatedAt < 25000
+    readonly property string connectivity: sampleFresh ? (networkData.connectivity || "unknown") : "unknown"
+    readonly property string internetStatus: !stateReady ? "Waiting for network status" : !linkConnected ? "No active network connection" : connectivity === "full" ? "Internet available on this device" : connectivity === "portal" ? "Network sign-in may be required" : connectivity === "limited" ? "Limited internet access reported on this device" : connectivity === "none" ? "No internet access reported on this device" : "Internet access not checked"
+    readonly property bool internetWarning: linkConnected && ["portal", "limited", "none"].includes(connectivity)
+    readonly property string barText: !stateReady ? "…" : !linkConnected ? (NetworkService.isConnecting ? "…" : "Disconnected") : sampleFresh && networkData.internetPingMs !== null && networkData.internetPingMs !== undefined ? latency(networkData.internetPingMs) : wired ? "Ethernet" : "Wi-Fi"
+
+    property int connectionRevision: 0
+    property var networkData: ({})
     property var trafficHistory: []
     property bool refreshing: false
     property string refreshError: ""
+    property double updatedAt: 0
+    property double clockTime: Date.now()
     readonly property string statusCommand: (Quickshell.env("HOME") || "") + "/.local/bin/dms-network-status"
 
+    onConnectionKeyChanged: {
+        connectionRevision++;
+        networkData = {};
+        trafficHistory = [];
+        updatedAt = 0;
+        refreshError = "";
+        if (stateReady) Qt.callLater(refresh);
+    }
+
     function refresh() {
+        if (refreshing) return;
         refreshing = true;
+        const requestRevision = connectionRevision;
         const screenKey = parentScreen?.name || "default";
-        Proc.runCommand("networkDiagnostics.status." + screenKey, [statusCommand], (stdout, exitCode) => {
+        const command = linkConnected && interfaceName ? [statusCommand, "--interface", interfaceName] : [statusCommand];
+        Proc.runCommand("networkDiagnostics.status." + screenKey, command, (stdout, exitCode) => {
             refreshing = false;
+            if (requestRevision !== connectionRevision) {
+                Qt.callLater(refresh);
+                return;
+            }
             if (exitCode !== 0) {
-                refreshError = "Network diagnostics failed. Retry or check dms-network-status.";
+                refreshError = "Could not read network diagnostics. Retry, or check dms-network-status.";
                 return;
             }
             try {
                 const next = JSON.parse(stdout);
+                if (typeof next !== "object" || next === null || Array.isArray(next) || ![true, false, null].includes(next.connected))
+                    throw new Error("Invalid network status");
                 networkData = next;
-                refreshError = "";
-                trafficHistory = trafficHistory.concat([{
-                    "down": Number(next.downloadBytesPerSecond || 0),
-                    "up": Number(next.uploadBytesPerSecond || 0)
-                }]).slice(-60);
+                updatedAt = Date.now();
+                clockTime = updatedAt;
+                refreshError = next.error || "";
+                if (sampleMatches) {
+                    trafficHistory = trafficHistory.concat([{
+                        "down": Number(next.downloadBytesPerSecond || 0),
+                        "up": Number(next.uploadBytesPerSecond || 0)
+                    }]).slice(-30);
+                }
             } catch (error) {
-                refreshError = "Network diagnostics returned invalid data. Check dms-network-status.";
+                refreshError = "Network diagnostics returned invalid data. Retry, or check dms-network-status.";
             }
         }, 100);
     }
 
-    function latency(value) {
-        return value === null || value === undefined ? "Offline" : Number(value).toFixed(value < 10 ? 1 : 0) + " ms";
+    function latency(value, missing = "No reply") {
+        return value === null || value === undefined ? missing : Number(value).toFixed(value < 10 ? 1 : 0) + " ms";
     }
 
     function formatRate(bytes) {
         const value = Number(bytes || 0);
-        if (value < 1024)
-            return Math.round(value) + " B/s";
-        if (value < 1024 * 1024)
-            return (value / 1024).toFixed(1) + " KiB/s";
-        if (value < 1024 * 1024 * 1024)
-            return (value / 1024 / 1024).toFixed(1) + " MiB/s";
+        if (value < 1024) return Math.round(value) + " B/s";
+        if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KiB/s";
+        if (value < 1024 * 1024 * 1024) return (value / 1024 / 1024).toFixed(1) + " MiB/s";
         return (value / 1024 / 1024 / 1024).toFixed(1) + " GiB/s";
     }
 
     function trafficPeak() {
         let peak = 1024;
-        for (const sample of trafficHistory)
-            peak = Math.max(peak, Number(sample.down || 0), Number(sample.up || 0));
+        for (const sample of trafficHistory) peak = Math.max(peak, sample.down, sample.up);
         return peak;
     }
 
     function copy(value, label) {
-        if (!value)
-            return;
+        if (!value) return;
         Quickshell.execDetached(["dms", "cl", "copy", String(value)]);
         ToastService.showInfo(label + " copied");
     }
 
     Component.onCompleted: refresh()
-
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        onTriggered: root.refresh()
-    }
+    Timer { interval: 10000; running: true; repeat: true; onTriggered: root.refresh() }
+    Timer { interval: 1000; running: true; repeat: true; onTriggered: root.clockTime = Date.now() }
 
     component MetricRow: Item {
         required property string label
         required property string value
-        property string icon: ""
         property bool copyable: false
-
-        width: parent ? parent.width : 0
-        height: 34
-
-        Row {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
+        width: parent.width
+        height: Math.max(36, metricValue.implicitHeight + Theme.spacingS * 2)
+        RowLayout {
+            anchors.fill: parent
             spacing: Theme.spacingS
-
-            DankIcon {
-                visible: icon.length > 0
-                name: icon
-                size: 17
-                color: Theme.surfaceVariantText
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
             StyledText {
                 text: label
                 color: Theme.surfaceVariantText
                 font.pixelSize: Theme.fontSizeMedium
-                anchors.verticalCenter: parent.verticalCenter
+                Layout.preferredWidth: 130
             }
-        }
-
-        Row {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.spacingXS
-
             StyledText {
-                width: Math.min(implicitWidth, 310)
+                id: metricValue
                 text: value || "—"
                 color: Theme.surfaceText
                 font.pixelSize: Theme.fontSizeMedium
-                font.weight: Font.Medium
-                elide: Text.ElideMiddle
                 horizontalAlignment: Text.AlignRight
-                anchors.verticalCenter: parent.verticalCenter
+                wrapMode: Text.WrapAnywhere
+                Layout.fillWidth: true
             }
-
             DankActionButton {
                 visible: copyable && value.length > 0
                 iconName: "content_copy"
@@ -135,53 +146,38 @@ PluginComponent {
     horizontalBarPill: Component {
         Row {
             spacing: Theme.spacingXS
-
             DankIcon {
-                name: !root.networkData.connected ? "wifi_off" : (root.networkData.type === "ethernet" ? "lan" : "wifi")
-                color: root.networkData.connected ? Theme.primary : Theme.error
+                name: root.connectionIcon
+                color: root.linkConnected ? Theme.primary : Theme.widgetIconColor
                 size: root.iconSize
                 anchors.verticalCenter: parent.verticalCenter
             }
-
             StyledText {
-                text: root.refreshError ? "?" : root.latency(root.networkData.internetPingMs)
-                color: root.networkData.internetPingMs === null ? Theme.error : Theme.widgetTextColor
+                text: root.barText
+                color: Theme.widgetTextColor
                 font.pixelSize: Theme.barTextSize(root.barThickness, root.barConfig?.fontScale, root.barConfig?.maximizeWidgetText)
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
     }
-
     verticalBarPill: Component {
-        Column {
-            spacing: Theme.spacingXXS
-
-            DankIcon {
-                name: !root.networkData.connected ? "wifi_off" : (root.networkData.type === "ethernet" ? "lan" : "wifi")
-                color: root.networkData.connected ? Theme.primary : Theme.error
-                size: root.iconSize
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            StyledText {
-                text: root.networkData.internetPingMs === null ? "—" : Math.round(root.networkData.internetPingMs)
-                color: Theme.widgetTextColor
-                font.pixelSize: Theme.fontSizeSmall
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
+        DankIcon {
+            name: root.connectionIcon
+            color: root.linkConnected ? Theme.primary : Theme.widgetIconColor
+            size: root.iconSize
         }
     }
 
+    popoutWidth: 540
+    popoutHeight: 700
     popoutContent: Component {
         PopoutComponent {
             id: popout
-
             property bool showDiagnostics: false
             readonly property bool settingsVisible: PopoutService.settingsModal?.visible ?? false
-            onSettingsVisibleChanged: {
-                if (settingsVisible && closePopout) closePopout();
-            }
+            onSettingsVisibleChanged: { if (settingsVisible && closePopout) closePopout(); }
             headerText: "Network"
+            showCloseButton: true
             headerActions: Component {
                 Row {
                     spacing: Theme.spacingXS
@@ -197,313 +193,191 @@ PluginComponent {
                     }
                 }
             }
-            detailsText: root.networkData.connected ? ((root.networkData.ssid || root.networkData.connection || root.networkData.interface) + " • " + (root.networkData.security || root.networkData.type)) : "No active connection"
-            showCloseButton: true
+
+            Rectangle {
+                id: summary
+                width: parent.width
+                height: summaryColumn.implicitHeight + Theme.spacingM * 2
+                radius: Theme.cornerRadius
+                color: root.linkConnected ? Theme.primaryPressed : Theme.surfaceLight
+                Column {
+                    id: summaryColumn
+                    x: Theme.spacingM; y: Theme.spacingM
+                    width: parent.width - Theme.spacingM * 2
+                    spacing: Theme.spacingS
+                    RowLayout {
+                        width: parent.width
+                        spacing: Theme.spacingM
+                        DankIcon {
+                            name: root.connectionIcon
+                            color: root.linkConnected ? Theme.primary : Theme.surfaceVariantText
+                            size: 28
+                        }
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingXS
+                            StyledText {
+                                width: parent.width
+                                text: root.connectionTitle
+                                font.pixelSize: Theme.fontSizeLarge
+                                font.weight: Font.Medium
+                                color: Theme.surfaceText
+                                elide: Text.ElideRight
+                                wrapMode: Text.NoWrap
+                            }
+                            StyledText {
+                                width: parent.width
+                                visible: root.linkConnected
+                                text: (root.wired ? "Ethernet" : "Wi-Fi") + " · " + root.interfaceName + (root.wired ? "" : " · " + NetworkService.wifiSignalStrength + "% signal")
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.surfaceVariantText
+                                elide: Text.ElideRight
+                                wrapMode: Text.NoWrap
+                            }
+                        }
+                    }
+                    Row {
+                        width: parent.width
+                        spacing: Theme.spacingS
+                        DankIcon {
+                            name: root.internetWarning ? "info" : root.connectivity === "full" ? "check_circle" : "help_outline"
+                            size: 17
+                            color: root.internetWarning ? Theme.warning : Theme.surfaceVariantText
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        StyledText {
+                            width: parent.width - 25
+                            text: root.internetStatus
+                            font.pixelSize: Theme.fontSizeMedium
+                            color: root.internetWarning ? Theme.warning : Theme.surfaceText
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+            }
 
             StyledText {
-                id: diagnosticsError
-                visible: root.refreshError.length > 0
+                id: statusNote
                 width: parent.width
-                text: root.refreshError
-                color: Theme.error
+                visible: root.refreshError.length > 0 || (root.updatedAt > 0 && !root.sampleFresh && root.linkConnected)
+                text: root.refreshError || "Diagnostics are out of date. Refresh to try again."
+                color: Theme.warning
+                font.pixelSize: Theme.fontSizeSmall
                 wrapMode: Text.WordWrap
+                topPadding: Theme.spacingS
             }
 
             DankTabBar {
+                id: tabs
                 width: parent.width
-                model: [{"text": "Connections"}, {"text": "Diagnostics"}]
+                model: [{"text": "Networks"}, {"text": "Connection & diagnostics"}]
                 showIcons: false
-                tabHeight: 40
+                tabHeight: 44
                 spacing: Theme.spacingS
                 currentIndex: popout.showDiagnostics ? 1 : 0
                 onTabClicked: index => popout.showDiagnostics = index === 1
             }
-
-            Item { width: 1; height: Theme.spacingM }
+            Item { id: gap; width: 1; height: Theme.spacingS }
 
             NetworkDetails.NetworkDetail {
-                implicitHeight: height
                 width: parent.width
-                height: root.popoutHeight - popout.headerHeight - popout.detailsHeight - 72 - (diagnosticsError.visible ? diagnosticsError.height : 0)
+                implicitHeight: height
+                height: root.popoutHeight - popout.headerHeight - summary.height - tabs.height - gap.height - (statusNote.visible ? statusNote.height : 0) - 24
                 visible: !popout.showDiagnostics
             }
 
-            Item {
+            DankFlickable {
+                objectName: "networkDetails"
                 width: parent.width
-                height: root.popoutHeight - popout.headerHeight - popout.detailsHeight - 72 - (diagnosticsError.visible ? diagnosticsError.height : 0)
+                height: root.popoutHeight - popout.headerHeight - summary.height - tabs.height - gap.height - (statusNote.visible ? statusNote.height : 0) - 24
+                contentHeight: details.implicitHeight + Theme.spacingM
+                clip: true
                 visible: popout.showDiagnostics
-
-                DankFlickable {
-                    anchors.fill: parent
-                    contentHeight: detailColumn.implicitHeight + Theme.spacingM
-                    clip: true
-
-                    Column {
-                        id: detailColumn
+                Column {
+                    id: details
+                    width: parent.width
+                    spacing: Theme.spacingS
+                    StyledText {
                         width: parent.width
-                        spacing: Theme.spacingM
+                        text: !root.linkConnected ? "Connect to a network to see its details." : !root.sampleFresh ? "Waiting for current connection details…" : "Connection details"
+                        color: Theme.surfaceText
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.weight: Font.Medium
                         topPadding: Theme.spacingS
-
-                        StyledRect {
-                            width: parent.width
-                            implicitHeight: connectionColumn.implicitHeight + Theme.spacingM * 2
-                            radius: Theme.cornerRadius
-                            color: Theme.surfaceContainerHigh
-
-                            Column {
-                                id: connectionColumn
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: Theme.spacingM
-
-                                StyledText {
-                                    text: "Connection"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeLarge
-                                    font.weight: Font.Medium
+                    }
+                    Column {
+                        width: parent.width
+                        visible: root.sampleFresh
+                        MetricRow { label: "Address"; value: (root.networkData.addresses || []).join(", "); copyable: true }
+                        MetricRow { label: "Gateway"; value: root.networkData.gateway || ""; copyable: true }
+                        MetricRow { label: "DNS servers"; value: (root.networkData.dnsServers || []).join(", "); copyable: true }
+                        MetricRow { label: "Security"; value: root.networkData.security || (root.wired ? "Wired" : "—") }
+                        MetricRow { label: "Link rate"; value: root.networkData.linkRate || "—" }
+                        MetricRow { label: "MAC address"; value: root.networkData.mac || ""; copyable: true }
+                    }
+                    Rectangle { width: parent.width; height: 1; color: Theme.outlineLight }
+                    StyledText {
+                        text: "Measurements"
+                        color: Theme.surfaceText
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.weight: Font.Medium
+                        topPadding: Theme.spacingS
+                    }
+                    StyledText {
+                        width: parent.width
+                        text: "Public IP and DNS measurements follow your system route, including any VPN. Router ping and traffic refer to this connection. A missed probe does not mean you are disconnected."
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        wrapMode: Text.WordWrap
+                    }
+                    Column {
+                        width: parent.width
+                        visible: root.sampleFresh
+                        MetricRow { label: "Router ping"; value: root.latency(root.networkData.gatewayPingMs) }
+                        MetricRow { label: "Public IP ping"; value: root.latency(root.networkData.internetPingMs) }
+                        MetricRow { label: "DNS lookup"; value: root.latency(root.networkData.dnsLookupMs, "Unavailable") }
+                        MetricRow { label: "Download"; value: root.formatRate(root.networkData.downloadBytesPerSecond) }
+                        MetricRow { label: "Upload"; value: root.formatRate(root.networkData.uploadBytesPerSecond) }
+                    }
+                    Row {
+                        spacing: Theme.spacingM
+                        visible: root.sampleFresh
+                        StyledText { text: "Download"; color: Theme.primary; font.pixelSize: Theme.fontSizeSmall }
+                        StyledText { text: "Upload"; color: Theme.surfaceVariantText; font.pixelSize: Theme.fontSizeSmall }
+                    }
+                    Canvas {
+                        id: trafficGraph
+                        width: parent.width
+                        height: 86
+                        visible: root.sampleFresh
+                        antialiasing: true
+                        onWidthChanged: requestPaint()
+                        Connections { target: root; function onTrafficHistoryChanged() { trafficGraph.requestPaint(); } }
+                        onPaint: {
+                            const ctx = getContext("2d");
+                            ctx.clearRect(0, 0, width, height);
+                            if (root.trafficHistory.length < 2) return;
+                            const peak = root.trafficPeak() * 1.1;
+                            for (const series of [{key: "down", color: Theme.primary}, {key: "up", color: Theme.surfaceVariantText}]) {
+                                ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = series.color;
+                                for (let i = 0; i < root.trafficHistory.length; i++) {
+                                    const x = width * i / 29;
+                                    const y = height - 4 - (height - 8) * root.trafficHistory[i][series.key] / peak;
+                                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                                 }
-
-                                MetricRow {
-                                    label: "Signal"
-                                    value: root.networkData.type === "wifi" ? ((root.networkData.signal || 0) + "% • " + (root.networkData.linkRate || "unknown rate")) : "Wired"
-                                    icon: "signal_cellular_alt"
-                                }
-                                MetricRow {
-                                    label: "Address"
-                                    value: (root.networkData.addresses || []).join(", ")
-                                    icon: "language"
-                                    copyable: true
-                                }
-                                MetricRow {
-                                    label: "Gateway"
-                                    value: root.networkData.gateway || ""
-                                    icon: "router"
-                                    copyable: true
-                                }
-                                MetricRow {
-                                    label: "DNS"
-                                    value: (root.networkData.dnsServers || []).join(", ")
-                                    icon: "dns"
-                                    copyable: true
-                                }
-                                MetricRow {
-                                    label: "MAC"
-                                    value: root.networkData.mac || ""
-                                    icon: "fingerprint"
-                                    copyable: true
-                                }
+                                ctx.stroke();
                             }
                         }
-
-                        StyledRect {
-                            width: parent.width
-                            implicitHeight: diagnosticsColumn.implicitHeight + Theme.spacingM * 2
-                            radius: Theme.cornerRadius
-                            color: Theme.surfaceContainerHigh
-
-                            Column {
-                                id: diagnosticsColumn
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: Theme.spacingM
-
-                                StyledText {
-                                    text: "Diagnostics"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeLarge
-                                    font.weight: Font.Medium
-                                }
-
-                                MetricRow {
-                                    label: "Router ping"
-                                    value: root.latency(root.networkData.gatewayPingMs)
-                                    icon: "router"
-                                }
-                                MetricRow {
-                                    label: "Internet ping"
-                                    value: root.latency(root.networkData.internetPingMs)
-                                    icon: "public"
-                                }
-                                MetricRow {
-                                    label: "DNS lookup"
-                                    value: root.latency(root.networkData.dnsLookupMs)
-                                    icon: "dns"
-                                }
-                                MetricRow {
-                                    label: "Traffic"
-                                    value: "↓ " + root.formatRate(root.networkData.downloadBytesPerSecond) + "   ↑ " + root.formatRate(root.networkData.uploadBytesPerSecond)
-                                    icon: "swap_vert"
-                                }
-                            }
-                        }
-
-                        StyledRect {
-                            width: parent.width
-                            implicitHeight: trafficColumn.implicitHeight + Theme.spacingM * 2
-                            radius: Theme.cornerRadius
-                            color: Theme.surfaceContainerHigh
-
-                            Column {
-                                id: trafficColumn
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: Theme.spacingM
-                                spacing: Theme.spacingS
-
-                                Row {
-                                    width: parent.width
-
-                                    StyledText {
-                                        text: "Traffic history"
-                                        color: Theme.surfaceText
-                                        font.pixelSize: Theme.fontSizeLarge
-                                        font.weight: Font.Medium
-                                    }
-
-                                    Item {
-                                        width: parent.width - parent.children[0].width - liveTraffic.width
-                                        height: 1
-                                    }
-
-                                    StyledText {
-                                        id: liveTraffic
-                                        text: "↓ " + root.formatRate(root.networkData.downloadBytesPerSecond) + "  ↑ " + root.formatRate(root.networkData.uploadBytesPerSecond)
-                                        color: Theme.surfaceVariantText
-                                        font.pixelSize: Theme.fontSizeSmall
-                                    }
-                                }
-
-                                Item {
-                                    width: parent.width
-                                    height: 126
-
-                                    Canvas {
-                                        id: trafficGraph
-                                        anchors.fill: parent
-                                        antialiasing: true
-
-                                        onWidthChanged: requestPaint()
-                                        onHeightChanged: requestPaint()
-
-                                        Connections {
-                                            target: root
-                                            function onTrafficHistoryChanged() {
-                                                trafficGraph.requestPaint();
-                                            }
-                                        }
-
-                                        onPaint: {
-                                            const ctx = getContext("2d");
-                                            ctx.clearRect(0, 0, width, height);
-                                            const samples = root.trafficHistory;
-                                            const left = 2;
-                                            const top = 4;
-                                            const graphWidth = Math.max(1, width - 4);
-                                            const graphHeight = Math.max(1, height - 8);
-
-                                            ctx.lineWidth = 1;
-                                            ctx.strokeStyle = Theme.withAlpha(Theme.outline, 0.35);
-                                            for (let line = 0; line <= 3; line++) {
-                                                const y = top + graphHeight * line / 3;
-                                                ctx.beginPath();
-                                                ctx.moveTo(left, y);
-                                                ctx.lineTo(left + graphWidth, y);
-                                                ctx.stroke();
-                                            }
-                                            if (samples.length < 2)
-                                                return;
-
-                                            const peak = root.trafficPeak() * 1.1;
-                                            function drawSeries(key, color) {
-                                                ctx.beginPath();
-                                                ctx.lineWidth = 2;
-                                                ctx.lineJoin = "round";
-                                                ctx.lineCap = "round";
-                                                ctx.strokeStyle = color;
-                                                for (let index = 0; index < samples.length; index++) {
-                                                    const x = left + graphWidth * index / 59;
-                                                    const value = Math.max(0, Number(samples[index][key] || 0));
-                                                    const y = top + graphHeight - graphHeight * value / peak;
-                                                    if (index === 0)
-                                                        ctx.moveTo(x, y);
-                                                    else
-                                                        ctx.lineTo(x, y);
-                                                }
-                                                ctx.stroke();
-                                            }
-                                            drawSeries("down", Theme.primary);
-                                            drawSeries("up", Theme.error);
-                                        }
-                                    }
-                                }
-
-                                Row {
-                                    width: parent.width
-                                    spacing: Theme.spacingM
-
-                                    Row {
-                                        spacing: Theme.spacingXS
-                                        Rectangle {
-                                            width: 9
-                                            height: 9
-                                            radius: 5
-                                            color: Theme.primary
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
-                                        StyledText {
-                                            text: "Download"
-                                            color: Theme.surfaceVariantText
-                                            font.pixelSize: Theme.fontSizeSmall
-                                        }
-                                    }
-
-                                    Row {
-                                        spacing: Theme.spacingXS
-                                        Rectangle {
-                                            width: 9
-                                            height: 9
-                                            radius: 5
-                                            color: Theme.error
-                                            anchors.verticalCenter: parent.verticalCenter
-                                        }
-                                        StyledText {
-                                            text: "Upload"
-                                            color: Theme.surfaceVariantText
-                                            font.pixelSize: Theme.fontSizeSmall
-                                        }
-                                    }
-
-                                    Item {
-                                        width: parent.width - parent.children[0].width - parent.children[1].width - peakLabel.width - Theme.spacingM * 3
-                                        height: 1
-                                    }
-
-                                    StyledText {
-                                        id: peakLabel
-                                        text: "Scale " + root.formatRate(root.trafficPeak())
-                                        color: Theme.surfaceVariantText
-                                        font.pixelSize: Theme.fontSizeSmall
-                                    }
-                                }
-                            }
-                        }
-
-                        StyledText {
-                            width: parent.width
-                            text: root.refreshError || (root.refreshing ? "Refreshing…" : "Updates every 5 seconds")
-                            color: Theme.surfaceVariantText
-                            font.pixelSize: Theme.fontSizeSmall
-                            horizontalAlignment: Text.AlignHCenter
-                        }
+                    }
+                    StyledText {
+                        width: parent.width
+                        text: root.refreshing ? "Measuring…" : root.sampleFresh ? "Updated " + Math.max(0, Math.floor((root.clockTime - root.updatedAt) / 1000)) + " s ago · updates every 10 s" : "Waiting for diagnostics"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        wrapMode: Text.WordWrap
                     }
                 }
             }
         }
     }
-
-    popoutWidth: 540
-    popoutHeight: 640
 }
