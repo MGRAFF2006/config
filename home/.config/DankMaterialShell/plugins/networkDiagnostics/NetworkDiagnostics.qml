@@ -209,16 +209,14 @@ PluginComponent {
                 wrapMode: Text.WordWrap
             }
 
-            DankButtonGroup {
+            DankTabBar {
                 width: parent.width
-                model: ["Connections", "Diagnostics"]
-                minButtonWidth: 150
-                checkEnabled: false
-                selectionMode: "single"
+                model: [{"text": "Connections"}, {"text": "Diagnostics"}]
+                showIcons: false
+                tabHeight: 40
+                spacing: Theme.spacingS
                 currentIndex: popout.showDiagnostics ? 1 : 0
-                onSelectionChanged: (index, selected) => {
-                    if (selected) popout.showDiagnostics = index === 1;
-                }
+                onTabClicked: index => popout.showDiagnostics = index === 1
             }
 
             Item { width: 1; height: Theme.spacingM }
