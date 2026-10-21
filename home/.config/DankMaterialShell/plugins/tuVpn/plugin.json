@@ -1,0 +1,13 @@
+{
+  "id": "tuVpn",
+  "name": "TU Dortmund VPN",
+  "description": "TU VPN with a login saved in KWallet",
+  "version": "1.0.0",
+  "author": "humunkulud",
+  "type": "widget",
+  "capabilities": ["dankbar-widget", "network", "process"],
+  "component": "./TuVpn.qml",
+  "icon": "vpn_lock",
+  "requires_dms": ">=1.6.0",
+  "permissions": ["process", "network"]
+}
