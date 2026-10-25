@@ -1,6 +1,6 @@
 ---
 name: research-notes
-description: Research a topic and save concise sourced notes when Mathis asks for reusable documentation, a comparison, or an investigation with durable findings.
+description: "Research a topic and save concise sourced notes when Mathis asks for reusable documentation, a comparison, or an investigation with durable findings."
 ---
 
 # Research into reusable notes

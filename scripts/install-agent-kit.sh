@@ -51,7 +51,7 @@ link_path() {
 for target in "$agent_home/AGENTS.md" "$codex_root/AGENTS.md" \
   "$config_root/opencode/AGENTS.md" "$agent_home/.claude/CLAUDE.md" \
   "$agent_home/.claude/AGENTS.md"; do
-  link_path "$repo_root/agent/GLOBAL.md" "$target"
+  link_path "$repo_root/agent/AGENTS.md" "$target"
 done
 
 # Linking the whole directory makes future shared skills available after sync.
@@ -77,7 +77,7 @@ done
 # Retire this kit's Cursor rules now that Cursor is no longer used.
 for legacy in "$agent_home/.cursor/rules/agent-kit.mdc" \
   "$agent_home/.cursor/rules/letter.mdc" "$agent_home/.cursor/rules/personal-machines.mdc"; do
-  if [[ -L "$legacy" && "$(readlink -f -- "$legacy")" == "$repo_root/agent/GLOBAL.md" ]]; then
+  if [[ -L "$legacy" && "$(readlink -f -- "$legacy")" == "$repo_root/agent/AGENTS.md" ]]; then
     case "$mode" in
       install) backup_path "$legacy" ;;
       --dry-run) echo "RETIRE duplicate rule: $legacy (back up)" ;;
