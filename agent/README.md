@@ -61,8 +61,8 @@ when resuming that task.
 
 ## Install the entrypoints
 
-Syncthing distributes the repo; the installer recreates links using each
-computer's own checkout path.
+Git transfers the repo between computers; the installer recreates links using
+each computer's own checkout path.
 
 ```bash
 cd ~/Documents/config

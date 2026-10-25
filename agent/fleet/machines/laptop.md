@@ -1,5 +1,16 @@
 # Laptop
 
+## Personal-file sync — verified 2026-10-25
+
+Syncthing now carries personal Documents, Downloads, Pictures, Music, Videos
+and Calibre Library. Projects and this config/agent-kit checkout use Git;
+their sync registrations were removed with local files preserved. Known
+software roots inside Documents and generated caches are excluded. Apply or
+preview through `scripts/configure-personal-sync.py`; see
+[scope and recovery](../../../docs/personal-sync.md). The desktop was offline
+during migration and needs the same setup when reachable. Uncommitted config
+edits no longer propagate automatically between machines.
+
 Portable interactive workstation. User: `humunkulud`; OS: Arch Linux;
 Tailscale identity: `laptop` (`100.66.24.27`). Use the established Tailscale name
 for connections. The local hostname alone does not identify this device.
@@ -40,7 +51,7 @@ replace either installation without a concrete reason.
 ## Connections and paths
 
 - Config and Fleet: `~/Documents/config/agent/`.
-- Common work: `~/Documents/`; `~/Projects/` is also a configured Syncthing share.
+- Personal work: `~/Documents/`; software under `~/Projects/` uses independent Git checkouts.
 - Desktop: `ssh desktop`; SSH configuration resolves to `100.65.78.19`, user
   `humunkulud`, port 22. Reachability was not available during setup.
 - T3 launcher and campus proxy source: `home/.local/bin/t3code` and

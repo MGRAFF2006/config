@@ -1,5 +1,14 @@
 # Hetzner development VM
 
+## Git-only config — verified 2026-10-25
+
+The receive-only config Syncthing registration was removed after Mathis moved
+software and the agent kit to Git-only. Files and independent dirty work remain
+local. The existing default `~/Sync` registration is preserved. Repeat scope
+setup with `scripts/configure-personal-sync.py`; see
+[scope and recovery](../../../docs/personal-sync.md). Fetch and integrate
+reviewed config commits explicitly; there is no live config-sync propagation.
+
 - Verified 2026-10-02 via SSH, systemd, Tailscale, and installed CLI checks.
 - Tailscale name / SSH alias: `homelab-dev`, IPv4 `100.108.73.48`.
 - Debian 13 VM 110 on `homelab-pve`, login user `humunkulud`, no desktop.
