@@ -1,5 +1,9 @@
 # Laptop background load
 
+The later [personal-file scope migration](personal-sync.md) removes Projects
+and config from Syncthing entirely. Apply that scope first; the concurrency
+tuning below remains useful for the remaining personal folders.
+
 Apply from the config checkout while Syncthing is running:
 
 ```bash

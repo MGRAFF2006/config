@@ -1,0 +1,23 @@
+{
+  "git_only": [
+    "Projects",
+    "Documents/config",
+    "Documents/3DPrinting/OrcaSlicer",
+    "Documents/Metrolist",
+    "Documents/home-server"
+  ],
+  "generated": [
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    ".cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ipynb_checkpoints",
+    ".gradle",
+    ".kotlin",
+    "MeshroomCache",
+    "CacheClip"
+  ]
+}

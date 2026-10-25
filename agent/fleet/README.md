@@ -5,7 +5,7 @@ you want help with your computers or AI workflow. It gives the agent a maintaine
 map of your machines and links to repeatable procedures. For application work,
 open the application's own repo instead.
 
-This is part of `~/Documents/config`, already shared through Syncthing. There
+This is part of `~/Documents/config`, transferred between machines through Git. There
 is no second dotfiles repo, background orchestrator, or new paid service.
 
 ## Start here
@@ -20,7 +20,7 @@ bash scripts/install-agent-kit.sh --check
 The installer links shared skills and agent instructions, backing up replaced
 files under `~/.local/share/agent-kit-backups/`. It installs no packages, changes
 no services, and makes no model calls. Use it on each machine after the repo
-arrives there. Instructions and existing skills pick up edits through Syncthing.
+is fetched there through Git. Instructions and skills use that local checkout.
 New skills appear automatically through the shared directory for Codex
 and OpenCode; rerun the installer to add their Claude links. Restart sessions
 after changing context.
