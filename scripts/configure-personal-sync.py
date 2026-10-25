@@ -65,11 +65,21 @@ def managed_ignores(previous, patterns):
     # Escape directives must precede patterns; first-match exclusions then go
     # before local overrides. Retain each device's leading header verbatim.
     header_end = 0
+    escape = "\\"
     for line in previous:
-        if line.strip() and not line.startswith(("//", "#escape=")):
+        stripped = line.strip()
+        if stripped.startswith("#escape"):
+            before, separator, character = stripped[len("#escape"):].partition("=")
+            if before.strip() or not separator or len(character.strip()) != 1:
+                raise ValueError("Invalid Syncthing escape directive")
+            escape = character.strip()
+        elif stripped and not stripped.startswith("//"):
             break
         header_end += 1
-    return [*previous[:header_end], BEGIN, *patterns, END, *previous[header_end:]]
+    if escape == "/" and any("/" in pattern for pattern in patterns):
+        raise ValueError("Cannot generate rooted exclusions with '/' as the escape character")
+    literals = [pattern.replace(escape, escape * 2) for pattern in patterns]
+    return [*previous[:header_end], BEGIN, *literals, END, *previous[header_end:]]
 
 
 def apply_scope(api, home, policy, state, apply):

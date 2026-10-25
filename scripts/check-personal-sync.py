@@ -137,6 +137,15 @@ class ScopeTests(unittest.TestCase):
         self.assertLess(significant.index("node_modules"), significant.index("!keep.txt"))
         self.assertEqual(sync.managed_ignores(result, ["node_modules"]), result)
 
+    def test_custom_escape_preserves_literal_cache_names(self):
+        result = sync.managed_ignores(["#escape = _", "!personal.pdf"], ["node_modules", "__pycache__"])
+        self.assertEqual(result[0], "#escape = _")
+        self.assertIn("node__modules", result)
+        self.assertIn("____pycache____", result)
+        self.assertIn("!personal.pdf", result)
+        with self.assertRaisesRegex(ValueError, "rooted exclusions"):
+            sync.managed_ignores(["#escape=/"], ["/config"])
+
 
 if __name__ == "__main__":
     unittest.main()
