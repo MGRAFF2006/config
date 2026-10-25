@@ -5,8 +5,10 @@ description: "Use when preparing, splitting, creating or updating a pull request
 
 # Make the change easy to review
 
-Read the repository's PR template, actual base and complete diff. For an
-existing PR, read its description and discussion. Follow the shared
+When the repository is available, read its PR template, actual base and complete
+diff. For an existing PR, read its description and discussion. A standalone
+draft can use the supplied change summary; label unavailable verification.
+Follow the shared
 [development workflow](../../workflows/development.md) for scope, authorization,
 attribution, independent review and merge conditions.
 

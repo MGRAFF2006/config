@@ -13,7 +13,9 @@ Use accessible sources that support the actual claim. Verify bibliographic
 details and page references; a plausible book citation is not evidence you
 read it. Respect the assignment's source restrictions and mark unresolved gaps.
 
-Keep source and generated artifacts in an organized project folder. Use LaTeX
-or Beamer where requested; PDF/office skills handle those formats when needed.
-Build and inspect rendered pages for clipping, overlap, missing glyphs, figure
-labels and citations. Deliver the editable source and usable final artifact.
+For a complete document, keep source and generated artifacts in an organized
+project folder. Use LaTeX or Beamer where requested; PDF/office skills handle
+those formats when needed. Build and inspect rendered pages for clipping,
+overlap, missing glyphs, figure labels and citations; deliver editable source
+and the usable final artifact. An outline, advice or source-only request keeps
+its requested scope; state any rendering that remains unverified.
