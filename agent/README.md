@@ -90,7 +90,9 @@ source files, install packages, or change services.
 They are aliases, not additional instruction sources. There is no generated
 copy to keep in sync.
 The installer retires this kit's old duplicate rules and skill copies while
-preserving unrelated files and Codex's managed `.system` skills.
+preserving unrelated files and Codex's managed `.system` skills. Old whole-root
+Codex/Claude skill links are backed up and replaced with local directories;
+destinations that would mutate the source checkout through an alias are refused.
 
 Instructions and existing skill edits appear after sync; restart sessions as
 needed. New skills appear through the shared directory for Codex and

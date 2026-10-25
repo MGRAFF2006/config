@@ -175,6 +175,36 @@ def main():
         run()
         assert (custom / "AGENTS.md").resolve() == agent / "AGENTS.md"
         run("--check")
+        env.pop("CODEX_HOME")
+        # A historical whole-root link must never turn source skills into backups
+        # or self-referential links. Exercise both roots and a second installation.
+        for tool in (".codex", ".claude"):
+            alias_home = root / f"{tool[1:]} legacy home"
+            (alias_home / tool).mkdir(parents=True)
+            skill_root = alias_home / tool / "skills"
+            skill_root.symlink_to(agent / "skills", target_is_directory=True)
+            env["AGENT_KIT_HOME"] = str(alias_home)
+            original = (agent / "skills/example/SKILL.md").read_bytes()
+            run("--dry-run")
+            assert skill_root.is_symlink()
+            run()
+            assert not skill_root.is_symlink()
+            assert (agent / "skills/example").is_dir() and not (agent / "skills/example").is_symlink()
+            assert (agent / "skills/example/SKILL.md").read_bytes() == original
+            old_roots = list((alias_home / ".local/share/agent-kit-backups").glob(f"*/{tool}/skills"))
+            assert len(old_roots) == 1 and old_roots[0].is_symlink()
+            run()
+            run("--check")
+            assert (agent / "skills/example/SKILL.md").read_bytes() == original
+        # An unexpected ancestor alias is rejected instead of writing into source.
+        unsafe_home = root / "unsafe ancestor home"
+        unsafe_home.mkdir()
+        (unsafe_home / ".claude").symlink_to(agent, target_is_directory=True)
+        env["AGENT_KIT_HOME"] = str(unsafe_home)
+        original_root = (agent / "AGENTS.md").read_bytes()
+        result = run(expected=1)
+        assert "inside the source repo" in result.stderr
+        assert (agent / "AGENTS.md").read_bytes() == original_root
     print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates and readiness checks")
 
 
