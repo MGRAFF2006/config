@@ -1,1 +1,1 @@
-GLOBAL.md
+AGENTS.md

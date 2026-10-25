@@ -2,7 +2,7 @@
 
 This workspace manages machine context, shared skills, and AI workflow notes.
 Start with `README.md` and the relevant `machines/<name>.md` when a task concerns
-a computer. `../GLOBAL.md` holds Mathis's personal defaults and collaboration
+a computer. `../AGENTS.md` holds Mathis's personal defaults and collaboration
 preferences, shared by all local tools.
 
 Keep durable changes in the enclosing config repo. Verify the current Tailscale
@@ -14,5 +14,7 @@ Use the focused `../../scripts/install-agent-kit.sh` for agent setup; the full
 chat databases, and raw transcripts out of this workspace. Update a machine
 record after a verified change and distinguish observed facts from user reports.
 
-Do not commit or push unless asked. Do not change power management just to keep
-an agent running. For durable jobs, use an awake host and tmux on that host.
+Follow `../AGENTS.md` for ownership, GitHub permissions, and merge conditions,
+and `../workflows/delegation.md` when coordinating child work.
+Do not change power management just to keep an agent running. For durable jobs,
+use an awake host and tmux on that host.

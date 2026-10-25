@@ -2,7 +2,7 @@
 
 The role of this file is how agents **change this codebase** — common mistakes
 and confusion points — not a second README. Global tone/prefs live in the
-letter (`~/Documents/config/agent/GLOBAL.md`).
+root (`~/Documents/config/agent/AGENTS.md`).
 
 If something here is discoverable from the code or manifests, delete it. If
 something **surprises** you, alert the developer and propose a one-line gotcha;
@@ -19,7 +19,7 @@ prefer a codebase/test fix when the surprise is a design smell.
 ## Do
 
 - Prefer the smallest verification that proves the change (focused test / lint / typecheck).
-- Leave unrelated work untouched. Do not commit or push unless asked.
+- Leave unrelated work untouched; stage only changes belonging to your task.
 
 ## Don't
 

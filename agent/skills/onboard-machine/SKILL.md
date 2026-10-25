@@ -1,6 +1,6 @@
 ---
 name: onboard-machine
-description: Set up or verify a computer for Mathis's AI fleet when adding, replacing, or preparing a development machine. Use the existing config repo and record verified capabilities.
+description: "Set up or verify a computer for Mathis's AI fleet when adding, replacing, or preparing a development machine. Use the existing config repo and record verified capabilities."
 ---
 
 # Onboard a machine

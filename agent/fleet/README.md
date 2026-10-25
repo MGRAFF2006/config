@@ -42,7 +42,7 @@ Then try an actual task:
 | Machine | Use it for | Record |
 | --- | --- | --- |
 | `laptop` | Interactive work, travel, light checks, research | [Laptop](machines/laptop.md) |
-| `desktop` | RX 7600 work and jobs that must survive laptop sleep | [Desktop](machines/desktop.md) |
+| `desktop` | RX 7600/GPU work; verify it is online and awake | [Desktop](machines/desktop.md) |
 | `homelab-pve` | Hetzner hypervisor, VM/storage administration | [Proxmox host](machines/homelab-pve.md) |
 | `homelab-dev` | Remote T3 Code, development and unattended CPU work | [Development VM](machines/homelab-dev.md) |
 | `homelab-services` | Docker homelab applications and bulk data | [Services VM](machines/homelab-services.md) |
@@ -64,18 +64,19 @@ not a permanent property. Do not assume the laptop is weaker in RAM.
 | Need | Document |
 | --- | --- |
 | Daily AI workflow, prompts, and proof | [Working with AI](WORKFLOW.md) |
+| Background GUI isolation | [Environment workflow](../workflows/environment.md#gui-work-alongside-me) and the target's machine record |
 | Add or replace a computer | [Onboarding](ONBOARDING.md) |
 | Public evidence about Theo and recreations | [Research](RESEARCH.md) |
-| Personal defaults and communication preferences | [Shared instructions](../GLOBAL.md) |
+| Root instructions and branches | [AGENTS.md](../AGENTS.md), [kit guide](../README.md) |
 | Write useful project instructions | [Project template](../AGENTS.template.md) |
 
 ## Which tool reads what
 
 | Tool | Global instructions | Personal skills |
 | --- | --- | --- |
-| Codex, including when launched by T3 Code | `~/.codex/AGENTS.md` → `GLOBAL.md` | `~/.agents/skills` → entire shared directory |
-| OpenCode | `~/.config/opencode/AGENTS.md` → `GLOBAL.md` | Same shared skills |
-| Claude Code, if used | `~/.claude/CLAUDE.md` → `GLOBAL.md` | `~/.claude/skills/<name>` → shared skill |
+| Codex, including when launched by T3 Code | `~/.codex/AGENTS.md` → `agent/AGENTS.md` | `~/.agents/skills` → entire shared directory |
+| OpenCode | `~/.config/opencode/AGENTS.md` → `agent/AGENTS.md` | Same shared skills |
+| Claude Code, if used | `~/.claude/CLAUDE.md` → `agent/AGENTS.md` | `~/.claude/skills/<name>` → shared skill |
 
 Custom `CODEX_HOME` and `XDG_CONFIG_HOME` are respected. T3 Code is the interface;
 the selected harness determines instruction and skill discovery. Local skills
@@ -85,8 +86,8 @@ and verify in that session. Discovery paths are documented by
 [OpenCode](https://opencode.ai/docs/skills/), and
 [Claude Code](https://code.claude.com/docs/en/skills).
 
-`GLOBAL.md` combines your existing personal instructions and collaboration
-letter. All tools read that same file. Older `PERSONAL.md` and `LETTER.md`
+`agent/AGENTS.md` is the shared root and points to task-specific workflows.
+All tools read that same root. Older `GLOBAL.md`, `PERSONAL.md`, and `LETTER.md`
 paths are compatibility symlinks; there is no rendering step or second copy.
 See [the shared kit guide](../README.md) for the full link layout.
 
