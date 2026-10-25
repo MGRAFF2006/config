@@ -62,8 +62,14 @@ def managed_ignores(previous, patterns):
         if end < start:
             raise ValueError("Malformed managed ignore block order")
         previous = previous[:start] + previous[end + 1:]
-    # First match wins: put managed code/cache exclusions before local overrides.
-    return [BEGIN, *patterns, END, *previous]
+    # Escape directives must precede patterns; first-match exclusions then go
+    # before local overrides. Retain each device's leading header verbatim.
+    header_end = 0
+    for line in previous:
+        if line.strip() and not line.startswith(("//", "#escape=")):
+            break
+        header_end += 1
+    return [*previous[:header_end], BEGIN, *patterns, END, *previous[header_end:]]
 
 
 def apply_scope(api, home, policy, state, apply):

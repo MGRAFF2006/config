@@ -127,6 +127,16 @@ class ScopeTests(unittest.TestCase):
             sync.restore_scope(self.api, backup)
         self.assertTrue(all(method == "GET" for method, _ in self.api.calls))
 
+    def test_custom_escape_header_remains_valid_before_patterns(self):
+        previous = ["// Device-specific escape character", "", "#escape=|",
+                    "/archive/|[notes|].txt", "!keep.txt"]
+        result = sync.managed_ignores(previous, ["node_modules"])
+        significant = [line for line in result if line and not line.startswith("//")]
+        self.assertEqual(significant[0], "#escape=|")
+        self.assertIn("/archive/|[notes|].txt", significant)
+        self.assertLess(significant.index("node_modules"), significant.index("!keep.txt"))
+        self.assertEqual(sync.managed_ignores(result, ["node_modules"]), result)
+
 
 if __name__ == "__main__":
     unittest.main()
