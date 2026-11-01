@@ -93,6 +93,19 @@ Code normally lives in `~/Projects`; documents under `~/Documents`. Use Git
 for durable work. Do not create another notes/dotfiles layout or overwrite
 project instructions.
 
+## Cloud sandboxes (Boat)
+
+Use Boat for disposable isolated builds, tests, Docker experiments or extra
+compute when useful for the task. Check `boat status` and `boat limits` first;
+use explicit sandbox IDs, keep automatic stop enabled, and stop your sandboxes
+when finished. Push or copy out work you need to keep before cleanup.
+Treat my Boat plan as a limited budget: use the smallest suitable runners,
+limit concurrent jobs, avoid duplicate push/PR runs and broad retries, and
+cancel superseded work. At a quota limit, defer work instead of repeatedly
+starting jobs. Do not add wallet funds or upgrade the plan without my explicit
+request.
+Setup, access and commands: [Boat](fleet/BOAT.md).
+
 ## Read what the task needs
 
 This kit's root is `~/Documents/config/agent/`. Resolve links from there even
