@@ -56,12 +56,12 @@ if hl.get_config("decoration.blur.variant") ~= nil then
 end
 
 hl.curve("electricOut", { type = "bezier", points = { { 0.16, 1 }, { 0.3, 1 } } })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 2, bezier = "electricOut", style = "popin 99%" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.5, bezier = "electricOut", style = "popin 99%" })
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "electricOut" })
-hl.animation({ leaf = "workspaces", enabled = false })
-hl.animation({ leaf = "fade", enabled = false })
-hl.animation({ leaf = "border", enabled = true, speed = 3, bezier = "electricOut" })
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 1.6, bezier = "electricOut", style = "popin 99%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.2, bezier = "electricOut", style = "popin 99%" })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 1.5, bezier = "electricOut" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 1.4, bezier = "electricOut", style = "slide 3%" })
+hl.animation({ leaf = "fade", enabled = true, speed = 1, bezier = "electricOut" })
+hl.animation({ leaf = "border", enabled = true, speed = 1.5, bezier = "electricOut" })
 
 -- Tint selected application surfaces without fading documents in every app.
 hl.window_rule({ name = "electric-tools", match = { class = "^(org\\.kde\\.dolphin|org\\.kde\\.konsole|org\\.wezfurlong\\.wezterm)$", fullscreen = false }, opacity = "0.94 0.90" })

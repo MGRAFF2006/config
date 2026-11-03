@@ -2,9 +2,11 @@
 
 This preset keeps 2 px gaps and 4 px window corners while giving the shell
 large text and controls. DMS uses a 115% font scale, larger bar text/icons,
-and scalable rounded controls. Window/workspace fades, workspace slides,
-shell bounce and ripple animations are disabled or reduced. Acrylic blur,
-shadows and a narrow inner glow add depth without continuous animation.
+and scalable rounded controls. Window, workspace and panel transitions finish
+quickly with tiny scale/position changes, short fades and no spring overshoot.
+Hover/press feedback remains enabled. Acrylic blur, shadows and a narrow inner
+glow add depth without continuous animation. Volume/brightness level smoothing
+is provided separately through a user-local DMS slider override.
 
 DMS's dynamic theme derives the shell and generated app colors from the
 wallpaper. The compositor keeps generated colors instead of overriding them

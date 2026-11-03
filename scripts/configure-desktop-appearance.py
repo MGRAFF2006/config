@@ -71,9 +71,10 @@ def main():
             "radiusMode": "scale", "radiusStrength": 65, "fontScale": 1.15,
             "hyprlandLayoutGapsOverride": 2, "hyprlandLayoutGapsOutOverride": 2,
             "hyprlandLayoutRadiusOverride": 4, "hyprlandLayoutBorderSize": 2,
-            "animationDuration": 180, "syncComponentAnimationSpeeds": True,
-            "popoutAnimationDuration": 180, "modalAnimationDuration": 180,
-            "springBounce": 0, "motionEffect": 0, "enableRippleEffects": False,
+            "animationDuration": 180, "syncComponentAnimationSpeeds": False,
+            "popoutAnimationDuration": 130, "modalAnimationDuration": 160,
+            "notificationAnimationDuration": 140,
+            "springBounce": 0, "motionEffect": 0, "enableRippleEffects": True,
             "m3ElevationEnabled": True, "m3ElevationIntensity": 12, "m3ElevationOpacity": 35,
         })
         for bar in settings.setdefault("barConfigs", [DEFAULT_BAR]):
