@@ -89,3 +89,18 @@ Detach with Ctrl-B, D; reconnect with `tmux attach -t asahi-build`.
 Artifacts are `arch/arm64/boot/Image`, device trees below `arch/arm64/boot/dts/`,
 and module `.ko` files inside the output directory. Hardware boot, graphics,
 keyboard, suspend/resume and networking tests remain separate from compilation.
+
+## Verified result — 2026-11-03
+
+The experiment at `58542935ba8be69599aaed5f785b551099a86ab2` passed the complete
+`Image modules dtbs` build on homelab-dev with LLVM 19.1.7, Rust 1.85.1 and
+bindgen 0.71.1. The resulting release is `7.2.15-g58542935ba8b`; the kernel
+Image, Apple GPU/AOP/PMP/SEP modules and 110 Apple device-tree blobs were checked
+for the expected format/architecture. Rebuilding `kernel/fork.o` reused the
+existing object unchanged. The existing global Rust 1.99.0 default was preserved.
+
+The laptop passed all eleven changed C objects and the Asahi Rust GPU object
+with LLVM 23.1.4 and Rust 1.99.1. Its full kernel build was not run.
+Debian's Rust 1.85.1 emits one nonfatal warning about the existing
+`unnecessary_transmutes` lint attribute in unchanged `float.rs:59`.
+No kernel was installed and no Apple hardware boot/runtime test was performed.
