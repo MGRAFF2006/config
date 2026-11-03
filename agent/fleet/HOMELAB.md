@@ -26,6 +26,7 @@ flowchart TB
         ssd -. "VM root disks" .-> dev
         ssd -. "VM root disks" .-> ci
         mirror -->|"1 TiB guest disk"| services
+        mirror -->|"512 GiB worktree disk"| dev
         mirror --> backups
     end
     laptop -->|"Tailscale SSH / Proxmox HTTPS"| pve
@@ -39,7 +40,7 @@ flowchart TB
 | --- | --- | --- | --- | --- | --- |
 | homelab-pve | Hypervisor and storage | 6 cores / 12 threads | 128 GB ECC, about 125 GiB usable | 64 GiB root, 8 GiB swap, 1 GiB boot | [Host](machines/homelab-pve.md) |
 | 100 / homelab-services | Docker services and bulk files | 2 vCPU | 16 GiB | 80 GiB SSD + 1 TiB HDD | [Services](machines/homelab-services.md) |
-| 110 / homelab-dev | Remote development and AI tools | 4 vCPU | 32 GiB | 160 GiB SSD | [Development](machines/homelab-dev.md) |
+| 110 / homelab-dev | Remote development and AI tools | 4 vCPU | 32 GiB | 172 GiB SSD + 512 GiB HDD worktrees | [Development](machines/homelab-dev.md) |
 | 120 / homelab-ci | Trusted project CI | 4 vCPU, CPU limit 3 | 32 GiB | 128 GiB SSD | [CI](machines/homelab-ci.md) |
 
 The guest CPUs share the physical CPU; allocations are not dedicated cores.
@@ -80,11 +81,15 @@ machine-local. Keep passwords in Bitwarden; never put values in fleet notes.
 - SSD: Intel 545s 512 GB, serial `BTLA75030D2Z512DGN`. Its high wear was
   explicitly accepted. It is a single unmirrored drive; monitor SMART.
 - Proxmox storage `ssd`: 384 GiB LVM thin pool `pve/data`. Guest root disks
-  total 368 GiB logical capacity, plus their small cloud-init volumes.
+  total 380 GiB logical capacity, plus their small cloud-init volumes (verified
+  2026-11-03). Do not overprovision disk allocations.
 - HDDs: Seagate 4 TB, serials `Z4F03GAC` and `Z4F03FQV`, ZFS mirror `bulk`.
   Identify physical disks by serial/by-id; `/dev/sdX` assignments change.
 - Proxmox storage `bulk`: ZFS `bulk/vmdata`. VM 100's 1 TiB disk has serial
   `homelab-bulk` and ext4 mounted at `/srv/homelab`.
+  VM 110 has a 512 GiB disk with serial `homelab-dev-worktrees`, mounted at
+  `/srv/development`; its `worktrees` directory bind-mounts at the existing
+  `~/.t3/worktrees` path. Both disks are included in nightly VM backups.
 - Proxmox storage `backups`: `/bulk/backups`, dataset `bulk/backups`; it shares
   remaining HDD capacity with bulk VM data. ZFS ARC is capped at 16 GiB.
 - Backup job `nightly`: VMs 100/110/120 at 02:30 Europe/Berlin, snapshot mode,
