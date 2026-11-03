@@ -1,0 +1,11 @@
+[Unit]
+Description=Development storage on the mirrored HDD pool
+
+[Mount]
+What=/dev/disk/by-label/dev-worktrees
+Where=/srv/development
+Type=ext4
+Options=noatime
+
+[Install]
+WantedBy=local-fs.target
