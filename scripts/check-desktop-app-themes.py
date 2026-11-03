@@ -60,6 +60,8 @@ def main():
         module.apply()
         assert "gtk-font-name=User Accessible 18" in (module.CONFIG / "gtk-3.0/settings.ini").read_text()
         assert "gtk-font-name=Google Sans Flex, Medium 11" in (module.CONFIG / "gtk-4.0/settings.ini").read_text()
+        for version in (3, 4):
+            assert "gtk-icon-theme-name=DMS-Papirus-Dark" in (module.CONFIG / f"gtk-{version}.0/settings.ini").read_text()
         css = (module.CONFIG / "gtk-4.0/gtk.css").read_text()
         assert '.custom { margin: 3px; }' in css and '"colors.css"' not in css
         module.apply()

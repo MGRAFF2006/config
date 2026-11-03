@@ -122,6 +122,10 @@ def apply():
                 content = re.sub(r"(?m)^gtk-theme-name=.*$", "gtk-theme-name=adw-gtk3-dark", content)
             else:
                 content = content.replace("[Settings]\n", "[Settings]\ngtk-theme-name=adw-gtk3-dark\n", 1)
+            if re.search(r"(?m)^gtk-icon-theme-name=", content):
+                content = re.sub(r"(?m)^gtk-icon-theme-name=.*$", "gtk-icon-theme-name=DMS-Papirus-Dark", content)
+            else:
+                content = content.replace("[Settings]\n", "[Settings]\ngtk-icon-theme-name=DMS-Papirus-Dark\n", 1)
             if fonts[version]:
                 if re.search(r"(?m)^gtk-font-name=", content):
                     content = re.sub(r"(?m)^gtk-font-name=.*$", "gtk-font-name=" + fonts[version], content)
@@ -133,6 +137,9 @@ def apply():
             subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "font-name", fonts[3]], check=True)
     if PALETTE.exists():
         refresh()
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DMS-Papirus-Dark"], check=True)
+        if shutil.which("kwriteconfig6"):
+            subprocess.run(["kwriteconfig6", "--file", str(CONFIG / "kdeglobals"), "--group", "Icons", "--key", "Theme", "--notify", "DMS-Papirus-Dark"], check=True)
     print("Installed the palette hook. Change wallpaper/theme in DMS to generate it.")
 
 
