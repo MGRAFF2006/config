@@ -58,3 +58,6 @@ kwallet-pam
 
 # AUR companions (install with yay — see aur-laptop.txt / install script notes):
 #   dsearch-bin dankcalendar-bin greetd-dms-greeter-bin
+
+# Guarded user-local DMS UI patches
+patch # setup:hyprland
