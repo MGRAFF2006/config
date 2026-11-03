@@ -12,7 +12,7 @@ DMS's dynamic theme derives the shell and generated app colors from the
 wallpaper. The compositor keeps generated colors instead of overriding them
 with a static gradient. GTK, Qt/KDE, Alacritty and Zen templates are enabled.
 The wallpaper uses DMS's built-in geometric Material composition, preset
-`garden`, with its cool violet seed (`#d0bcff`); there is no generated illustration.
+`garden`, with a cool accent chosen in DMS; there is no generated illustration.
 Choose another image or Material seed through DMS to update the palette.
 
 Deploy through the existing setup flow, then preview/apply the shell preset:

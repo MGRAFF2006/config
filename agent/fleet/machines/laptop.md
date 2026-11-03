@@ -4,7 +4,7 @@
 
 Hyprland 0.57 / DMS 2.0 uses 2 px gaps with larger shell controls and 115%
 text, small window corners, acrylic blur and fast subtle transitions. DMS's built-in
-Material `garden` wallpaper is active with cool violet seed `#d0bcff`; the previous
+Material `garden` wallpaper is active with a cool accent selected in DMS; the previous
 keyboard-reference wallpaper remains in `keyboards/corne/wallpaper.png`.
 
 Apply the saved appearance with `scripts/configure-desktop-appearance.py --apply`
