@@ -58,3 +58,8 @@ kwallet-pam
 
 # AUR companions (install with yay — see aur-laptop.txt / install script notes):
 #   dsearch-bin dankcalendar-bin greetd-dms-greeter-bin
+
+# Shared GTK and Qt5/Qt6 palette integration
+adw-gtk-theme # setup:hyprland
+plasma-integration # setup:hyprland
+plasma5-integration # setup:hyprland

@@ -1,17 +1,13 @@
 -- Electric glass. Kept outside DMS-generated fragments so updates preserve it.
 hl.config({
 	general = {
-		gaps_in = 5,
-		gaps_out = 10,
+		gaps_in = 2,
+		gaps_out = 2,
 		border_size = 2,
-		col = {
-			active_border = { colors = { "rgb(58c7ff)", "rgb(56e2cb)", "rgb(a994ff)" }, angle = 45 },
-			inactive_border = "rgba(65759655)",
-		},
 	},
 	decoration = {
-		rounding = 14,
-		rounding_power = 3,
+		rounding = 4,
+		rounding_power = 2,
 		active_opacity = 1,
 		inactive_opacity = 1,
 		shadow = {
@@ -47,27 +43,24 @@ if hl.get_config("decoration.blur.variant") ~= nil then
 					bulb = 32,
 					clarity = 0.25,
 					aberration = 0.018,
-					tint = "rgba(58c7ff12)",
 				},
 			},
 			glow = {
 				enabled = true,
-				range = 10,
-				render_power = 3,
-				color = "rgba(58c7ff32)",
-				color_inactive = "rgba(58c7ff08)",
+				range = 4,
+				render_power = 4,
+				-- Colors come from DMS's wallpaper-derived colors.lua.
 			},
 		},
 	})
 end
 
 hl.curve("electricOut", { type = "bezier", points = { { 0.16, 1 }, { 0.3, 1 } } })
-hl.curve("electricSpring", { type = "spring", mass = 1, stiffness = 260, damping = 25 })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 3.5, spring = "electricSpring", style = "popin 94%" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 2, bezier = "electricOut", style = "popin 96%" })
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 3.5, spring = "electricSpring" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 3, bezier = "electricOut", style = "slidefade 15%" })
-hl.animation({ leaf = "fade", enabled = true, speed = 2.5, bezier = "electricOut" })
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 2, bezier = "electricOut", style = "popin 99%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.5, bezier = "electricOut", style = "popin 99%" })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "electricOut" })
+hl.animation({ leaf = "workspaces", enabled = false })
+hl.animation({ leaf = "fade", enabled = false })
 hl.animation({ leaf = "border", enabled = true, speed = 3, bezier = "electricOut" })
 
 -- Tint selected application surfaces without fading documents in every app.

@@ -45,7 +45,7 @@ def main():
         run("--apply")
         backup = next((state / "config/desktop-appearance-backups").iterdir())
         changed = json.loads(target.read_text())
-        assert changed["currentThemeName"] == "custom"
+        assert changed["currentThemeName"] == "dynamic"
         assert changed["unrelatedPreference"] == 42 and changed["reduceMotion"] is True
         bar = changed["barConfigs"][0]
         assert bar["rightWidgets"] == settings["barConfigs"][0]["rightWidgets"]
@@ -60,6 +60,15 @@ def main():
         run("--restore", str(backup))
         assert json.loads(target.read_text()) == settings
         assert (hypr / "layout-user.lua").read_text() == original_layout
+        target.write_text(json.dumps({"configVersion": 42, "currentThemeName": "blue"}))
+        run("--apply")
+        sparse = json.loads(target.read_text())
+        assert sparse["currentThemeName"] == "dynamic"
+        assert sparse["barConfigs"][0]["leftWidgets"] == ["launcherButton", "workspaceSwitcher", "focusedWindow"]
+        assert sparse["barConfigs"][0]["centerWidgets"] == ["music", "clock", "weather"]
+        assert sparse["barConfigs"][0]["rightWidgets"] == ["systemTray", "clipboard", "cpuUsage", "memUsage", "notificationButton", "battery", "controlCenterButton"]
+        # Restore before checking refusal, so the layout must remain untouched.
+        run("--restore", str(backup))
         target.write_text("{corrupt")
         run("--apply", success=False)
         assert target.read_text() == "{corrupt"

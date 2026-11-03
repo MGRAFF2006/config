@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the Electric glass DMS preset, preserving widgets and unrelated settings."""
+"""Apply readable wallpaper-themed glass, preserving widgets and unrelated settings."""
 
 import argparse
 import json
@@ -10,12 +10,19 @@ import tempfile
 from datetime import datetime
 
 
-ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
 SETTINGS = CONFIG / "DankMaterialShell/settings.json"
 LAYOUT = CONFIG / "hypr/dms/layout-user.lua"
 INCLUDE = '\nrequire("dms.expressive")\n'
+# DMS 2.0 omits barConfigs when it equals this default widget arrangement.
+DEFAULT_BAR = {
+    "id": "default", "name": "Main Bar", "enabled": True, "position": 0,
+    "screenPreferences": ["all"], "showOnLastDisplay": True,
+    "leftWidgets": ["launcherButton", "workspaceSwitcher", "focusedWindow"],
+    "centerWidgets": ["music", "clock", "weather"],
+    "rightWidgets": ["systemTray", "clipboard", "cpuUsage", "memUsage", "notificationButton", "battery", "controlCenterButton"],
+}
 
 
 def write_atomic(path, content):
@@ -44,30 +51,34 @@ def main():
         layout = (args.restore / "layout-user.lua").read_text()
     else:
         settings = json.loads(settings_path.read_text())
-        theme = ROOT / "home/.config/DankMaterialShell/theme_electric.json"
-        json.loads(theme.read_text())
         if not (CONFIG / "hypr/dms/expressive.lua").is_file():
             raise SystemExit("Deploy the Hyprland config with scripts/link-home.sh first.")
         settings.update({
-            "currentThemeName": "custom", "currentThemeCategory": "custom",
-            "customThemeFile": str(theme),
+            "currentThemeName": "dynamic", "currentThemeCategory": "dynamic",
+            "matugenScheme": "scheme-tonal-spot", "matugenContrast": 0.25,
+            "runDmsMatugenTemplates": True, "runUserMatugenTemplates": True,
+            "matugenTemplateGtk": True, "matugenTemplateKcolorscheme": True,
+            "matugenTemplateQt5ct": True, "matugenTemplateQt6ct": True,
+            "matugenTemplateAlacritty": True, "matugenTemplateZenBrowser": True,
+            "matugenTemplateNeovim": False,
             "popupTransparency": 0.72, "dockTransparency": 0.78,
             "blurEnabled": True, "blurForegroundLayers": True,
             "blurLayerOutlineOpacity": 0.16,
             "blurBorderEnabled": True, "blurBorderColor": "primary", "blurBorderOpacity": 0.30,
             "foregroundLayerTransparency": 0.72,
-            "radiusMode": "scale", "radiusStrength": 65,
-            "hyprlandLayoutGapsOverride": 5, "hyprlandLayoutGapsOutOverride": 10,
-            "hyprlandLayoutRadiusOverride": 14, "hyprlandLayoutBorderSize": 2,
-            "animationDuration": 240, "syncComponentAnimationSpeeds": True,
-            "popoutAnimationDuration": 200, "modalAnimationDuration": 240,
-            "springBounce": 2, "motionEffect": 2, "enableRippleEffects": True,
+            "radiusMode": "scale", "radiusStrength": 65, "fontScale": 1.15,
+            "hyprlandLayoutGapsOverride": 2, "hyprlandLayoutGapsOutOverride": 2,
+            "hyprlandLayoutRadiusOverride": 4, "hyprlandLayoutBorderSize": 2,
+            "animationDuration": 180, "syncComponentAnimationSpeeds": True,
+            "popoutAnimationDuration": 180, "modalAnimationDuration": 180,
+            "springBounce": 0, "motionEffect": 0, "enableRippleEffects": False,
             "m3ElevationEnabled": True, "m3ElevationIntensity": 12, "m3ElevationOpacity": 35,
         })
-        for bar in settings["barConfigs"]:
+        for bar in settings.setdefault("barConfigs", [DEFAULT_BAR]):
             bar.update({
-                "spacing": 5, "innerPadding": 5, "barInsetPadding": 10,
-                "bottomGap": 6, "transparency": 0.76, "widgetTransparency": 0.62,
+                "spacing": 2, "innerPadding": 5, "barInsetPadding": 2,
+                "bottomGap": 0, "transparency": 0.76, "widgetTransparency": 0.62,
+                "fontScale": 1.1, "iconScale": 1.1,
                 "squareCorners": False, "noBackground": False,
                 "borderEnabled": True, "borderColor": "primary", "borderOpacity": 0.24,
                 "borderThickness": 1, "widgetOutlineEnabled": False,
