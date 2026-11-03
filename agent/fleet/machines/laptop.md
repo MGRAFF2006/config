@@ -4,7 +4,7 @@
 
 Hyprland 0.57 / DMS 2.0 uses 2 px gaps with larger shell controls and 115%
 text, small window corners, acrylic blur and reduced fades/motion. DMS's built-in
-Material `dank` wallpaper is active with cool cyan seed `#58c7ff`; the previous
+Material `garden` wallpaper is active with cool violet seed `#d0bcff`; the previous
 keyboard-reference wallpaper remains in `keyboards/corne/wallpaper.png`.
 
 Apply the saved appearance with `scripts/configure-desktop-appearance.py --apply`
@@ -16,7 +16,8 @@ under `~/.local/state/config/desktop-refresh-2026-11-03/`. See
 
 GTK3/4 use DMS's generated palette and adw-gtk3; Qt5/6 use the KDE platform
 plugin (`plasma5-integration` / `plasma-integration`). Existing GTK font choices
-are preserved. Alacritty, Zen, Neovim surfaces and VS Code share palette exports.
+are preserved. Alacritty, Zen, Neovim surfaces and VS Code share palette exports. Folder/place icons use generated local Papirus
+overlays; application icons remain inherited.
 Native Qt5/Qt6 and GTK3 palette queries matched generated background/text/accent;
 Neovim's actual Normal highlight matched too. An automatic image change and
 return to the Material wallpaper regenerated the palette/hook. Existing apps

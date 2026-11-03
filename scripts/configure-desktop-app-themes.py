@@ -40,6 +40,7 @@ def refresh():
     colors = json.loads(PALETTE.read_text())
     if not all(re.fullmatch(r"#[0-9a-fA-F]{6}", color) for color in colors.values()):
         raise ValueError("Invalid generated desktop palette")
+    subprocess.run(["python3", str(ROOT / "scripts/theme-folder-icons.py"), "--palette", str(PALETTE)], env=dict(os.environ, XDG_DATA_HOME=str(DATA)), check=True)
     vscode = CONFIG / "Code/User/settings.json"
     if vscode.exists():
         try:

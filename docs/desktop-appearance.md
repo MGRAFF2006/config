@@ -10,7 +10,7 @@ DMS's dynamic theme derives the shell and generated app colors from the
 wallpaper. The compositor keeps generated colors instead of overriding them
 with a static gradient. GTK, Qt/KDE, Alacritty and Zen templates are enabled.
 The wallpaper uses DMS's built-in geometric Material composition, preset
-`dank`, with a cool cyan seed (`#58c7ff`); there is no generated illustration.
+`garden`, with its cool violet seed (`#d0bcff`); there is no generated illustration.
 Choose another image or Material seed through DMS to update the palette.
 
 Deploy through the existing setup flow, then preview/apply the shell preset:
@@ -45,5 +45,5 @@ base46; use the repository's app-theme integration instead.
 The cross-toolkit approach follows [dwm-titus's shared application palette](https://dwm.christitus.com/theming.html)
 and [DMS's native application theme integration](https://duxlabs.dev/docs/dms/application-themes).
 
-In DMS Wallpaper settings, select the Material `dank` preset and choose the
-cool cyan color. `wallpaper clear` restores the saved/default Material layout.
+In DMS Wallpaper settings, select a Material preset and choose a
+cool accent color. `wallpaper clear` restores the saved/default Material layout.

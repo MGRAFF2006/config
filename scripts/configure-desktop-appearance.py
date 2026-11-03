@@ -61,6 +61,8 @@ def main():
             "matugenTemplateQt5ct": True, "matugenTemplateQt6ct": True,
             "matugenTemplateAlacritty": True, "matugenTemplateZenBrowser": True,
             "matugenTemplateNeovim": False,
+            "iconThemeDark": "DMS-Papirus-Dark", "iconThemeLight": "DMS-Papirus",
+            "iconThemePerMode": True,
             "popupTransparency": 0.72, "dockTransparency": 0.78,
             "blurEnabled": True, "blurForegroundLayers": True,
             "blurLayerOutlineOpacity": 0.16,

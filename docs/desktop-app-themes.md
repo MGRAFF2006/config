@@ -63,3 +63,8 @@ To undo the shared hook, remove the marked `shared desktop palette` block from
 the printed backup, and remove the `custom.dms-theme` setup line from Neovim.
 The generated `desktop-theme/palette.json` can then be removed. DMS's native
 GTK/Qt theming remains selectable through its own application-theme settings.
+
+The shared palette hook also updates [folder icons](folder-icons.md) through
+local Papirus overlays. Select `DMS-Papirus-Dark` and `DMS-Papirus` as the dark
+and light icon themes (the appearance preset selects these names). Application
+logos are inherited unchanged; folder accents follow the same generated primary.

@@ -12,6 +12,9 @@ def main():
     spec = importlib.util.spec_from_file_location("desktop_app_themes", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Native toolkit/icon commands are covered separately; keep this fixture
+    # independent of installed desktop packages and the real user's data.
+    module.subprocess.run = lambda *args, **kwargs: None
     with tempfile.TemporaryDirectory(prefix="app-theme-check-") as directory:
         root = Path(directory)
         module.CONFIG, module.DATA = root / "config", root / "data"
