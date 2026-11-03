@@ -40,6 +40,12 @@ Reuse an existing kernel object database when practical. Inspect its worktree
 first and preserve unfinished checkouts or dirty work; a separate Git worktree
 can share objects without replacing the original checkout.
 
+On homelab-dev, `~/Projects/asahi-linux` resolves to
+`/srv/development/projects/asahi-linux` on the development disk.
+`~/.cache/asahi-linux` resolves to `/srv/development/build/asahi-linux` there,
+so the default build output also stays off the root filesystem. The source
+branch is `experiment/asahi-7.2.15`, at the same commit as the fork PR.
+
 ## Configure and build
 
 ```bash

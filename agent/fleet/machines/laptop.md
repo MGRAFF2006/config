@@ -1,5 +1,19 @@
 # Laptop
 
+## Asahi kernel cross-builds — verified 2026-11-03
+
+Native LLVM/Clang 23.1.4, Rust 1.99.1 with matching source, bindgen 0.73.2
+and bc are available. Restore/check with `scripts/setup-asahi-build.sh`;
+cross-build with `scripts/asahi-build.sh` as documented in
+[the build guide](../../../docs/asahi-kernel-build.md). Build output is
+`~/.cache/asahi-linux/build`; it is separate from the source checkout.
+
+The Linux 7.2.15 experiment at `58542935ba8be69599aaed5f785b551099a86ab2`
+configured with ARM64 16 KiB pages and the Asahi Rust GPU driver enabled.
+All eleven changed C objects and `drivers/gpu/drm/asahi/asahi.o` compiled
+successfully. No kernel was installed and no Apple hardware boot/runtime
+test was performed. Prefer homelab-dev for full unattended builds.
+
 ## Personal-file sync — verified 2026-10-25
 
 Syncthing now carries personal Documents, Downloads, Pictures, Music, Videos
