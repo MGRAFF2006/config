@@ -1,0 +1,18 @@
+# Native tools for ARM64 cross-compilation; no cross GCC is required.
+base-devel
+bc
+clang
+cpio
+dtc
+git
+libelf
+lld
+llvm
+openssl
+pahole
+python
+rsync
+rust
+rust-bindgen
+rust-src
+tmux

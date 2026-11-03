@@ -1,5 +1,28 @@
 # Hetzner development VM
 
+## Asahi kernel cross-builds — verified 2026-11-03
+
+Native LLVM/Clang 19.1.7, distribution Rust 1.85.1 with matching source,
+bindgen 0.71.1 and the remaining build dependencies are installed. Restore
+or check with `scripts/setup-asahi-build.sh`; build using
+`scripts/asahi-build.sh` and [the build guide](../../../docs/asahi-kernel-build.md).
+The build wrapper selects `/usr/bin/rustc`; the existing rustup default
+remained Rust 1.99.0 before and after verification.
+
+`~/Projects/asahi-linux` points to `/srv/development/projects/asahi-linux`,
+branch `experiment/asahi-7.2.15`, at commit
+`58542935ba8be69599aaed5f785b551099a86ab2`. It shares Git objects with the
+preserved partial clone at `~/Projects/linux`. `~/.cache/asahi-linux` points
+to `/srv/development/build/asahi-linux`, keeping source and build outputs
+on the development disk. The ARM64 16 KiB/Rust configuration and all eleven
+changed C objects plus Asahi GPU/AOP/PMP/SEP Rust objects compiled successfully.
+The complete `Image modules dtbs` build also passed, producing release
+`7.2.15-g58542935ba8b`, AArch64 Apple modules and 110 valid Apple device-tree
+blobs. A cached `kernel/fork.o` build preserved the object's timestamp and hash.
+Hardware boot, module loading and runtime behavior remain unverified.
+Rust 1.85.1 warns about the pre-existing `unnecessary_transmutes` lint attribute
+in `drivers/gpu/drm/asahi/float.rs`; this file is unchanged by the update.
+
 ## Worktree storage and T3 recovery — 2026-11-03
 
 The 172 GiB SSD root disk filled, and `t3code.service` failed. Removing the
