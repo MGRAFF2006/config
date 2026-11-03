@@ -219,8 +219,11 @@ function hyprsplit.dsp.focus(args)
             end
 
             -- check for workspace_back_and_forth
+            -- Hyprland's integer-backed boolean returns 0 when disabled;
+            -- Lua treats 0 as true, so test the enabled values explicitly.
+            local back_and_forth = hl.get_config("binds.workspace_back_and_forth")
             if
-                hl.get_config("binds.workspace_back_and_forth")
+                (back_and_forth == true or back_and_forth == 1)
                 and active_monitor
                 and active_monitor.active_workspace
             then
