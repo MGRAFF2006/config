@@ -6,7 +6,7 @@ hl.config({
 		border_size = 2,
 	},
 	decoration = {
-		rounding = 4,
+		rounding = 2,
 		rounding_power = 2,
 		active_opacity = 1,
 		inactive_opacity = 1,
@@ -59,7 +59,7 @@ hl.curve("electricOut", { type = "bezier", points = { { 0.16, 1 }, { 0.3, 1 } } 
 hl.animation({ leaf = "windowsIn", enabled = true, speed = 1.6, bezier = "electricOut", style = "popin 99%" })
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.2, bezier = "electricOut", style = "popin 99%" })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 1.5, bezier = "electricOut" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 1.4, bezier = "electricOut", style = "slide 3%" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 1.4, bezier = "electricOut", style = "slidefade 3%" })
 hl.animation({ leaf = "fade", enabled = true, speed = 1, bezier = "electricOut" })
 hl.animation({ leaf = "border", enabled = true, speed = 1.5, bezier = "electricOut" })
 

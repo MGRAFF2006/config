@@ -1,5 +1,15 @@
 # Laptop
 
+## Desktop refinements — verified 2026-11-04
+
+Windows use 2 px corners; DMS controls use a fixed 4 px radius. The saved
+appearance preset retains both choices. Workspace changes now use `slidefade 3%`
+with the existing short duration and easing. An isolated nested Hyprland check
+reproduced the abrupt disappearance with `slide 3%` and confirmed blended frames
+in both populated-to-empty and empty-to-populated transitions with the fade.
+The actual updated fragment loaded without config errors and reported 2 px
+rounding in that compositor. DMS setting readback confirmed the shell radius.
+
 ## Readable wallpaper theming — verified 2026-11-03
 
 Hyprland 0.57 / DMS 2.0 uses 2 px gaps with larger shell controls and 115%
