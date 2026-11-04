@@ -16,6 +16,12 @@ Held-key repeats retarget the running movement without restarting the easing on
 every step. The real value, adjustment signal and hardware update remain immediate. Pointer dragging, reduced motion and disabled animations
 bypass the transition.
 
+Launcher results use single-line native styled-text elision for both the title
+and subtitle, preserving search emphasis. Display-only newline normalization
+keeps multiline clipboard entries within their rows; the full name, clipboard
+payload and accessible label remain unchanged. The guarded patch set also
+fingerprints `LauncherRow.qml` before applying this correction.
+
 Stage the reviewed change without changing any running shell:
 
 ```bash
@@ -26,9 +32,9 @@ python3 scripts/check-dms-smooth-sliders.py --ui
 
 The helper reads the running shell's `dms.path` and copies its current extracted
 UI into `~/.local/share/dms-ui-overrides`. It checks the exact reviewed DMS
-version and the exact slider/control-center source hashes before applying both
+version and the exact slider/control-center source hashes before applying all
 patches. The manifest records the whole source tree's hash, combined patch hash,
-all three patched-file hashes, binary hash and
+all four patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
 extracted built-in files are changed.

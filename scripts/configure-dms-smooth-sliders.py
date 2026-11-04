@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage guarded DMS refinements: smooth sliders and inline quick-access pages."""
+"""Stage guarded DMS refinements: sliders, quick-access pages and launcher text."""
 
 import argparse
 import hashlib
@@ -18,11 +18,12 @@ SLIDER = Path("DCommon/Widgets/DSlider.qml")
 SUPPORTED_VERSION = "v2.0.0"
 SUPPORTED_SLIDER = "0888dce6b3c9c1e7b748ee47470bd978700a8878793f071bf0641ccc63cc3adb"
 PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/smooth-slider-level.patch"
-PATCHES = (PATCH, PATCH.with_name("control-center-pages.patch"))
+PATCHES = (PATCH, PATCH.with_name("control-center-pages.patch"), PATCH.with_name("launcher-text-bounds.patch"))
 SUPPORTED_FILES = {
     SLIDER: SUPPORTED_SLIDER,
     Path("Modules/ControlCenter/Components/CcDetailPage.qml"): "dcf3d2e82ccdd5920b11d7b245d3b3b0c1876326b7e4a431fbb0753816e328d5",
     Path("Modules/ControlCenter/ControlCenterContent.qml"): "cd62fce37d92706a1f9db61edf1ba65e4af6071a72b59a8114fcedc82c3fe6ce",
+    Path("Modals/DLauncherV2/Components/LauncherRow.qml"): "0c9498f52c259fc02834d713eb326995302d2c49681304ffedfb4057b7b48b56",
 }
 
 
