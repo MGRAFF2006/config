@@ -51,7 +51,7 @@ def main():
     aur = set().union(*(packages for name, packages in package_lists.items() if name.startswith("aur-")))
     assert not native & aur, f"Packages listed for both pacman and AUR: {sorted(native & aur)}"
     subprocess.run(["shellcheck", "--severity=warning", *shell], check=True)
-    for check in ("check-agent-kit.py", "check-deployment.py", "check-dms-config.py", "check-dms-network-status.py", "check-hyprland-packages.py"):
+    for check in ("check-agent-kit.py", "check-deployment.py", "check-dms-config.py", "check-dms-network-status.py", "check-hyprland-packages.py", "check-desktop-appearance.py", "check-desktop-app-themes.py", "check-folder-icons.py"):
         subprocess.run(["python3", str(ROOT / "scripts" / check)], check=True)
     subprocess.run(["python3", str(ROOT / "scripts/check-personal-sync.py")], check=True)
     print("PASS: shell/Python syntax, JSON/TOML, package lists, shellcheck, deployment checks")
