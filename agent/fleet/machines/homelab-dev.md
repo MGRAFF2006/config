@@ -1,5 +1,23 @@
 # Hetzner development VM
 
+## Windows browser desktop — provisioned 2026-11-04
+
+Windows 11 Pro and Office LTSC Professional Plus 2024 run in Docker container
+`windows-vm`, using nested KVM.
+Full graphical console: <https://homelab-dev.tail03caec.ts.net/windows/>, private
+through Tailscale; the existing T3 route at `/` is preserved. Windows account
+`Mathis` has a generated password saved in Bitwarden as **Homelab Windows VM**.
+The console opens the automatically signed-in Windows session.
+
+Configuration and operating commands: [Windows VM](../../../headless/windows-vm/README.md).
+The 96 GiB growable Windows disk lives in `/srv/development/windows-vm` on
+the development data disk. Four CPU cores, 6 GiB guest RAM,
+8 GiB container limit, no GPU or audio. Only the
+console's loopback port 8006 is published; no public or direct RDP/VNC endpoint.
+The first evaluation disk is preserved separately. Provisioning installs the
+private QEMU Guest Agent, restores normal UAC/update/SMB settings, and checks
+Windows and Office activation results; see the operating guide for details.
+
 ## Worktree storage and T3 recovery — 2026-11-03
 
 The 172 GiB SSD root disk filled, and `t3code.service` failed. Removing the

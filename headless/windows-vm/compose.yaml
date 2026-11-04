@@ -1,0 +1,44 @@
+services:
+  windows:
+    image: dockurr/windows:6.06@sha256:16fd7c39a3e48bb946d29c59dc6015942e5b900a1fa5d7e5552053bfc48ee2ea
+    container_name: windows-vm
+    environment:
+      VERSION: "11"
+      TZ: "Europe/Berlin"
+      RAM_SIZE: "6G"
+      # The upstream check counts reclaimable ISO cache as unavailable RAM.
+      RAM_CHECK: "N"
+      CPU_CORES: "4"
+      DISK_SIZE: "96G"
+      LANGUAGE: "en-US"
+      REGION: "de-DE"
+      KEYBOARD: "de-DE"
+      USERNAME: "Mathis"
+      PASSWORD: "${WINDOWS_PASSWORD:?Run setup.sh first}"
+      HOST: "HOMELAB-WIN"
+      AUTOLOGIN: "Y"
+      SAMBA: "N"
+      AUDIO: "N"
+      QGA: "unix:/run/shm/guest-agent.sock,server=on,wait=off"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "127.0.0.1:8006:8006"
+    volumes:
+      - type: bind
+        source: /srv/development/windows-vm
+        target: /storage
+        bind:
+          create_host_path: false
+    restart: unless-stopped
+    stop_grace_period: 2m
+    mem_limit: 8g
+    cpus: 4
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
