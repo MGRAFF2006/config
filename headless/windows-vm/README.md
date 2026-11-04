@@ -23,7 +23,8 @@ There is no GPU acceleration. Audio and shared host folders are disabled.
 Only the web console is published, on loopback port 8006; RDP and VNC ports
 are not published. Tailscale Serve supplies HTTPS on `/windows/`.
 
-The QEMU Guest Agent is installed from Fedora's pinned, signed MSI. Its channel
+The QEMU Guest Agent is installed from Fedora's pinned MSI, checked by SHA-256
+on both the host and Windows. This Fedora MSI is unsigned. Its channel
 uses only a Unix socket inside the container, not a network port. The OEM script
 restores UAC, normal Windows updates and secure SMB client defaults that the
 upstream unattended installation changes. Restart after provisioning so UAC

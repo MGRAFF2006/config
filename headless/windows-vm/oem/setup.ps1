@@ -24,13 +24,8 @@ function Assert-Signature([string]$path) {
 }
 
 try {
-    Set-SetupState 'guest-agent'
-    Assert-Signature 'C:\OEM\qemu-ga-x86_64.msi'
-    $agent = Start-Process msiexec.exe -ArgumentList '/i C:\OEM\qemu-ga-x86_64.msi /qn /norestart /l*v C:\VMSetup\guest-agent.log' -Wait -PassThru
-    if ($agent.ExitCode -notin @(0, 3010)) { throw "Guest-agent install failed: $($agent.ExitCode)" }
-    Start-Service QEMU-GA
-
     # Restore normal protections changed by the upstream unattended image.
+    Set-SetupState 'windows-protections'
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -Value 1
     $updates = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
     foreach ($name in @('FlightSettingsMaxPauseDays', 'PauseFeatureUpdatesStartTime', 'PauseFeatureUpdatesEndTime', 'PauseQualityUpdatesStartTime', 'PauseQualityUpdatesEndTime', 'PauseUpdatesStartTime', 'PauseUpdatesExpiryTime')) {
@@ -39,6 +34,15 @@ try {
         }
     }
     Set-SmbClientConfiguration -EnableInsecureGuestLogons $false -RequireSecuritySignature $true -Confirm:$false
+
+    Set-SetupState 'guest-agent'
+    # Fedora's MSI is unsigned; pin its exact bytes instead of accepting arbitrary MSIs.
+    if ((Get-FileHash -Algorithm SHA256 'C:\OEM\qemu-ga-x86_64.msi').Hash -ne '19dcf8abc30f70c2eb6e87282601fd0476e4e0b19936f63d9c80be30db0796ed') {
+        throw 'Guest-agent MSI SHA-256 mismatch.'
+    }
+    $agent = Start-Process msiexec.exe -ArgumentList '/i C:\OEM\qemu-ga-x86_64.msi /qn /norestart /l*v C:\VMSetup\guest-agent.log' -Wait -PassThru
+    if ($agent.ExitCode -notin @(0, 3010)) { throw "Guest-agent install failed: $($agent.ExitCode)" }
+    Start-Service QEMU-GA
 
     Set-SetupState 'office-download'
     Get-CheckedDownload 'https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20430-20146.exe' "$work\odt.exe" 'af1594121ab610cd8abc3dd6ff0a504e0cbc6ce54372e5c3813926352d1179c6'
