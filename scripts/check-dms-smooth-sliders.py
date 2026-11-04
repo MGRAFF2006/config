@@ -20,10 +20,19 @@ def isolated_ui_source(module, source, destination):
     manifest = destination / "smooth-sliders.json"
     if manifest.exists():
         recorded = json.loads(manifest.read_text())
-        assert recorded["patch_sha256"] == module.digest(module.PATCH)
-        assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
-        (destination / module.SLIDER).chmod(0o644)
-        subprocess.run(["patch", "--reverse", "--batch", "-p1", "-d", str(destination), "-i", str(module.PATCH)], check=True, capture_output=True, text=True)
+        if "files_sha256" in recorded:
+            assert recorded["patch_sha256"] == module.patch_digest()
+            assert module.stage_intact(destination, recorded)
+            patches = module.PATCHES
+        else:
+            # Existing slider-only stages can be used as isolated test input.
+            assert recorded["patch_sha256"] == module.digest(module.PATCH)
+            assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
+            patches = (module.PATCH,)
+        for path in module.SUPPORTED_FILES:
+            (destination / path).chmod(0o644)
+        for patch_file in reversed(patches):
+            subprocess.run(["patch", "--reverse", "--batch", "-p1", "-d", str(destination), "-i", str(patch_file)], check=True, capture_output=True, text=True)
         manifest.unlink()
         assert module.tree_digest(destination) == recorded["source_sha256"]
     return destination
@@ -44,11 +53,12 @@ def main():
         root = Path(directory)
         output, target = root / "output", root / "staged"
         output.mkdir()
-        (target / module.SLIDER.parent).mkdir(parents=True)
-        (target / module.SLIDER).write_text("reviewed slider")
+        for path in module.SUPPORTED_FILES:
+            (target / path.parent).mkdir(parents=True, exist_ok=True)
+            (target / path).write_text("reviewed UI file")
         binary = root / "dms"
         binary.write_text("reviewed binary")
-        manifest = {"version": "v2.0.0", "slider_sha256": module.digest(target / module.SLIDER), "dms_binary_sha256": module.digest(binary)}
+        manifest = {"version": "v2.0.0", "patch_sha256": module.patch_digest(), "files_sha256": module.patched_files(target), "dms_binary_sha256": module.digest(binary)}
         (target / "smooth-sliders.json").write_text(json.dumps(manifest))
 
         def launched(expected):
@@ -68,11 +78,19 @@ def main():
         launched(["dms", "run", "-d"])
         (output / "active.json").write_text(json.dumps({"target": str(target)}))
         launched(["dms", "-c", str(target), "run", "-d"])
+        (target / "smooth-sliders.json").write_text(json.dumps({**manifest, "patch_sha256": "outdated-patches"}))
+        launched(["dms", "run", "-d"])
+        (target / "smooth-sliders.json").write_text(json.dumps(manifest))
         binary.write_text("updated binary, same version")
         launched(["dms", "run", "-d"])
         binary.write_text("reviewed binary")
-        (target / module.SLIDER).write_text("modified override")
-        launched(["dms", "run", "-d"])
+        for path in module.SUPPORTED_FILES:
+            (target / path).write_text("modified override")
+            launched(["dms", "run", "-d"])
+            (target / path).write_text("reviewed UI file")
+            (target / path).unlink()
+            launched(["dms", "run", "-d"])
+            (target / path).write_text("reviewed UI file")
         (output / "active.json").write_text("{corrupt")
         launched(["dms", "run", "-d"])
         unsupported = root / "unsupported"

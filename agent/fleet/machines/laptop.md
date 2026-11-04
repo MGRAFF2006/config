@@ -1,5 +1,17 @@
 # Laptop
 
+## Quick-access detail pages — verified 2026-11-04
+
+The guarded DMS 2.0 UI override replaces the control-center tile grid with
+full-panel detail pages instead of centering a second card over a dimmed panel.
+Details fit their content within the display bounds; Back returns to the grid.
+All built-in detail sections, keyboard Back/Escape and a smaller display were
+exercised in a private nested Hyprland session. Audio used its unavailable-device
+state there because that runtime has no PipeWire. Existing slider smoothing
+remains active. Reapply through `scripts/configure-dms-smooth-sliders.py --apply`;
+all patched source and staged files are fingerprinted before use. See
+[the override guide](../../../docs/dms-smooth-sliders.md).
+
 ## Desktop startup dependency — verified 2026-11-04
 
 Private SSH now starts through `sshd-tailscale.timer`, retaining its existing
