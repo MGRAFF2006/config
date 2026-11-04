@@ -54,7 +54,7 @@
      }
  
      NumberAnimation {
-@@ -193,49 +182,8 @@
+@@ -193,60 +182,21 @@
          onFinished: root.finishClose()
      }
  
@@ -105,7 +105,12 @@
  
          MouseArea {
              anchors.fill: parent
-@@ -246,7 +194,7 @@
++            hoverEnabled: true
+             acceptedButtons: Qt.AllButtons
++            onWheel: wheel => wheel.accepted = true
+         }
+ 
+         Item {
              id: panel
  
              anchors.fill: parent
@@ -114,7 +119,7 @@
              opacity: CcMetrics.hideCoveredContent ? 1 - root.coverage : 1
  
              Item {
-@@ -271,7 +219,7 @@
+@@ -271,7 +221,7 @@
  
                  Item {
                      id: headerSlot
@@ -123,7 +128,7 @@
                      anchors.rightMargin: Theme.spacingS
                      anchors.verticalCenter: parent.verticalCenter
                      width: childrenRect.width
-@@ -279,15 +227,15 @@
+@@ -279,15 +229,15 @@
                  }
  
                  DActionButton {
