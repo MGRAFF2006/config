@@ -39,3 +39,5 @@ hl.bind("SUPER + SHIFT + period", hl.dsp.window.move({ monitor = "+1" }), {
 hl.bind("SUPER + CTRL + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrToggle"), {
 	description = "DMS settings",
 })
+
+hl.bind("SUPER + S", hl.dsp.workspace.toggle_special(""), { description = "Toggle scratchpad" })
