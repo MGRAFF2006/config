@@ -24,7 +24,11 @@ services:
     ports:
       - "127.0.0.1:8006:8006"
     volumes:
-      - /srv/development/windows-vm:/storage
+      - type: bind
+        source: /srv/development/windows-vm
+        target: /storage
+        bind:
+          create_host_path: false
     restart: unless-stopped
     stop_grace_period: 2m
     mem_limit: 8g
