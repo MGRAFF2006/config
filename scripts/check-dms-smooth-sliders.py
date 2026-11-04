@@ -41,6 +41,7 @@ def isolated_ui_source(module, source, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ui", action="store_true")
+    parser.add_argument("--source-dir", type=Path, help="Pristine UI input when checking a changed patch set")
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location("smooth_sliders", Path(__file__).with_name("configure-dms-smooth-sliders.py"))
     module = importlib.util.module_from_spec(spec)
@@ -107,7 +108,7 @@ def main():
 
         if args.ui:
             runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
-            source = Path((runtime / "dms.path").read_text().strip())
+            source = args.source_dir or Path((runtime / "dms.path").read_text().strip())
             input_hash = module.tree_digest(source)
             pristine = isolated_ui_source(module, source, root / "pristine")
             staged = module.stage(pristine, root / "ui-staged")
@@ -143,7 +144,7 @@ def main():
             assert result.returncode == 0 and "SMOOTH_SLIDER_PASS" in logs, logs
             assert module.tree_digest(source) == input_hash, "UI check changed its input source/stage"
             print(next(line for line in logs.splitlines() if "SMOOTH_SLIDER_PASS" in line))
-            print("PASS: actual DSlider intermediate/settled progress, rapid retarget, immediate values/commits, drag and reduced-motion bypass, reapply from staged source")
+            print("PASS: actual DSlider intermediate/settled progress, rapid retarget, held-key progress/settling, immediate values/commits, drag and reduced-motion bypass, reapply from staged source")
 
 
 if __name__ == "__main__":

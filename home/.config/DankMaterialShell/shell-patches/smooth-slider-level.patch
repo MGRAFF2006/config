@@ -1,18 +1,19 @@
 --- a/DCommon/Widgets/DSlider.qml
 +++ b/DCommon/Widgets/DSlider.qml
-@@ -139,7 +139,18 @@
+@@ -139,7 +139,19 @@
      }
      readonly property real outsideCorner: Style.scaledRadius(trackCornerRadius, trackHeight / 2)
      readonly property real insideCorner: Style.scaledRadius(Style.sliderTrackInsideCornerRadius, trackHeight / 2)
 -    readonly property real visualRatio: mirrored ? 1 - ratio : ratio
-+    // Animate the visual level only; value and user commits stay immediate.
++    // Preserve velocity across held-key repeats; model values stay immediate.
 +    property real displayedRatio: ratio
 +
 +    Behavior on displayedRatio {
 +        enabled: !slider.isDragging && !Style.reduceMotion && Style.currentAnimationSpeed !== Style.AnimationSpeed.None
-+        NumberAnimation {
-+            duration: 110
-+            easing.type: Easing.OutCubic
++        SmoothedAnimation {
++            duration: 120
++            velocity: -1
++            reversingMode: SmoothedAnimation.Immediate
 +        }
 +    }
 +
