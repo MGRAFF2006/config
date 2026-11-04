@@ -6,9 +6,27 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from unittest.mock import patch
+
+
+def isolated_ui_source(module, source, destination):
+    """Recover pristine input in temporary storage, never in the active stage."""
+    shutil.copytree(source, destination)
+    for directory in [destination, *(path for path in destination.rglob("*") if path.is_dir())]:
+        directory.chmod(directory.stat().st_mode | 0o700)
+    manifest = destination / "smooth-sliders.json"
+    if manifest.exists():
+        recorded = json.loads(manifest.read_text())
+        assert recorded["patch_sha256"] == module.digest(module.PATCH)
+        assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
+        (destination / module.SLIDER).chmod(0o644)
+        subprocess.run(["patch", "--reverse", "--batch", "-p1", "-d", str(destination), "-i", str(module.PATCH)], check=True, capture_output=True, text=True)
+        manifest.unlink()
+        assert module.tree_digest(destination) == recorded["source_sha256"]
+    return destination
 
 
 def main():
@@ -72,18 +90,26 @@ def main():
         if args.ui:
             runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
             source = Path((runtime / "dms.path").read_text().strip())
-            staged = module.stage(source, root / "ui-staged")
+            input_hash = module.tree_digest(source)
+            pristine = isolated_ui_source(module, source, root / "pristine")
+            staged = module.stage(pristine, root / "ui-staged")
             assert module.stage(staged, root / "ui-staged") == staged
             manifest_path = staged / "smooth-sliders.json"
             recorded = json.loads(manifest_path.read_text())
             recorded["dms_binary_sha256"] = "old-binary-build"
             manifest_path.write_text(json.dumps(recorded))
-            assert module.stage(source, root / "ui-staged") == staged
+            assert module.stage(pristine, root / "ui-staged") == staged
             assert json.loads(manifest_path.read_text())["dms_binary_sha256"] == module.digest(Path(module.shutil.which("dms")))
             recorded = json.loads(manifest_path.read_text())
             recorded["source"] = str(root / "extraction-cleared-on-reboot")
             manifest_path.write_text(json.dumps(recorded))
             assert module.stage(staged, root / "ui-staged") == staged
+            # Reproduce a reboot-cleared extraction using a temporary stage.
+            # Recovery and re-staging must leave that input untouched as well.
+            reboot_hash = module.tree_digest(staged)
+            recovered = isolated_ui_source(module, staged, root / "recovered")
+            module.stage(recovered, root / "recovered-staged")
+            assert module.tree_digest(staged) == reboot_hash
             fixture = root / "fixture"
             fixture.mkdir()
             for name in ("DCommon", "Common", "Services", "Widgets", "Modules", "assets"):
@@ -97,6 +123,7 @@ def main():
             result = subprocess.run(["qs", "-p", str(fixture)], env=env, capture_output=True, text=True, timeout=20)
             logs = result.stdout + result.stderr
             assert result.returncode == 0 and "SMOOTH_SLIDER_PASS" in logs, logs
+            assert module.tree_digest(source) == input_hash, "UI check changed its input source/stage"
             print(next(line for line in logs.splitlines() if "SMOOTH_SLIDER_PASS" in line))
             print("PASS: actual DSlider intermediate/settled progress, rapid retarget, immediate values/commits, drag and reduced-motion bypass, reapply from staged source")
 
