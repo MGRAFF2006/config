@@ -4,6 +4,7 @@ services:
     container_name: windows-vm
     environment:
       VERSION: "11"
+      TZ: "Europe/Berlin"
       RAM_SIZE: "6G"
       # The upstream check counts reclaimable ISO cache as unavailable RAM.
       RAM_CHECK: "N"

@@ -19,6 +19,7 @@ The VM uses nested KVM, four CPU cores and a 96 GiB growable disk on
 RAM is fixed at 6 GiB with an 8 GiB container limit. The upstream RAM heuristic
 is disabled because it counts reclaimable ISO page cache as unavailable RAM.
 The container is limited to four CPU cores.
+The container clock uses Europe/Berlin to match Windows' local-time hardware clock.
 There is no GPU acceleration. Audio and shared host folders are disabled.
 Only the web console is published, on loopback port 8006; RDP and VNC ports
 are not published. Tailscale Serve supplies HTTPS on `/windows/`.
