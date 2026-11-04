@@ -1,5 +1,13 @@
 # Fast, subtle slider motion
 
+The same guarded UI override also includes inline quick-access detail pages.
+Opening network, Bluetooth, audio or other control-center details replaces the
+tile grid on the existing panel surface. The panel fits its content within the
+display bounds, with a Back button and the existing Escape/outside-dismiss
+behavior. There is no centered second card, extra dimming layer or zoom effect.
+Back returns to the tile grid. Device actions and nested device selectors retain
+their existing behavior.
+
 DMS 2.0's shared slider normally places its handle directly at each integer
 volume or brightness value. Panel-opening motion does not interpolate that
 progress. The `smooth-slider-level.patch` adds a 110 ms OutCubic transition to
@@ -17,8 +25,9 @@ python3 scripts/check-dms-smooth-sliders.py --ui
 
 The helper reads the running shell's `dms.path` and copies its current extracted
 UI into `~/.local/share/dms-ui-overrides`. It checks the exact reviewed DMS
-version and slider hash before applying the patch. The manifest records the
-whole source tree's hash, patch hash, patched slider hash, binary hash and
+version and the exact slider/control-center source hashes before applying both
+patches. The manifest records the whole source tree's hash, combined patch hash,
+all three patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
 extracted built-in files are changed.
@@ -31,7 +40,7 @@ python3 scripts/configure-dms-smooth-sliders.py --launch
 ```
 
 This launches the staged UI only when its DMS version and binary still match
-and its patched slider is intact. After a package update, missing stage or
+and all patched files and the patch set are intact. After a package update, missing stage or
 invalid manifest, it reports the reason and launches the built-in UI. Review
 the new source and rerun setup before using the patch again. It never silently
 keeps a previous DMS UI active after an update. Starting the launch command does

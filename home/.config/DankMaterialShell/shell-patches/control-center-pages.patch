@@ -1,0 +1,173 @@
+--- a/Modules/ControlCenter/Components/CcDetailPage.qml
++++ b/Modules/ControlCenter/Components/CcDetailPage.qml
+@@ -18,8 +18,6 @@
+     property string screenName: ""
+     property string screenModel: ""
+     property var transientSurfaceTracker: null
+-    property real topInset: 0
+-    property vector4d cornerRadii: Qt.vector4d(Theme.windowRadius, Theme.windowRadius, Theme.windowRadius, Theme.windowRadius)
+     property real coverage: 0
+     property var runningToplevels: []
+ 
+@@ -37,8 +35,7 @@
+     readonly property var pageItem: pageLoader.item
+     readonly property real pageHeight: (pageItem?.implicitHeight ?? 0) > 0 ? pageItem.implicitHeight : CcMetrics.preferredDetailHeight(shownSection, pageItem?.preferredHeight ?? 0)
+     readonly property real contentHeight: pageHeight
+-    readonly property real chromeHeight: header.height + CcMetrics.detailDialogPadding * 2
+-    readonly property real maximumHeight: height - topInset - CcMetrics.detailDialogInset
++    readonly property real chromeHeight: header.height + CcMetrics.sheetPadding * 2
+     // plugin detail content may not scroll itself, so the panel grows to fit it
+     readonly property bool pageScrollsItself: !shownSection.startsWith("plugin_")
+     readonly property real minimumHeight: chromeHeight + (pageScrollsItself ? Math.min(contentHeight, CcMetrics.detailMinContentHeight) : pageHeight)
+@@ -75,8 +72,8 @@
+     function moveFocus(backwards) {
+         const current = root.Window.window?.activeFocusItem ?? root;
+         const next = current.nextItemInFocusChain(!backwards);
+-        const target = root.containsItem(next) ? next : backwards ? closeButton : root.nextItemInFocusChain(true);
+-        (root.containsItem(target) ? target : closeButton).forceActiveFocus(backwards ? Qt.BacktabFocusReason : Qt.TabFocusReason);
++        const target = root.containsItem(next) ? next : backwards ? backButton : root.nextItemInFocusChain(true);
++        (root.containsItem(target) ? target : backButton).forceActiveFocus(backwards ? Qt.BacktabFocusReason : Qt.TabFocusReason);
+     }
+ 
+     Shortcut {
+@@ -145,7 +142,6 @@
+         const opening = shownSection === "";
+         enterPending = opening && animationsEnabled;
+         root.opacity = enterPending ? 0 : 1;
+-        dialogSurface.entryScale = enterPending ? CcMetrics.popupEnterScale : 1;
+         shownSection = section;
+         pageLoader.sourceComponent = _componentFor(section);
+         (pageItem ?? root).forceActiveFocus();
+@@ -172,14 +168,7 @@
+             easing.type: Easing.BezierSpline
+             easing.bezierCurve: Theme.expressiveCurves.expressiveEffects
+         }
+-        NumberAnimation {
+-            target: dialogSurface
+-            property: "entryScale"
+-            to: 1
+-            duration: Theme.expressiveDurations.expressiveDefaultSpatial
+-            easing.type: Easing.BezierSpline
+-            easing.bezierCurve: Theme.expressiveCurves.expressiveDefaultSpatial
+-        }
++
+     }
+ 
+     NumberAnimation {
+@@ -193,49 +182,8 @@
+         onFinished: root.finishClose()
+     }
+ 
+-    Rectangle {
++    Item {
+         anchors.fill: parent
+-        topLeftRadius: root.cornerRadii.x
+-        topRightRadius: root.cornerRadii.y
+-        bottomRightRadius: root.cornerRadii.z
+-        bottomLeftRadius: root.cornerRadii.w
+-        color: Theme.scrimColor
+-        opacity: Theme.scrimAlpha
+-    }
+-
+-    MouseArea {
+-        anchors.fill: parent
+-        hoverEnabled: true
+-        acceptedButtons: Qt.AllButtons
+-        onClicked: {
+-            if (root.section !== "")
+-                root.backRequested();
+-        }
+-        onWheel: wheel => wheel.accepted = true
+-    }
+-
+-    Rectangle {
+-        id: dialogSurface
+-
+-        x: CcMetrics.detailDialogInset
+-        y: root.topInset + Math.max(0, (root.maximumHeight - height) / 2)
+-        width: Math.max(0, root.width - CcMetrics.detailDialogInset * 2)
+-        height: Math.max(0, Math.min(root.chromeHeight + root.contentHeight, root.maximumHeight))
+-        radius: Theme.cornerRadiusXL
+-
+-        Behavior on height {
+-            enabled: root.animationsEnabled && !root.transitioning && root.section !== ""
+-            NumberAnimation {
+-                duration: Theme.expressiveDurations.expressiveFastSpatial
+-                easing.type: Easing.BezierSpline
+-                easing.bezierCurve: Theme.expressiveCurves.standard
+-            }
+-        }
+-        color: CcMetrics.dialogColor
+-        border.width: Theme.layerOutlineWidth
+-        border.color: Theme.outlineMedium
+-        property real entryScale: 1
+-        scale: Math.min(1, entryScale)
+ 
+         MouseArea {
+             anchors.fill: parent
+@@ -246,7 +194,7 @@
+             id: panel
+ 
+             anchors.fill: parent
+-            anchors.margins: CcMetrics.detailDialogPadding
++            anchors.margins: CcMetrics.sheetPadding
+             opacity: CcMetrics.hideCoveredContent ? 1 - root.coverage : 1
+ 
+             Item {
+@@ -271,7 +219,7 @@
+ 
+                 Item {
+                     id: headerSlot
+-                    anchors.right: closeButton.left
++                    anchors.right: backButton.left
+                     anchors.rightMargin: Theme.spacingS
+                     anchors.verticalCenter: parent.verticalCenter
+                     width: childrenRect.width
+@@ -279,15 +227,15 @@
+                 }
+ 
+                 DActionButton {
+-                    id: closeButton
++                    id: backButton
+                     anchors.right: parent.right
+                     anchors.rightMargin: CcMetrics.headerEdgeInset
+                     anchors.verticalCenter: parent.verticalCenter
+                     buttonSize: CcMetrics.headerActionSize
+-                    iconName: "close"
++                    iconName: "arrow_back"
+                     iconSize: CcMetrics.headerActionIconSize
+                     iconColor: Theme.surfaceText
+-                    Accessible.name: I18n.tr("Close")
++                    Accessible.name: I18n.tr("Back")
+                     onClicked: root.backRequested()
+                 }
+             }
+--- a/Modules/ControlCenter/ControlCenterContent.qml
++++ b/Modules/ControlCenter/ControlCenterContent.qml
+@@ -51,7 +51,7 @@
+         const total = CcMetrics.sheetPadding * 2 + heldGridHeight;
+         if (detailPage.shownSection === "")
+             return total;
+-        return Math.max(total, detailPage.topInset + detailPage.minimumHeight + CcMetrics.detailDialogInset);
++        return detailPage.chromeHeight + detailPage.contentHeight;
+     }
+     property Item detailReturnFocus: null
+     property var pageHistory: []
+@@ -440,7 +440,7 @@
+ 
+                 width: parent.width
+                 height: Math.max(root.gridHeight, root.heldGridHeight)
+-                opacity: CcMetrics.hideCoveredContent ? 1 - root.coveredAmount : 1
++                opacity: 1 - root.coveredAmount
+ 
+                 CcTileGrid {
+                     id: widgetGrid
+@@ -520,8 +520,6 @@
+         z: 1
+         anchors.fill: parent
+         section: root.host.expandedSection ?? ""
+-        topInset: CcMetrics.sheetPadding
+-        cornerRadii: root.surfaceCornerRadii
+         coverage: Math.max(codecSelectorLoader.item?.presence ?? 0, portSelectorLoader.item?.presence ?? 0)
+         model: widgetModel
+         screenName: root.host.triggerScreen?.name || ""
