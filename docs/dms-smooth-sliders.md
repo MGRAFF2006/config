@@ -10,9 +10,10 @@ their existing behavior.
 
 DMS 2.0's shared slider normally places its handle directly at each integer
 volume or brightness value. Panel-opening motion does not interpolate that
-progress. The `smooth-slider-level.patch` adds a 110 ms OutCubic transition to
-a separate visual ratio. The real value, adjustment signal and hardware update
-remain immediate. Pointer dragging, reduced motion and disabled animations
+progress. The `smooth-slider-level.patch` uses Qt’s velocity-preserving
+`SmoothedAnimation` on a separate visual ratio, with a 120 ms tracking duration.
+Held-key repeats retarget the running movement without restarting the easing on
+every step. The real value, adjustment signal and hardware update remain immediate. Pointer dragging, reduced motion and disabled animations
 bypass the transition.
 
 Stage the reviewed change without changing any running shell:
@@ -49,7 +50,7 @@ not stop an already running shell; activation requires a separate shell reload.
 The `--ui` check uses the real patched slider with a software-rendered offscreen
 Qt window, isolated runtime and no display, desktop input or hardware service.
 It checks an intermediate level, final settling, bounded rapid retargeting,
-unchanged immediate model values, no spurious user commits, and immediate drag
+a held-key sequence with rendered progress between repeats, immediate model values, no spurious user commits, and immediate drag
 and reduced-motion updates. It also checks repeat staging. No audio or real
 brightness/volume change is involved.
 

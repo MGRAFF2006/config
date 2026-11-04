@@ -8,6 +8,9 @@ ShellRoot {
     property int commits: 0
     property int phase: 0
     property var samples: []
+    property int repeats: 0
+    property int movingFrames: 0
+    property real previousRatio: 0.2
 
     QtObject { id: preferences; property bool reduceMotion: false }
     Component.onCompleted: Style.settings = preferences
@@ -33,6 +36,30 @@ ShellRoot {
             return false;
         }
         return true;
+    }
+
+    Timer {
+        id: heldKey
+        interval: 40
+        repeat: true
+        onTriggered: {
+            root.repeats++;
+            slider.value = 20 + root.repeats * 5;
+            if (!root.check(slider.value === 20 + root.repeats * 5 && root.commits === 1, "held key updates model without hardware feedback")) return;
+            if (root.repeats === 12)
+                stop();
+        }
+    }
+
+    FrameAnimation {
+        running: heldKey.running
+        onTriggered: {
+            const current = slider.displayedRatio;
+            if (!root.check(current >= root.previousRatio - 0.001 && current <= slider.ratio + 0.001, "held key stays monotonic and bounded")) return;
+            if (current > root.previousRatio + 0.0001)
+                root.movingFrames++;
+            root.previousRatio = current;
+        }
     }
 
     Timer {
@@ -78,6 +105,13 @@ ShellRoot {
                 if (!root.check(Math.abs(slider.displayedRatio - 0.4) < 0.001, "reduced motion snaps")) return;
                 slider.commit(60);
                 if (!root.check(root.commits === 1 && slider.value === 60, "user commit stays immediate")) return;
+                slider.value = 20;
+                preferences.reduceMotion = false;
+                heldKey.start();
+                interval = 900;
+                break;
+            case 6:
+                if (!root.check(root.repeats === 12 && root.movingFrames > root.repeats && Math.abs(slider.displayedRatio - 0.8) < 0.001, "held sequence renders between repeats and settles after release")) return;
                 console.warn("SMOOTH_SLIDER_PASS", JSON.stringify(root.samples));
                 Qt.quit();
             }
