@@ -1,5 +1,21 @@
 # Laptop
 
+## Desktop startup dependency — verified 2026-11-04
+
+Private SSH now starts through `sshd-tailscale.timer`, retaining its existing
+Tailscale-online ordering and loopback/Tailscale listeners. Its direct
+`multi-user.target` enablement was removed with
+`scripts/install-ssh-startup.sh`; neither SSH nor the desktop was restarted.
+Previously, the Tailscale wait held `multi-user.target` for 65 seconds and
+prevented DMS's power-profile service from starting during shell loading.
+The Quickshell log recorded a 26-second configuration load.
+
+The live dependency graph no longer puts SSH below `multi-user.target`;
+a controlled systemd check confirmed the timer lets the desktop target proceed
+while the SSH readiness wait runs. Fresh agent SSH and unchanged listener/PID
+checks passed. Power settings were not changed. A fresh boot/login has not been
+measured. See [the migration and rollback](../../../docs/hyprland-dms.md#slow-desktop-after-login-while-offline).
+
 ## Personal-file sync — verified 2026-10-25
 
 Syncthing now carries personal Documents, Downloads, Pictures, Music, Videos
