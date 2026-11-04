@@ -2,6 +2,7 @@
 -- dms-greeter -C appends the greeter start hook; do not launch qs here.
 
 hl.env("DMS_RUN_GREETER", "1")
+dofile("/etc/greetd/dms-appearance.lua")
 hl.config({
 	misc = {
 		disable_hyprland_logo = true,

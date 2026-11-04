@@ -1,8 +1,11 @@
 [Unit]
-Description=Restore DMS greeter settings permissions
-ConditionPathExists=%h/.config/DankMaterialShell/settings.json
+Description=Keep the DMS greeter theme linked and readable
+ConditionPathExists=/usr/bin/dms-greeter
+ConditionPathExists=%h/.config/dms/settings.json
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/chgrp greeter %h/.config/DankMaterialShell/settings.json
-ExecStart=/usr/bin/chmod g+r %h/.config/DankMaterialShell/settings.json
+ExecStart=/usr/bin/dms-greeter sync --profile --yes
+
+[Install]
+WantedBy=default.target

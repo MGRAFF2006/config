@@ -1,8 +1,10 @@
 [Unit]
-Description=Watch DMS settings used by the greeter
+Description=Watch DMS theme inputs used by the greeter
 
 [Path]
-PathChanged=%h/.config/DankMaterialShell/settings.json
+PathChanged=%h/.config/dms/settings.json
+PathChanged=%h/.local/state/dms/session.json
+PathChanged=%h/.cache/dms/dms-colors.json
 Unit=dms-greeter-settings-permissions.service
 
 [Install]
