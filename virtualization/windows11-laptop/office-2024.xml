@@ -1,0 +1,12 @@
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="PerpetualVL2024">
+    <Product ID="ProPlus2024Volume">
+      <Language ID="en-gb" />
+      <Language ID="de-de" />
+      <ExcludeApp ID="Lync" />
+      <ExcludeApp ID="OneDrive" />
+    </Product>
+  </Add>
+  <Updates Enabled="TRUE" Channel="PerpetualVL2024" />
+  <Display Level="None" AcceptEULA="TRUE" />
+</Configuration>
