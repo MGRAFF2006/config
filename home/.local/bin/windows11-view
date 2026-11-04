@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Start the local Windows VM and open its Looking Glass window."""
+
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+
+import libvirt
+
+
+def main():
+    home = Path.home()
+    binary = home / ".local/lib/looking-glass/B7-829-cdba29f2/looking-glass-client"
+    config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "looking-glass/windows11.ini"
+    if not binary.is_file():
+        raise RuntimeError("Looking Glass is not installed. See the Windows VM setup notes in Documents/config/virtualization/windows11-laptop.")
+
+    connection = libvirt.open("qemu:///system")
+    try:
+        domain = connection.lookupByName("windows11")
+        if not domain.isActive():
+            try:
+                domain.create()
+            except libvirt.libvirtError:
+                if not domain.isActive():
+                    raise
+        devices = ET.fromstring(domain.XMLDesc(0)).find("devices")
+        if devices.find("shmem[@name='looking-glass-windows11']") is None:
+            raise RuntimeError("The running Windows VM needs the Looking Glass shared-memory configuration. Finish setup and restart the VM.")
+    finally:
+        connection.close()
+
+    os.execv(binary, [str(binary), "-C", str(config), *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, RuntimeError, libvirt.libvirtError) as error:
+        message = str(error)
+        print(message, file=sys.stderr)
+        if shutil.which("notify-send"):
+            subprocess.run(["notify-send", "Windows 11", message], check=False)
+        sys.exit(1)

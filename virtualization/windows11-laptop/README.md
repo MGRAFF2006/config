@@ -1,8 +1,13 @@
 # Windows 11 on the laptop
 
 Local libvirt VM `windows11`, managed by **Virtual Machine Manager** under
-**QEMU/KVM** (`qemu:///system`). Open the VM and select its console; press the
-play button when it is stopped. Direct console command:
+**QEMU/KVM** (`qemu:///system`). Open **Windows 11** in the Linux app launcher
+for its standalone Looking Glass window, or run `windows11-view`. It starts
+the VM when necessary; closing the viewer leaves Windows running. Use one
+viewer at a time and close the Virtual Machine Manager console first. Tap
+**Right Ctrl** to toggle input capture; hold it for Looking Glass's menu.
+
+Virtual Machine Manager remains available for VM management and recovery:
 
 ```bash
 virt-manager --connect qemu:///system --show-domain-console windows11
@@ -18,7 +23,8 @@ virt-manager --connect qemu:///system --show-domain-console windows11
 - SATA storage and Intel e1000e networking use Windows' built-in drivers.
 - `passt` provides outbound networking without a bridge, DHCP service, firewall
   exceptions or published inbound ports.
-- SPICE console through libvirt, QXL display, USB tablet and ICH9 sound.
+- Looking Glass software display, QXL recovery display, USB tablet and ICH9 sound.
+- Local SPICE socket for audio and fallback input/clipboard, also accessible through libvirt.
 - VM autostart is disabled; starting the laptop does not consume VM memory.
 - English interface, German keyboard and regional formats, Berlin time zone.
 - Local administrator account `Mathis`, with its password supplied privately.
@@ -93,6 +99,89 @@ performed. Preserve current VM state before deliberately restoring this older
 checkpoint. Checkpoint files and activation logs stay machine-local, outside Git.
 
 ## Host setup and recovery
+
+### Looking Glass — verified 2026-11-04
+
+The matching development client and signed Windows IDD package are
+`B7-829-cdba29f2`, full source revision
+`cdba29f2f6bcae3ded26369fc231a067cbca3752`. This IDD supports software SDR
+rendering without GPU passthrough. The laptop's Radeon remains bound to
+`amdgpu`; the domain has no PCI host device assignments. This is a development
+build, and software rendering is not a substitute for a gaming GPU.
+
+Official artifacts and observed SHA-256 values:
+
+- [Source archive](https://looking-glass.io/artifact/B7-829-cdba29f2/source):
+  `60d7067b4fa7f42d57fc31b6e85a48baa88652f57d65fa54de98d2070ff478ce`.
+- [Windows IDD archive](https://looking-glass.io/artifact/B7-829-cdba29f2/idd):
+  `bf91dbe3b69d369f8180247881739144308c2c0f6c85785ab8220d8a8e4b2665`.
+- Extracted `looking-glass-idd-setup.exe`:
+  `1dd363a58ace6fd5e824d1a6c36744a58bbf181b739b3d75df669002cb1c68b5`.
+
+Build the source's `client` directory with CMake and install the resulting
+`looking-glass-client` to
+`~/.local/lib/looking-glass/B7-829-cdba29f2/looking-glass-client`.
+The cache at `~/.cache/windows11-vm/looking-glass/` retains source and build.
+Client/config/desktop entry use the existing setup flow:
+
+```bash
+bash scripts/link-home.sh laptop --components virtualization
+```
+
+Install [looking-glass.tmpfiles.conf](looking-glass.tmpfiles.conf) as
+`/etc/tmpfiles.d/windows11-looking-glass.conf`, then run
+`systemd-tmpfiles --create /etc/tmpfiles.d/windows11-looking-glass.conf` as root.
+This creates a private 64 MiB shared-memory file and socket directory. The
+active and persistent VM definitions contain:
+
+```xml
+<shmem name='looking-glass-windows11'>
+  <model type='ivshmem-plain'/>
+  <size unit='M'>64</size>
+</shmem>
+```
+
+The SPICE graphics listener is
+`<listen type='socket' socket='/run/windows11-looking-glass/spice.sock'/>`.
+Its parent directory's default ACL grants the desktop user access to the
+QEMU-created socket. No network SPICE port or KVMFR kernel module was added.
+Changing these VM devices requires a complete guest shutdown/start.
+
+The Windows installer and LG display/input catalogs had valid **HostFission**
+signatures; IVSHMEM's catalog had a valid Microsoft hardware publisher signature.
+Windows initially rejected the driver publisher with `0xE0000242`. After checking
+those signatures, the HostFission leaf certificate with thumbprint
+`57476AACDE410C05A63E9FEC8B97938605B9D8F5` was added to LocalMachine's
+**TrustedPublisher** store, then the installer completed with `/S /ivshmem`.
+No root certificate was added, and signature enforcement was not disabled.
+Run [looking-glass-settings.ps1](looking-glass-settings.ps1) elevated afterward.
+It preserves the driver's registry ACL, selects 60 Hz, suppresses the expected
+no-GPU warning and makes Looking Glass the sole active display.
+
+Display, mouse clicks, keyboard typing and guest resizing to 1280 × 800 and
+1100 × 700 passed in the isolated agent desktop. Windows logged
+`Software render adapter` and all four Looking Glass/IVSHMEM devices were OK.
+Input and clipboard selected LGMP; clipboard transfers and sound playback were
+not tested. Two connected clients competed for input, so verify with only one
+viewer. The initial monitor transition needed the Windows helper service
+restarted after its registry ACL was repaired, followed by Windows
+`DisplaySwitch.exe /extend`; the helper then selected Looking Glass alone.
+
+If app windows appear on the old console instead, check the Looking Glass tray
+helper's **Make LG the only monitor** setting. Its user log is under
+`%LOCALAPPDATA%\Looking Glass (IDD)`. Driver/service logs are under
+`C:\ProgramData\Looking Glass (IDD)`. QXL remains configured for recovery;
+the helper's recovery mode can restore it. The original domain definition is
+machine-local at `~/.local/state/windows11-vm/pre-looking-glass-domain.xml`.
+Restore that definition only after shutting down Windows and preserving its
+current definition. It removes the added shared-memory device and restores
+the original libvirt-only SPICE listener; it does not revert guest disk data.
+
+References: [requirements](https://looking-glass.io/docs/B7-829-cdba29f2/requirements/),
+[signed IDD installation](https://looking-glass.io/docs/B7-829-cdba29f2/install_idd/),
+[libvirt setup](https://looking-glass.io/docs/B7-829-cdba29f2/install_libvirt/).
+
+### Libvirt
 
 The existing config setup flow's virtualization service actions were applied:
 `libvirtd.service` is enabled, and `humunkulud` belongs to `libvirt`. The packaged

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Windows 11
+Comment=Open Windows in a Looking Glass window
+Exec=windows11-view
+Icon=computer
+Terminal=false
+Categories=System;Emulator;
+StartupNotify=true
+StartupWMClass=windows11-looking-glass
