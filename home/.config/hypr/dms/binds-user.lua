@@ -41,3 +41,6 @@ hl.bind("SUPER + CTRL + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrTo
 })
 
 hl.bind("SUPER + S", hl.dsp.workspace.toggle_special(""), { description = "Toggle scratchpad" })
+hl.bind("SUPER + ALT + S", hl.dsp.window.move({ workspace = "special", follow = false }), {
+	description = "Move window to scratchpad",
+})
