@@ -63,3 +63,6 @@ kwallet-pam
 adw-gtk-theme # setup:hyprland
 plasma-integration # setup:hyprland
 plasma5-integration # setup:hyprland
+
+# Guarded user-local DMS UI patches
+patch # setup:hyprland

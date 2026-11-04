@@ -24,7 +24,7 @@ hl.on("hyprland.start", function()
 	-- Secret Service + kwallet-pam socket (Plasma uses plasma-kwallet-pam.service)
 	hl.exec_cmd("systemctl --user start hypr-kwallet.service")
 	-- Dank Material Shell (bar, control center, notifications, lock, polkit, …)
-	hl.exec_cmd("dms run -d")
+	hl.exec_cmd("python3 ~/.config/hypr/dms/start-shell.py")
 end)
 
 hl.config({
