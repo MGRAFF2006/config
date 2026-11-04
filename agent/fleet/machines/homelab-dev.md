@@ -11,8 +11,8 @@ The console opens the automatically signed-in Windows session.
 
 Configuration and operating commands: [Windows VM](../../../headless/windows-vm/README.md).
 The 96 GiB growable Windows disk lives in `/srv/development/windows-vm` on
-the development data disk. Two CPU cores, 6 GiB configured RAM (Dockur may reduce
-this under memory pressure), 8 GiB container limit, no GPU or audio. Only the
+the development data disk. Four CPU cores, 6 GiB guest RAM,
+8 GiB container limit, no GPU or audio. Only the
 console's loopback port 8006 is published; no public or direct RDP/VNC endpoint.
 The first evaluation disk is preserved separately. Provisioning installs the
 private QEMU Guest Agent, restores normal UAC/update/SMB settings, and checks

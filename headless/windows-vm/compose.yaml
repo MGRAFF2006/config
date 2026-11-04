@@ -5,7 +5,9 @@ services:
     environment:
       VERSION: "11"
       RAM_SIZE: "6G"
-      CPU_CORES: "2"
+      # The upstream check counts reclaimable ISO cache as unavailable RAM.
+      RAM_CHECK: "N"
+      CPU_CORES: "4"
       DISK_SIZE: "96G"
       LANGUAGE: "en-US"
       REGION: "de-DE"
@@ -33,7 +35,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 2m
     mem_limit: 8g
-    cpus: 2
+    cpus: 4
     logging:
       driver: json-file
       options:

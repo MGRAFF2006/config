@@ -14,10 +14,11 @@ The local Windows account is `Mathis`; its generated password is saved in
 Bitwarden under **Homelab Windows VM**. Runtime `.env` stays only on the host
 with mode 0600 and is excluded from Git.
 
-The VM uses nested KVM, two CPU cores and a 96 GiB growable disk on
+The VM uses nested KVM, four CPU cores and a 96 GiB growable disk on
 `/srv/development/windows-vm`, outside the development host's SSD root.
-Configured RAM is 6 GiB, automatically reduced by Dockur when the host needs
-more memory. The container is limited to two CPU cores and 8 GiB RAM.
+RAM is fixed at 6 GiB with an 8 GiB container limit. The upstream RAM heuristic
+is disabled because it counts reclaimable ISO page cache as unavailable RAM.
+The container is limited to four CPU cores.
 There is no GPU acceleration. Audio and shared host folders are disabled.
 Only the web console is published, on loopback port 8006; RDP and VNC ports
 are not published. Tailscale Serve supplies HTTPS on `/windows/`.
