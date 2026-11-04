@@ -14,7 +14,7 @@ ShellRoot {
         id: window
         visible: true
         implicitWidth: 620
-        implicitHeight: 210
+        implicitHeight: 270
 
         Column {
             id: rows
@@ -34,6 +34,11 @@ ShellRoot {
             LauncherRow {
                 id: shortRow
                 item: ({ type: "app", name: "T3 Code Nightly", subtitle: "T3 Code nightly desktop build", iconType: "material", icon: "apps" })
+            }
+            LauncherRow {
+                id: markupRow
+                item: ({ type: "dmenu", name: "Large", subtitle: "", _hRich: true,
+                    _hName: '<span style="font-size:30px; color:red">Large</span>', iconType: "material", icon: "apps" })
             }
         }
     }
@@ -88,6 +93,9 @@ ShellRoot {
                 return;
             }
             if (!root.check(root.textItems(highlighted)[1].truncated, "highlighted subtitle also elides on a narrow launcher")) return;
+            const markupTitle = root.textItems(markupRow)[0];
+            if (!root.check(markupTitle.textFormat === Text.RichText && markupTitle.contentHeight >= 30,
+                    "explicit dmenu rich markup preserves its CSS font size")) return;
             console.warn("LAUNCHER_TEXT_PASS: highlighted and plain long titles, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
             const evidence = Quickshell.env("DMS_LAUNCHER_EVIDENCE");
             if (evidence) {
