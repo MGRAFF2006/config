@@ -22,8 +22,8 @@ passed. Final click-through/flicker confirmation is pending. See the
 
 The native **Show Flow Bar at all times** preference is off at Mathis's request:
 the resting bar is hidden, with active-use visibility managed by Wispr. The
-preference is stored only in the app profile. Readback confirmed it enabled and
-the idle X11 input region was empty after restart.
+preference is stored only in the app profile. Readback confirmed hide-idle enabled
+and Electron's 1×1 click-through input region after restart.
 
 ## Wispr Flow installation — verified 2026-11-05
 
