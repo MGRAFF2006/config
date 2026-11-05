@@ -12,12 +12,13 @@ After the approved restart, live metadata confirmed a pinned 512×614 XWayland
 canvas. Mathis confirmed the calendar popup is fully visible. Alpha-based input
 hit-testing failed with `UnknownVizError`, so release 6 uses renderer-reported
 XWayland input regions. A small Python/Xlib helper changes only input, preserving
-the painted shape; altering the latter caused flickering and was rolled back. The real Electron app passed isolated pointer
-checks: its button received a click and unused canvas passed a click underneath.
+the painted shape; altering the latter caused flickering and was rolled back.
+The real Electron app passed isolated pointer checks: its button received a click and unused canvas passed a click underneath.
 The actual XWayland app also held its viewport, position and painted shape stable
 through 30 control-region updates under isolated Hyprland. Live checks confirmed
 512×614 painted bounds and a separate 60×20 idle input region. Package verification
-passed. Final click-through/flicker confirmation is pending. See [repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
+passed. Final click-through/flicker confirmation is pending. See the
+[repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
 
 ## Wispr Flow installation — verified 2026-11-05
 
@@ -32,7 +33,7 @@ The application rendered its sign-in screen in the isolated agent desktop.
 including uinput, all input devices and clipboard tools. Its missing-desktop-entry
 warning checks the wrong filename; the application menu entry is installed.
 Accessibility is initially disabled and the helper enables it at runtime.
-Account sign-in and actual speech-to-text remain unverified.
+Dictation was not exercised by this installation check.
 
 ## Login-screen appearance — verified 2026-11-05
 
