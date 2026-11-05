@@ -29,3 +29,13 @@ hl.window_rule({
 	no_blur = true,
 	no_dim = true,
 })
+
+-- Hyprland 0.57 selects XWayland windows by their rectangle, even outside an
+-- X11 input shape. Honor the overlay's input region during that selection.
+-- Optional: this shared config also runs on machines without Wispr installed.
+local input_plugin = "/opt/wispr-flow-appimage/usr/lib/wispr-flow/resources/Release/wispr-hypr-input.so"
+local input_file = io.open(input_plugin, "rb")
+if input_file then
+	input_file:close()
+	hl.plugin.load(input_plugin)
+end

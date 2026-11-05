@@ -14,24 +14,33 @@
 
 pkgname=wispr-flow-appimage
 pkgver=1.0.5+wispr1.6.1337
-pkgrel=6
+pkgrel=7
 pkgdesc="Wispr Flow voice dictation for Linux (unofficial AppImage build)"
 arch=('x86_64')
 url="https://github.com/wispr-flow-linux/wispr-flow-linux"
 license=('LicenseRef-proprietary')
 depends=('gtk3' 'nss' 'alsa-lib' 'python' 'python-xlib')
-optdepends=('wl-clipboard: clipboard paste-injection on Wayland')
+makedepends=('gcc' 'hyprland' 'pkgconf')
+optdepends=('wl-clipboard: clipboard paste-injection on Wayland' 'hyprland: compositor integration for transparent popup input')
 provides=('wispr-flow')
 conflicts=('wispr-flow')
 options=(!strip)
 
 _appimage=wispr-flow-1.6.1337-1.0.5-x86_64.AppImage
-source=("${_appimage}::https://github.com/wispr-flow-linux/wispr-flow-linux/releases/download/v${pkgver}/${_appimage}" "repair-overlays.py" "wispr-input-region.py" "wispr-input-region.cjs")
+source=("${_appimage}::https://github.com/wispr-flow-linux/wispr-flow-linux/releases/download/v${pkgver}/${_appimage}" "repair-overlays.py" "wispr-input-region.py" "wispr-input-region.cjs" "wispr-hypr-input.cpp")
 sha256sums=('149b710600ed29d6526e88b09b5e6d181539c17841c72907a7ba982753fd6326'
             '0d6a4fd7bec15a45a384493c39c694e80c984fdcc0bfc5783dfb0437204ddb01'
             '27c0a4255561fe78d5efb2f4f0742f6adbd859391f5bc8f67b752523fa7db336'
-            'b8b6def5f4f29284b10ae54a32859f4cd4c52f927dd8055735aef0c016addb32')
+            'b8b6def5f4f29284b10ae54a32859f4cd4c52f927dd8055735aef0c016addb32'
+            'a33e59c095c6200c641c81725ffe8dbb4f071ca44e617609dc29544de87a2905')
 noextract=("${_appimage}")
+
+build() {
+	cd "${srcdir}"
+	# Hyprland plugins use its exact C++ ABI; the plugin also checks it on load.
+	c++ ${CXXFLAGS} -std=c++23 -fPIC -shared $(pkg-config --cflags hyprland) \
+		wispr-hypr-input.cpp ${LDFLAGS} -o wispr-hypr-input.so
+}
 
 package() {
 	cd "${srcdir}"
@@ -50,6 +59,9 @@ package() {
 	for helper in wispr-input-region.py wispr-input-region.cjs; do
 		install -Dm644 "${srcdir}/${helper}" "${pkgdir}/opt/${pkgname}/usr/lib/wispr-flow/resources/Release/${helper}"
 	done
+
+	install -Dm755 "${srcdir}/wispr-hypr-input.so" \
+		"${pkgdir}/opt/${pkgname}/usr/lib/wispr-flow/resources/Release/wispr-hypr-input.so"
 
 	install -dm755 "${pkgdir}/usr/bin"
 	ln -s "/opt/${pkgname}/AppRun" "${pkgdir}/usr/bin/wispr-flow"

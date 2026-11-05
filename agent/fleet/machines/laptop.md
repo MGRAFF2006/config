@@ -2,33 +2,33 @@
 
 ## Wispr overlay repair — verified 2026-11-05
 
-Local `wispr-flow-appimage` release 6 removes the port's fixed 200×110 status
-canvas, which clips its 400×154 calendar hover card. The guarded package patch
-restores the app's normal canvas and defaults Hyprland to XWayland for transparent
-input shaping. Hyprland rules only float, pin and remove decorations from the
-indicator/menu; no geometry timer or focus-blocking rule remains.
+Local `wispr-flow-appimage` release 7 restores the normal popup canvas and
+uses renderer-reported X11 input regions without changing the painted shape.
+Mathis confirmed complete popup visibility, clickable controls and stopped
+flickering, but clicks through unused space still failed against native Wayland
+applications. Hyprland 0.57.0 selected the whole XWayland rectangle regardless of
+its input shape.
 
-After the approved restart, live metadata confirmed a pinned 512×614 XWayland
-canvas. Mathis confirmed the calendar popup is fully visible. Alpha-based input
-hit-testing failed with `UnknownVizError`, so release 6 uses renderer-reported
-XWayland input regions. A small Python/Xlib helper changes only input, preserving
-the painted shape; altering the latter caused flickering and was rolled back.
-The real Electron app passed isolated pointer checks: its button received a click and unused canvas passed a click underneath.
-The actual XWayland app also held its viewport, position and painted shape stable
-through 30 control-region updates under isolated Hyprland. Live checks confirmed
-512×614 painted bounds and a separate 60×20 idle input region. Package verification
-passed. Final click-through/flicker confirmation is pending. See the
-[repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
+The bundled compositor plugin now honors the committed input region when
+selecting Wispr indicator/menu windows. It leaves the Hub, configured focus
+rules and window geometry alone. In isolated Hyprland, the actual Electron app
+reproduced the failure before the plugin; afterward a virtual-pointer click
+reached a native GTK/Wayland underlay, and Wispr's control still received clicks.
+The packaged plugin also passed overlapping-overlay, empty-region and 30-update
+geometry checks. It is loaded in the live session with no config errors, and
+package verification found no altered files. User confirmation of this final
+click-through change is pending. Rebuild the local package after compositor or
+core-library upgrades; mismatched ABIs are refused.
+See the [repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
 
 The native **Show Flow Bar at all times** preference is off at Mathis's request:
 the resting bar is hidden, with active-use visibility managed by Wispr. The
-preference is stored only in the app profile. Readback confirmed hide-idle enabled
-and Electron's 1×1 click-through input region after restart.
+preference is stored only in the app profile.
 
 ## Wispr Flow installation — verified 2026-11-05
 
 The unofficial native Linux port is installed as
-`wispr-flow-appimage 1.0.5+wispr1.6.1337-6`. The upstream AppImage checksum
+`wispr-flow-appimage 1.0.5+wispr1.6.1337-7`. The upstream AppImage checksum
 passed. The local package repairs root-only directories and sets the bundled
 Chromium sandbox to root-owned mode 04755. Pacman's file verification reports
 no altered files. See the [recipe and restore instructions](../../../packages/aur-builds/wispr-flow-appimage/README.md).
