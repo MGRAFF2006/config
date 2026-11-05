@@ -25,7 +25,7 @@ virt-manager --connect qemu:///system --show-domain-console windows11
 
 ## Configuration
 
-- KVM, Q35, host CPU passthrough, one socket with four cores and 8 GiB RAM.
+- KVM, Q35, host CPU passthrough, one socket with six cores and 12 GiB RAM.
 - 80 GiB growable QCOW2 disk: `/var/lib/libvirt/images/windows11.qcow2`.
 - OVMF UEFI with Secure Boot support and an emulated TPM 2.0. The distribution's
   firmware template has no enrolled signing keys, so Secure Boot enforcement
@@ -40,6 +40,14 @@ virt-manager --connect qemu:///system --show-domain-console windows11
 - Local administrator account `Mathis`, with its password supplied privately.
   Persistent automatic sign-in is enabled at Mathis's request. Its credential
   state stays inside Windows.
+
+Resource increase saved on 2026-11-05: 12,288 MiB RAM and six virtual CPUs
+(one socket, six cores, one thread per core). The running session retains its
+original 8 GiB and four CPUs until a full Windows shutdown and VM start; a guest
+Restart does not recreate the VM process. The previous persistent domain XML
+is backed up machine-locally under `~/.local/state/windows11-vm/domain-backups/`.
+Only memory, CPU count and CPU topology changed. The saved definition was read
+back and checked; the larger allocation has not yet been verified inside Windows.
 
 The existing `Win11_25H2_EnglishInternational_x64_v2.iso` was reused. Its observed
 SHA-256 is `66b7b4b71763ed6f9b2ce29326ed9284544da6f5283d00329921540c01aaaeea`;
