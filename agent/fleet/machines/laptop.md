@@ -20,6 +20,11 @@ through 30 control-region updates under isolated Hyprland. Live checks confirmed
 passed. Final click-through/flicker confirmation is pending. See the
 [repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
 
+The native **Show Flow Bar at all times** preference is off at Mathis's request:
+the resting bar is hidden, with active-use visibility managed by Wispr. The
+preference is stored only in the app profile. Readback confirmed it enabled and
+the idle X11 input region was empty after restart.
+
 ## Wispr Flow installation — verified 2026-11-05
 
 The unofficial native Linux port is installed as

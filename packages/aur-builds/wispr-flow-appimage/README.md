@@ -91,3 +91,10 @@ Dictation was not exercised as part of this popup repair.
 Updates normally come from AUR. Check whether newer recipes retain these fixes
 before replacing this local build. No proprietary bundle or account data is
 stored in the config repository.
+
+## Show only during use
+
+In Wispr Settings → System, turn off **Show Flow Bar at all times** to hide the
+resting bar. The laptop uses that native preference (`hideFlowBarPermanently`);
+the package does not change the default for other profiles. Recording and
+processing still use the bar, and an active Notetaker meeting may keep it shown.
