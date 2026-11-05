@@ -46,12 +46,13 @@ p.write_text(json.dumps(sorted(installed)))
             (binaries / name).write_text(manager)
         (binaries / "sudo").write_text('#!/bin/sh\n[ "$1" = pacman ] || exit 99\nexec "$@"\n')
         (binaries / "systemctl").write_text('#!/bin/sh\ncase "$*" in "--user disable dms.service"|"--user daemon-reload") exit 0;; esac\nexit 1\n')
-        for name in ("xdg-mime", "kwriteconfig6"):
+        for name in ("xdg-mime", "kwriteconfig6", "gsettings"):
             (binaries / name).write_text("#!/bin/sh\nexit 0\n")
         for binary in binaries.iterdir():
             binary.chmod(0o755)
         state = root / "state"
         env = dict(os.environ, PATH=f"{binaries}:{os.environ['PATH']}",
+                   HOME=str(home), XDG_DATA_HOME=str(home / ".local/share"), XDG_RUNTIME_DIR=str(root / "run"),
                    CONFIG_LINK_HOME=str(home), CONFIG_DEPLOY_STATE_HOME=str(state),
                    XDG_CONFIG_HOME=str(home / ".config"), XDG_STATE_HOME=str(root / "session"),
                    CONFIG_TEST_PACKAGES=str(package_state), XDG_CURRENT_DESKTOP="KDE")
@@ -62,7 +63,7 @@ p.write_text(json.dumps(sorted(installed)))
             assert result.returncode == expected, result.stdout + result.stderr
 
         run("install-hyprland-dms.sh", "desktop", "--with-greeter", expected=2)
-        run("install-hyprland-dms.sh", "laptop", "--dry-run")
+        run("install-hyprland-dms.sh", "laptop", "--dry-run", "--with-appearance")
         assert not state.exists()
         assert list(home.iterdir()) == []
         env["CONFIG_TEST_FAIL"] = "1"
@@ -79,6 +80,15 @@ p.write_text(json.dumps(sorted(installed)))
         previous = manifest.read_text()
         run("install-hyprland-dms.sh", "laptop")
         assert manifest.read_text() == previous
+        settings = home / ".config/DankMaterialShell/settings.json"
+        existing = json.loads(settings.read_text())
+        existing["currentThemeName"] = "personal"
+        settings.write_text(json.dumps(existing))
+        run("install-hyprland-dms.sh", "laptop")
+        assert json.loads(settings.read_text())["currentThemeName"] == "personal"
+        run("install-hyprland-dms.sh", "laptop", "--with-appearance")
+        assert json.loads(settings.read_text())["currentThemeName"] == "dynamic"
+        assert (home / ".config/matugen/config.toml").is_file()
         run("remove-hyprland-dms.sh", "--dry-run")
         assert manifest.exists()
         env["XDG_CURRENT_DESKTOP"] = "Hyprland"

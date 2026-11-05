@@ -23,6 +23,8 @@ bash scripts/link-home.sh laptop
 python3 scripts/configure-desktop-appearance.py
 python3 scripts/configure-desktop-appearance.py --apply
 python3 scripts/configure-desktop-app-themes.py --apply
+# Existing managed DMS login screen (theme only; no PAM or restart):
+python3 scripts/install-dms-greeter-theme.py --apply
 dms ipc call wallpaper clear
 ```
 
@@ -30,6 +32,9 @@ Use `desktop` instead of `laptop` on the other workstation. Review the linker
 preview: it also deploys the rest of that machine's configuration. Existing
 widgets, plugins, workspace logic, terminal fonts and screen layout are retained.
 The preset does not itself change application font settings.
+Login-screen synchronization and the guarded greeter renderer are described in
+[the greeter theme guide](dms-greeter-theme.md). The optional-session installer
+also accepts `--with-appearance` to apply both desktop and app integration.
 
 The helper prints a backup directory and exact restore command before writing.
 Restore returns the complete previous DMS settings and user layout, and also

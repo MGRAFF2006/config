@@ -221,6 +221,11 @@ Verify face auth from a real session: `sudo howdy test`.
 
 Greeter: **greetd + DMS greeter**. Plasma stays selectable. Rollback DM: `dms greeter uninstall`.
 
+For an existing greeter whose colors, wallpaper or controls stopped matching the
+desktop, use `python3 scripts/install-dms-greeter-theme.py --apply`. This repair
+does not change PAM or restart the display manager. See [theme synchronization,
+renderer compatibility and recovery](dms-greeter-theme.md).
+
 Full DMS defaults live in [`home/.config/hypr/dms/binds.lua`](../home/.config/hypr/dms/binds.lua).
 DWM-style tags: [`home/.config/hypr/dms/workspaces.lua`](../home/.config/hypr/dms/workspaces.lua) + vendored `hyprsplit/`.
 DWM-style extras: [`home/.config/hypr/dms/binds-user.lua`](../home/.config/hypr/dms/binds-user.lua).

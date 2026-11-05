@@ -1,8 +1,12 @@
 [Unit]
-Description=Watch DMS settings used by the greeter
+Description=Watch DMS theme inputs used by the greeter
 
 [Path]
-PathChanged=%h/.config/DankMaterialShell/settings.json
+# Watch the containing directories: replacing a file can invalidate its inotify
+# watch before a second atomic write arrives.
+PathChanged=%h/.config/dms
+PathChanged=%h/.local/state/dms
+PathChanged=%h/.cache/dms
 Unit=dms-greeter-settings-permissions.service
 
 [Install]

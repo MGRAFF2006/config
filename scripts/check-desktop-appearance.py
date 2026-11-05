@@ -22,6 +22,7 @@ def main():
         settings = {
             "currentThemeName": "blue", "unrelatedPreference": 42,
             "reduceMotion": True,
+            "cursorSettings": {"theme": "System Default", "size": 36, "hyprland": {"hideOnKeyPress": True}},
             "barConfigs": [{"id": "personal", "leftWidgets": ["launcherButton", {"id": "workspaceSwitcher", "workspaceFocusedCustomColor": "#abcdef", "showOccupiedWorkspacesOnly": True}], "rightWidgets": ["tuVpn", "networkDiagnostics"], "position": 2}],
         }
         # Resolve a settings-file symlink without replacing the link itself.
@@ -47,6 +48,7 @@ def main():
         changed = json.loads(target.read_text())
         assert changed["currentThemeName"] == "dynamic"
         assert changed["unrelatedPreference"] == 42 and changed["reduceMotion"] is True
+        assert changed["cursorSettings"] == {"theme": "breeze_cursors", "size": 36, "hyprland": {"hideOnKeyPress": True}}
         bar = changed["barConfigs"][0]
         assert bar["rightWidgets"] == settings["barConfigs"][0]["rightWidgets"]
         assert bar["id"] == "personal" and bar["position"] == 2
@@ -67,6 +69,9 @@ def main():
         assert sparse["barConfigs"][0]["leftWidgets"] == ["launcherButton", "workspaceSwitcher", "focusedWindow"]
         assert sparse["barConfigs"][0]["centerWidgets"] == ["music", "clock", "weather"]
         assert sparse["barConfigs"][0]["rightWidgets"] == ["systemTray", "clipboard", "cpuUsage", "memUsage", "notificationButton", "battery", "controlCenterButton"]
+        target.write_text(json.dumps({"cursorSettings": {"theme": "Personal Cursor", "size": 48}}))
+        run("--apply")
+        assert json.loads(target.read_text())["cursorSettings"] == {"theme": "Personal Cursor", "size": 48}
         # Restore before checking refusal, so the layout must remain untouched.
         run("--restore", str(backup))
         target.write_text("{corrupt")
