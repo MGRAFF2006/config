@@ -7,6 +7,15 @@ the VM when necessary; closing the viewer leaves Windows running. Use one
 viewer at a time and close the Virtual Machine Manager console first. Tap
 **Right Ctrl** to toggle input capture; hold it for Looking Glass's menu.
 
+The viewer opens fullscreen with Windows fixed at the laptop's native
+1920 × 1200 at 60 Hz. Automatic guest resizing (`win:setGuestRes`) is disabled,
+so opening or resizing a viewer does not change Windows' display mode. A smaller
+window scales the existing image. The viewer grabs the keyboard while focused
+so Windows receives its normal shortcuts, including Alt+Tab and the Windows key.
+Hyprland's workspace bindings use `dont_inhibit` to keep workspace switching and
+moving windows between workspaces available even while the keyboard is grabbed.
+**Right Ctrl + F** toggles the viewer's fullscreen mode.
+
 Virtual Machine Manager remains available for VM management and recovery:
 
 ```bash
@@ -180,6 +189,36 @@ the original libvirt-only SPICE listener; it does not revert guest disk data.
 References: [requirements](https://looking-glass.io/docs/B7-829-cdba29f2/requirements/),
 [signed IDD installation](https://looking-glass.io/docs/B7-829-cdba29f2/install_idd/),
 [libvirt setup](https://looking-glass.io/docs/B7-829-cdba29f2/install_libvirt/).
+
+### Display and sharing — verified 2026-11-05
+
+Looking Glass was made the sole primary Windows display using
+[ensure-looking-glass-display.ps1](ensure-looking-glass-display.ps1), which selects
+its adapter by name and saves the native 1920 × 1200, 60 Hz layout without removing
+the QXL recovery adapter. The single-display layout survived closing and reopening
+the viewer, and remained fixed when a smaller viewer was opened.
+A further Windows cold start was not performed during this check.
+
+If the helper's **Make LG the only monitor** preference is already enabled but
+QXL is still primary, run the repair in the signed-in Windows user's session,
+with the Looking Glass display active:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ensure-looking-glass-display.ps1
+```
+
+The script policy override is limited to that process. No system-wide execution
+policy change is required. Keep the existing helper preference enabled.
+
+Clipboard text transfers passed both directions, including German characters.
+Audio uses the existing ICH9 card and classic SPICE stereo path; a generated
+Windows signal reached a Linux null sink with nonzero captured samples, without
+playing through speakers or headphones. Listening quality was not evaluated.
+The saved configuration uses the normal audio output when opened normally.
+
+Actual Looking Glass input passed in isolated Hyprland: workspace switching
+continued during keyboard capture, while Win+R, Win+Q and Ctrl+A reached Windows.
+Temporary test tasks and files were removed afterward.
 
 ### Libvirt
 

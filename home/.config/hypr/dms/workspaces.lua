@@ -18,9 +18,11 @@ for i = 1, 9 do
 	hl.unbind("SUPER + " .. n)
 	hl.unbind("SUPER + SHIFT + " .. n)
 	hl.bind("SUPER + " .. n, hs.dsp.focus({ workspace = i }), {
+		dont_inhibit = true,
 		description = "tag " .. n .. " (this monitor)",
 	})
 	hl.bind("SUPER + SHIFT + " .. n, hs.dsp.window.move({ workspace = i, follow = false }), {
+		dont_inhibit = true,
 		description = "move to tag " .. n .. " (this monitor)",
 	})
 end
@@ -36,7 +38,7 @@ local rel = {
 }
 for _, b in ipairs(rel) do
 	hl.unbind(b[1])
-	hl.bind(b[1], hs.dsp.focus({ workspace = b[2] }))
+	hl.bind(b[1], hs.dsp.focus({ workspace = b[2] }), { dont_inhibit = true })
 end
 
 local mov = {
@@ -53,5 +55,5 @@ local mov = {
 }
 for _, b in ipairs(mov) do
 	hl.unbind(b[1])
-	hl.bind(b[1], hs.dsp.window.move({ workspace = b[2], follow = true }))
+	hl.bind(b[1], hs.dsp.window.move({ workspace = b[2], follow = true }), { dont_inhibit = true })
 end
