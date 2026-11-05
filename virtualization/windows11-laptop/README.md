@@ -14,6 +14,7 @@ grabs the keyboard while focused
 so Windows receives its normal shortcuts, including Alt+Tab and the Windows key.
 Hyprland's workspace bindings use `dont_inhibit` to keep workspace switching and
 moving windows between workspaces available even while the keyboard is grabbed.
+**Super + Q** also bypasses capture to close the viewer; Windows keeps running.
 **Right Ctrl + F** toggles the viewer's fullscreen mode.
 
 Virtual Machine Manager remains available for VM management and recovery:
@@ -218,7 +219,7 @@ playing through speakers or headphones. Listening quality was not evaluated.
 The saved configuration uses the normal audio output when opened normally.
 
 Actual Looking Glass input passed in isolated Hyprland: workspace switching
-continued during keyboard capture, while Win+R, Win+Q and Ctrl+A reached Windows.
+continued during keyboard capture, while Win+R and Ctrl+A reached Windows. Super+Q is reserved for host window closing.
 Temporary test tasks and files were removed afterward.
 
 ### Libvirt

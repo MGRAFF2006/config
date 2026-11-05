@@ -1,5 +1,9 @@
 -- DMS user keybind overrides (edit via Control Center or dms; do not remove this header)
 
+-- Keep the host close shortcut available while a VM grabs the keyboard.
+hl.unbind("SUPER + Q")
+hl.bind("SUPER + Q", hl.dsp.window.close(), { dont_inhibit = true, description = "Close window (also during keyboard capture)" })
+
 hl.unbind("SUPER + A")
 hl.bind("SUPER + A", hl.dsp.exec_cmd("dms ipc call control-center toggle"))
 hl.unbind("SUPER + CTRL + L")
