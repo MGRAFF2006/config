@@ -8,3 +8,6 @@ greetd-dms-greeter-bin
 
 # Face unlock (greetd / DMS lock / SDDM via install-pam-keyring-howdy.sh)
 howdy-git
+
+# Wispr Flow unofficial Linux port (permission repair in aur-builds/wispr-flow-appimage)
+wispr-flow-appimage # setup:ai

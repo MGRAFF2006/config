@@ -1,5 +1,39 @@
 # Laptop
 
+## Wispr overlay repair — verified 2026-11-05
+
+Local `wispr-flow-appimage` release 6 removes the port's fixed 200×110 status
+canvas, which clips its 400×154 calendar hover card. The guarded package patch
+restores the app's normal canvas and defaults Hyprland to XWayland for transparent
+input shaping. Hyprland rules only float, pin and remove decorations from the
+indicator/menu; no geometry timer or focus-blocking rule remains.
+
+After the approved restart, live metadata confirmed a pinned 512×614 XWayland
+canvas. Mathis confirmed the calendar popup is fully visible. Alpha-based input
+hit-testing failed with `UnknownVizError`, so release 6 uses renderer-reported
+XWayland input regions. A small Python/Xlib helper changes only input, preserving
+the painted shape; altering the latter caused flickering and was rolled back. The real Electron app passed isolated pointer
+checks: its button received a click and unused canvas passed a click underneath.
+The actual XWayland app also held its viewport, position and painted shape stable
+through 30 control-region updates under isolated Hyprland. Live checks confirmed
+512×614 painted bounds and a separate 60×20 idle input region. Package verification
+passed. Final click-through/flicker confirmation is pending. See [repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
+
+## Wispr Flow installation — verified 2026-11-05
+
+The unofficial native Linux port is installed as
+`wispr-flow-appimage 1.0.5+wispr1.6.1337-6`. The upstream AppImage checksum
+passed. The local package repairs root-only directories and sets the bundled
+Chromium sandbox to root-owned mode 04755. Pacman's file verification reports
+no altered files. See the [recipe and restore instructions](../../../packages/aur-builds/wispr-flow-appimage/README.md).
+
+The application rendered its sign-in screen in the isolated agent desktop.
+`wispr-flow --doctor` passes its required checks on the real Hyprland session,
+including uinput, all input devices and clipboard tools. Its missing-desktop-entry
+warning checks the wrong filename; the application menu entry is installed.
+Accessibility is initially disabled and the helper enables it at runtime.
+Account sign-in and actual speech-to-text remain unverified.
+
 ## Login-screen appearance — verified 2026-11-05
 
 The DMS greeter now uses live per-account settings, wallpaper/session data and
