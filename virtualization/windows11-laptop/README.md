@@ -7,10 +7,10 @@ the VM when necessary; closing the viewer leaves Windows running. Use one
 viewer at a time and close the Virtual Machine Manager console first. Tap
 **Right Ctrl** to toggle input capture; hold it for Looking Glass's menu.
 
-The viewer opens fullscreen with Windows fixed at the laptop's native
-1920 × 1200 at 60 Hz. Automatic guest resizing (`win:setGuestRes`) is disabled,
-so opening or resizing a viewer does not change Windows' display mode. A smaller
-window scales the existing image. The viewer grabs the keyboard while focused
+The viewer starts fullscreen at the laptop's usual 1920 × 1200 size, matching
+the saved Windows display mode at 60 Hz. Automatic guest resizing stays enabled
+so Windows follows the viewport when the viewer is tiled or resized. The viewer
+grabs the keyboard while focused
 so Windows receives its normal shortcuts, including Alt+Tab and the Windows key.
 Hyprland's workspace bindings use `dont_inhibit` to keep workspace switching and
 moving windows between workspaces available even while the keyboard is grabbed.
@@ -196,7 +196,8 @@ Looking Glass was made the sole primary Windows display using
 [ensure-looking-glass-display.ps1](ensure-looking-glass-display.ps1), which selects
 its adapter by name and saves the native 1920 × 1200, 60 Hz layout without removing
 the QXL recovery adapter. The single-display layout survived closing and reopening
-the viewer, and remained fixed when a smaller viewer was opened.
+the viewer. Automatic guest resizing remains enabled for tiling; the default
+startup size matches the laptop rather than the previous 1280 × 800 window.
 A further Windows cold start was not performed during this check.
 
 If the helper's **Make LG the only monitor** preference is already enabled but

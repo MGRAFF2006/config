@@ -59,7 +59,7 @@ if (-not [LGDisplayLayout]::EnumDisplaySettings($lg[0].name, -1, [ref]$mode)) {
 }
 $mode.x = 0
 $mode.y = 0
-# Keep the laptop's native mode stable when a viewer is opened or resized.
+# Start from the laptop's usual native mode; the viewer can adapt it for tiling.
 $mode.width = 1920
 $mode.height = 1200
 $mode.frequency = 60
