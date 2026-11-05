@@ -1,5 +1,50 @@
 # Laptop
 
+## Wi-Fi stalls — investigated 2026-11-04, verified 2026-11-05
+
+The RTL8922AE (`rtw89_8922ae`, kernel 7.2.14, Wi-Fi firmware 0.35.80.3)
+showed multi-second local-gateway delays on both eduroam and an iPhone's
+2.4 GHz hotspot. With MOMENTUM 4 disconnected, a 100-probe hotspot check
+returned every reply without the multi-second stalls; the headset was then
+reconnected. This implicates Bluetooth/Wi-Fi coexistence, but does not establish
+the exact driver or firmware defect. Debugfs also reported Bluetooth coexistence
+version 8 while the Wi-Fi driver expected 9. The installed Bluetooth firmware
+was byte-identical to official upstream on 2026-11-04; do not replace it blindly.
+
+`wireless-regdb` and `iw` were missing. The kernel reported that it could not
+load `regulatory.db`. Both packages are now installed and listed in the laptop
+hardware packages. After the next boot the regulatory database loaded, the
+reported domain was DE, and 5 GHz association worked. This repairs a confirmed
+missing prerequisite; it does not prove that the database caused all stalls.
+The normal package setup includes these requirements.
+
+NetworkManager now has **eduroam (5 GHz)**, cloned from **eduroam**, with
+`802-11-wireless.band=a` and autoconnect priority 110. The original unrestricted
+profile remains enabled at priority 100 as a fallback where only 2.4 GHz is
+available. The active 5 GHz profile prevents roaming to 2.4 GHz within that
+connection. Credentials remain solely in NetworkManager's machine-local store.
+To recreate this preference once, after the original profile exists:
+
+```bash
+nmcli connection clone eduroam 'eduroam (5 GHz)'
+nmcli connection modify 'eduroam (5 GHz)' 802-11-wireless.band a connection.autoconnect-priority 110
+nmcli connection up 'eduroam (5 GHz)'
+```
+
+Rollback: activate `eduroam`, then delete `eduroam (5 GHz)` with `nmcli connection
+delete`. Neither step deletes the original credentials. The iPhone profile was
+not changed. No driver power-saving overrides were retained: disabling interface
+power saving, reloading the driver and testing PCIe ASPM options did not reliably
+eliminate the problem. The next boot restored default parameters, confirmed live.
+
+On the active 5 GHz profile, 50 probes each to the gateway, public IPv4 and public
+IPv6 destinations all returned. Google, GitHub and Cloudflare HTTPS requests
+completed successfully. Tailscale reached homelab-dev through DERP; direct UDP
+connectivity was unavailable during that check. These are short smoke checks;
+active headset playback, long sessions and automatic fallback remain unverified.
+See the [same-adapter report](https://github.com/lwfinger/rtw89/issues/408) for
+related symptoms; its suggested workarounds are not proof of a local fix.
+
 ## Desktop startup dependency — verified 2026-11-04
 
 Private SSH now starts through `sshd-tailscale.timer`, retaining its existing
