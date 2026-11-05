@@ -3,9 +3,9 @@
 # Usage: bash scripts/link-home.sh [laptop|desktop|homelab-dev] [--dry-run|--check]
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-home_root="$repo_root/home"
-target_home="${CONFIG_LINK_HOME:-$HOME}"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+home_root="$(realpath -m -- "$repo_root/home")"
+target_home="$(realpath -m -- "${CONFIG_LINK_HOME:-$HOME}")"
 mode=install
 machine=""
 for arg in "$@"; do
@@ -98,6 +98,28 @@ done
 
 backup_root=""
 failures=0
+ensure_local_destination() {
+  local parent
+  parent="$(realpath -m -- "$(dirname -- "$1")")"
+  case "$parent/" in
+    "$repo_root/"*|"$home_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
+  esac
+}
+
+# Reject shared parents and backup aliases before changing any existing links.
+if [[ "$mode" == install ]]; then
+  for rel in "${links[@]}"; do ensure_local_destination "$target_home/$rel"; done
+  if [[ "$machine" == homelab-dev ]]; then
+    ensure_local_destination "$target_home/.zshenv"
+    ensure_local_destination "$target_home/.config/mise/config.toml"
+  else
+    ensure_local_destination "$target_home/.config/alacritty/machine.toml"
+  fi
+  ensure_local_destination "$target_home/.config/systemd/user/t3code.service.d/path.conf"
+  ensure_local_destination "$target_home/.ssh/config"
+  ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
+fi
+
 link_file() {
   local rel="$1" src="${2:-$home_root/$1}" dst="$target_home/$1"
   if [[ -L "$dst" && "$(readlink -- "$dst")" == "$src" ]]; then
@@ -108,15 +130,11 @@ link_file() {
     --check) echo "MISSING or different link: $rel"; failures=$((failures + 1)); return ;;
     --dry-run) echo "LINK $dst -> $src (back up existing destination)"; return ;;
   esac
-  # A parent link into home/ would write machine-local files into the shared repo.
-  local parent
-  parent="$(realpath -m -- "$(dirname -- "$dst")")"
-  case "$parent/" in
-    "$home_root/"*) echo "Destination parent points into shared home/: $dst" >&2; exit 1 ;;
-  esac
+  ensure_local_destination "$dst"
   mkdir -p -- "$(dirname -- "$dst")"
   if [[ -e "$dst" || -L "$dst" ]]; then
     if [[ -z "$backup_root" ]]; then
+      ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
       mkdir -p -- "$target_home/.local/share/config-link-backups"
       backup_root="$(mktemp -d "$target_home/.local/share/config-link-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
     fi
