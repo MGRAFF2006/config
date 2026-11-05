@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Keep greeter sharing readable while retaining events during native sync."""
+
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+
+
+def sync_profile():
+    subprocess.run(["dms-greeter", "sync", "--profile", "--yes"], check=True)
+
+
+def main(sync=sync_profile):
+    from gi.repository import Gio, GLib
+
+    home = Path.home()
+    watched = {
+        Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "dms": {"settings.json"},
+        Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) / "dms": {"session.json"},
+        Path(os.environ.get("XDG_CACHE_HOME", home / ".cache")) / "dms": {"dms-colors.json"},
+    }
+    loop = GLib.MainLoop()
+    failure = []
+
+    def changed(monitor, file, other_file, event, names):
+        if event not in (Gio.FileMonitorEvent.CHANGES_DONE_HINT, Gio.FileMonitorEvent.MOVED_IN, Gio.FileMonitorEvent.RENAMED):
+            return
+        if not any(item and item.get_basename() in names for item in (file, other_file)):
+            return
+        try:
+            sync()
+        except (OSError, subprocess.CalledProcessError) as error:
+            failure.append(error)
+            loop.quit()
+
+    # Gio keeps the inotify subscription alive while sync blocks. A path unit
+    # alone disarms while its service runs, losing a second atomic replacement.
+    monitors = []
+    for directory, names in watched.items():
+        if not directory.is_dir():
+            raise FileNotFoundError(f"DMS has not created {directory} yet")
+        monitor = Gio.File.new_for_path(str(directory)).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+        monitor.connect("changed", changed, names)
+        monitors.append(monitor)
+    sync()
+    address = os.environ.get("NOTIFY_SOCKET")
+    if address:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect("\0" + address[1:] if address.startswith("@") else address)
+            notify.sendall(b"READY=1")
+    try:
+        loop.run()
+    finally:
+        for monitor in monitors:
+            monitor.cancel()
+    if failure:
+        raise failure[0]
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Greeter theme watcher failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

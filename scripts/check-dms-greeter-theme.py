@@ -2,8 +2,10 @@
 """Check that installing greeter appearance preserves login behavior."""
 
 import importlib.util
+import os
 from pathlib import Path
 import shlex
+import tempfile
 import tomllib
 
 
@@ -33,6 +35,13 @@ user = "desktop-account"
     assert args[args.index("--") + 1:] == shlex.split(before["default_session"]["command"])[1:]
     assert installer.themed_command(command) == command
     assert installer.replace_command(changed, command) == changed
+    for selector in ("--shell-dir /custom/ui", "--shell-dir=/custom/ui", "-c /custom/ui", "-c/custom/ui", "--path custom", "-p custom"):
+        try:
+            installer.themed_command(before["default_session"]["command"] + " " + selector)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Accepted a custom UI that defeats the guarded fallback")
     for unsupported in ["/usr/bin/agreety", "/custom/local-login --foo"]:
         try:
             installer.themed_command(unsupported)
@@ -43,6 +52,26 @@ user = "desktop-account"
     # TOML basic-string escaping must preserve literal shell syntax, not expand it.
     quoted = installer.replace_command(original, command + " --name 'with space $HOME'")
     assert tomllib.loads(quoted)["default_session"]["command"].endswith("--name 'with space $HOME'")
+    with tempfile.TemporaryDirectory(prefix="greeter-install-check-") as directory:
+        root = Path(directory)
+        source = root / "source.py"
+        source.write_text("# launcher\n")
+        previous_mask = os.umask(0o077)
+        try:
+            target = root / "usr/local/libexec/launcher.py"
+            installer.install_file(source, target)
+        finally:
+            os.umask(previous_mask)
+        assert target.read_bytes() == source.read_bytes()
+        assert target.stat().st_mode & 0o777 == 0o644
+        for path in (root / "usr", root / "usr/local", target.parent):
+            assert path.stat().st_mode & 0o777 == 0o755, path
+        original_source = root / "old-launcher"
+        original_source.write_text("preserve unrelated source")
+        target.unlink()
+        target.symlink_to(original_source)
+        installer.install_file(source, target)
+        assert not target.is_symlink() and original_source.read_text() == "preserve unrelated source"
     print("PASS: theme installation preserves compositor/session options, auto-login, comments and unrelated login managers; repeat install is stable")
 
 

@@ -1,11 +1,15 @@
 [Unit]
 Description=Keep the DMS greeter theme linked and readable
+# Brightness and launcher state can replace session.json many times per second.
+StartLimitIntervalSec=0
 ConditionPathExists=/usr/bin/dms-greeter
 ConditionPathExists=%h/.config/dms/settings.json
 
 [Service]
-Type=oneshot
-ExecStart=/usr/bin/dms-greeter sync --profile --yes
+Type=notify
+ExecStart=/usr/bin/python3 %h/.local/bin/dms-greeter-theme-watch
+Restart=on-failure
+RestartSec=1
 
 [Install]
 WantedBy=default.target

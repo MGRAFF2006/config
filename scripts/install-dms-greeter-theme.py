@@ -29,6 +29,9 @@ def themed_command(command):
         argv = ["/usr/bin/dms-greeter", *argv[argv.index("--") + 1:]]
     if not argv or Path(argv[0]).name != "dms-greeter":
         raise ValueError("The active greetd command is not the managed DMS greeter")
+    for argument in argv[1:]:
+        if any(argument == flag or argument.startswith(flag + "=") for flag in ("--shell-dir", "--path")) or (argument.startswith(("-c", "-p")) and not argument.startswith("--")):
+            raise ValueError("Remove the custom greeter UI selector before installing the guarded renderer")
     return shlex.join(["/usr/bin/python3", str(WRAPPER), "--output", str(UI), "--launch", "--", *argv[1:]])
 
 
@@ -61,8 +64,19 @@ def backup_file(path, backup):
         shutil.copy2(path, target)
 
 
+def system_directory(path):
+    missing = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+    for directory in reversed(missing):
+        directory.mkdir()
+        directory.chmod(0o755)
+
+
 def install_file(source, target, mode=0o644):
-    target.parent.mkdir(parents=True, exist_ok=True)
+    system_directory(target.parent)
     # Replacing a symlink must never write back into its old source.
     fd, name = tempfile.mkstemp(dir=target.parent, prefix="." + target.name)
     try:
@@ -109,6 +123,7 @@ def main():
     for program in ("patch", "getfacl", "setfacl", "dms-greeter"):
         if not shutil.which(program):
             parser.error(f"Missing required program: {program}")
+    subprocess.run([sys.executable, "-c", "from gi.repository import Gio, GLib"], check=True)
     if os.geteuid() != 0:
         os.execvp("sudo", ["sudo", sys.executable, str(Path(__file__).resolve()), *os.sys.argv[1:], "--user", username])
 
@@ -131,7 +146,7 @@ def main():
         prepare += ["--source-dir", str(args.source_dir)]
     subprocess.run(prepare, check=True)
     # Stage and validate everything before replacing the active renderer.
-    UI.parent.mkdir(parents=True, exist_ok=True)
+    system_directory(UI.parent)
     if UI.exists():
         shutil.rmtree(UI)
     shutil.copytree(staged, UI)
@@ -152,16 +167,19 @@ def main():
     user_env = ["env", f"HOME={home}", f"XDG_CONFIG_HOME={home}/.config", f"XDG_STATE_HOME={home}/.local/state", f"XDG_CACHE_HOME={home}/.cache", f"XDG_RUNTIME_DIR=/run/user/{account.pw_uid}", f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{account.pw_uid}/bus"]
     def as_user(*argv):
         subprocess.run(["runuser", "-u", username, "--", *user_env, *argv], check=True)
-    for suffix in ("service", "path"):
-        name = "dms-greeter-settings-permissions." + suffix
-        target = home / ".config/systemd/user" / name
+    links = [".config/systemd/user/dms-greeter-settings-permissions." + suffix for suffix in ("service", "path")]
+    links.append(".local/bin/dms-greeter-theme-watch")
+    for relative in links:
+        target = home / relative
         backup_file(target, backup)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.unlink(missing_ok=True)
-        target.symlink_to(ROOT / "home/.config/systemd/user" / name)
+        target.symlink_to(ROOT / "home" / relative)
         os.lchown(target, account.pw_uid, account.pw_gid)
     as_user("systemctl", "--user", "daemon-reload")
-    as_user("systemctl", "--user", "enable", "--now", "dms-greeter-settings-permissions.service")
+    as_user("systemctl", "--user", "reset-failed", "dms-greeter-settings-permissions.service", "dms-greeter-settings-permissions.path")
+    as_user("systemctl", "--user", "enable", "dms-greeter-settings-permissions.service")
+    as_user("systemctl", "--user", "restart", "dms-greeter-settings-permissions.service")
     as_user("systemctl", "--user", "enable", "dms-greeter-settings-permissions.path")
     as_user("systemctl", "--user", "restart", "dms-greeter-settings-permissions.path")
     as_user("dms-greeter", "status")

@@ -1,5 +1,21 @@
 # Laptop
 
+## Login-screen appearance — verified 2026-11-05
+
+The DMS greeter now uses live per-account settings, wallpaper/session data and
+colors. Its existing user service retains Gio file events while native
+profile-only sync repairs read access; twelve rapid mode-0600 atomic session
+replacements were repaired successfully. The greeter account can read the
+root-owned guarded renderer and live theme inputs. The renderer adds support
+for the desktop's fixed corner radius and popup transparency; unknown package
+builds fall back to the packaged UI.
+
+The actual patched greeter rendered in a private nested Hyprland session, and
+theme readback matched the desktop palette, text scale, corners and opacity.
+PAM fingerprints and the running greetd process stayed unchanged. A fresh
+login/logout remains untested. Apply/recover through the
+[greeter theme guide](../../../docs/dms-greeter-theme.md).
+
 ## Desktop startup dependency — verified 2026-11-04
 
 Private SSH now starts through `sshd-tailscale.timer`, retaining its existing

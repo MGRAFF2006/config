@@ -2,9 +2,11 @@
 Description=Watch DMS theme inputs used by the greeter
 
 [Path]
-PathChanged=%h/.config/dms/settings.json
-PathChanged=%h/.local/state/dms/session.json
-PathChanged=%h/.cache/dms/dms-colors.json
+# Watch the containing directories: replacing a file can invalidate its inotify
+# watch before a second atomic write arrives.
+PathChanged=%h/.config/dms
+PathChanged=%h/.local/state/dms
+PathChanged=%h/.cache/dms
 Unit=dms-greeter-settings-permissions.service
 
 [Install]

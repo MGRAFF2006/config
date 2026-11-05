@@ -55,6 +55,7 @@ links=(
   .config/systemd/user/hypr-kwallet.service
   .config/systemd/user/dms-greeter-settings-permissions.service
   .config/systemd/user/dms-greeter-settings-permissions.path
+  .local/bin/dms-greeter-theme-watch
   .config/systemd/user/wacom-cursor-restore.service
   .local/bin/hyprland-dms-session .local/bin/wacom-cursor-restore
   .local/bin/dms-network-status .local/bin/nm-wifi-system-secret
