@@ -1,0 +1,44 @@
+--- a/AK/Rust/src/lib.rs
++++ b/AK/Rust/src/lib.rs
+@@ -754,7 +754,7 @@
+     let header = unsafe { &*std::ptr::with_exposed_provenance::<Utf16StringDataHeader>(raw) };
+     let result = header
+         .reference_count
+-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
++        .try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+             (count != 0).then(|| count.checked_add(1)).flatten()
+         });
+     assert!(result.is_ok(), "invalid UTF-16 string reference count");
+--- a/Libraries/LibWeb/Rust/src/css/style_sheet.rs
++++ b/Libraries/LibWeb/Rust/src/css/style_sheet.rs
+@@ -406,7 +406,7 @@
+     pub(crate) fn new(rules: Rc<NativeRuleList>, media: MediaList) -> Rc<Self> {
+         Rc::new(Self {
+             identity: NEXT_SHEET_IDENTITY
+-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
++                .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
+                 .expect("stylesheet identity overflow"),
+             rules,
+             media,
+--- a/Libraries/LibWeb/Rust/src/css/declaration_block.rs
++++ b/Libraries/LibWeb/Rust/src/css/declaration_block.rs
+@@ -241,7 +241,7 @@
+             *state = DeclarationBlockState::Mutable(Rc::new(RefCell::new(DeclarationBlockOwner {
+                 data: data.clone(),
+                 identity: NEXT_DECLARATION_BLOCK_IDENTITY
+-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
++                    .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
+                     .expect("declaration block identity overflow"),
+                 revision: 0,
+             })));
+--- a/Libraries/LibWeb/Rust/src/css/rule.rs
++++ b/Libraries/LibWeb/Rust/src/css/rule.rs
+@@ -775,7 +775,7 @@
+ 
+ fn reserve_rule_identities(count: u64) -> u64 {
+     NEXT_RULE_IDENTITY
+-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(count))
++        .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(count))
+         .expect("rule identity overflow")
+ }
+ 
