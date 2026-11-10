@@ -22,6 +22,31 @@ keeps multiline clipboard entries within their rows; the full name, clipboard
 payload and accessible label remain unchanged. The guarded patch set also
 fingerprints `LauncherRow.qml` before applying this correction.
 
+DMS 2.1.2 uses a separate reviewed patch for launcher rows, grid labels and image
+tile captions. Generated search emphasis uses native styled text so Qt honors
+line limits and ellipses; explicit dmenu HTML retains its rich formatting. The
+older 2.0.0 slider and control-center patches are not applied to changed 2.1
+internals. The version, binary and each patched renderer must match before the
+override launches. An upgrade to another version falls back to built-in DMS
+until its source is reviewed again.
+
+Check actual launcher components with synthetic clipboard data in the separate
+agent desktop (no physical desktop input or clipboard access):
+
+```bash
+agent-desktop start
+agent-desktop run python3 "$PWD/scripts/check-dms-launcher-text.py" --source-dir /path/to/pristine/dms-ui
+```
+
+The helper logs to the agent desktop's `apps.log`. `--unpatched` reproduces the
+original failure; `--evidence /absolute/path.png` saves the patched fixture.
+Coverage includes grid widths 180/120 px, row widths 620/320 px, multiline and
+highlighted entries, long subtitles, image captions, ordinary short app labels,
+115% text scale, unchanged payloads, explicit dmenu HTML, repeat staging and
+renderer-tamper/version fallback. The fixture exercises the actual rendering
+components; backend clipboard copy/paste and physical keyboard use are separate
+from these checks.
+
 Stage the reviewed change without changing any running shell:
 
 ```bash
@@ -32,9 +57,9 @@ python3 scripts/check-dms-smooth-sliders.py --ui
 
 The helper reads the running shell's `dms.path` and copies its current extracted
 UI into `~/.local/share/dms-ui-overrides`. It checks the exact reviewed DMS
-version and the exact slider/control-center source hashes before applying all
+version and the exact version-specific source hashes before applying all
 patches. The manifest records the whole source tree's hash, combined patch hash,
-all four patched-file hashes, binary hash and
+all version-specific patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
 extracted built-in files are changed.
@@ -53,7 +78,7 @@ the new source and rerun setup before using the patch again. It never silently
 keeps a previous DMS UI active after an update. Starting the launch command does
 not stop an already running shell; activation requires a separate shell reload.
 
-The `--ui` check uses the real patched slider with a software-rendered offscreen
+On DMS 2.0.0, the `--ui` check uses the real patched slider with a software-rendered offscreen
 Qt window, isolated runtime and no display, desktop input or hardware service.
 It checks an intermediate level, final settling, bounded rapid retargeting,
 a held-key sequence with rendered progress between repeats, immediate model values, no spurious user commits, and immediate drag

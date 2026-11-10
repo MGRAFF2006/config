@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Common
+import qs.Modals.DLauncherV2
 import qs.Modals.DLauncherV2.Components
 
 ShellRoot {
@@ -13,32 +14,70 @@ ShellRoot {
     FloatingWindow {
         id: window
         visible: true
-        implicitWidth: 620
-        implicitHeight: 270
+        implicitWidth: 760
+        implicitHeight: 520
 
-        Column {
-            id: rows
-            width: root.phase === 0 ? parent.width : 320
-            LauncherRow {
-                id: highlighted
-                item: ({ type: "clipboard", name: root.fullTitle, subtitle: "Text - Shift+Enter to paste a very long subtitle that must also fit the row",
-                    _hName: "[Recreate Slides Figures as SVGs](<b>t3</b>-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row",
-                    _hSub: "Text - Shift+Enter to <b>paste</b> a very long subtitle that must also fit the row", _hRich: true,
-                    iconType: "material", icon: "content_paste", data: { content: root.fullTitle } })
-            }
-            LauncherRow {
-                id: multiline
-                item: ({ type: "clipboard", name: root.multilineTitle, subtitle: "Text - Shift+Enter to paste", _hRich: false,
-                    iconType: "material", icon: "content_paste", data: { content: root.multilineTitle } })
-            }
-            LauncherRow {
-                id: shortRow
-                item: ({ type: "app", name: "T3 Code Nightly", subtitle: "T3 Code nightly desktop build", iconType: "material", icon: "apps" })
-            }
-            LauncherRow {
-                id: markupRow
-                item: ({ type: "dmenu", name: "Large", subtitle: "", _hRich: true,
-                    _hName: '<span style="font-size:30px; color:red">Large</span>', iconType: "material", icon: "apps" })
+        Item {
+            id: evidenceCanvas
+            anchors.fill: parent
+            Column {
+                id: rows
+                width: root.phase === 0 ? 620 : 320
+                LauncherRow {
+                    id: highlighted
+                    item: ({ type: "clipboard", name: root.fullTitle, subtitle: "Text - Shift+Enter to paste a very long subtitle that must also fit the row",
+                        _hName: "[Recreate Slides Figures as SVGs](<b>t3</b>-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row",
+                        _hSub: "Text - Shift+Enter to <b>paste</b> a very long subtitle that must also fit the row", _hRich: true,
+                        iconType: "material", icon: "content_paste", data: { content: root.fullTitle } })
+                }
+                LauncherRow {
+                    id: multiline
+                    item: ({ type: "clipboard", name: root.multilineTitle, subtitle: "Text - Shift+Enter to paste", _hRich: false,
+                        iconType: "material", icon: "content_paste", data: { content: root.multilineTitle } })
+                }
+                LauncherRow {
+                    id: shortRow
+                    item: ({ type: "app", name: "T3 Code Nightly", subtitle: "T3 Code nightly desktop build", iconType: "material", icon: "apps" })
+                }
+                LauncherRow {
+                    id: markupRow
+                    item: ({ type: "dmenu", name: "Large", subtitle: "", _hRich: true,
+                        _hName: '<span style="font-size:30px; color:red">Large</span>', iconType: "material", icon: "apps" })
+                }
+
+                Row {
+                    spacing: 8
+                    TileItem {
+                        id: imageTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: highlighted.item
+                    }
+                    LauncherTile {
+                        id: highlightedTile
+                        width: root.phase === 0 ? 180 : 120
+                        height: LauncherMetrics.tileMinHeight
+                        item: highlighted.item
+                    }
+                    LauncherTile {
+                        id: plainTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: multiline.item
+                    }
+                    LauncherTile {
+                        id: shortTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: ({ type: "app", name: "Notes", iconType: "material", icon: "apps" })
+                    }
+                    LauncherTile {
+                        id: markupTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: markupRow.item
+                    }
+                }
             }
         }
     }
@@ -79,11 +118,42 @@ ShellRoot {
         return check(labels[0].truncated === shouldTruncate, "long titles elide and short titles remain intact");
     }
 
+    function tileLabel(item, expected) {
+        if (expected === undefined) {
+            const title = item.item?._hName ?? item.item?.name ?? "";
+            expected = item.item?.type === "dmenu" ? title : String(title).replace(/[\r\n\u2028\u2029]/g, " ");
+        }
+        for (let child of item.children) {
+            if (child.text === expected && child.font !== undefined && child.mapToItem !== undefined)
+                return child;
+            const nested = tileLabel(child, expected);
+            if (nested) return nested;
+        }
+        return null;
+    }
+
+    function verifyTile(tile, shouldTruncate) {
+        const label = tileLabel(tile);
+        if (!check(label !== null, "actual tile label found")) return false;
+        const top = label.mapToItem(tile, 0, 0).y;
+        return check(label.lineCount <= 2 && label.contentHeight <= label.height + 1
+                && top >= 0 && top + label.height <= tile.height
+                && label.truncated === shouldTruncate,
+                "tile title stays in two lines and elides at width " + tile.width
+                + ": lines=" + label.lineCount + ", contentHeight=" + label.contentHeight + ", height=" + label.height);
+    }
+
     Timer {
         interval: 1500
         running: true
         repeat: true
         onTriggered: {
+            const imageLabel = root.tileLabel(imageTile);
+            if (!root.check(imageLabel && imageLabel.lineCount === 1 && imageLabel.truncated
+                    && imageLabel.contentHeight <= imageLabel.height + 1,
+                    "image tile caption stays within one line and elides")) return;
+            if (!root.verifyTile(highlightedTile, true) || !root.verifyTile(plainTile, true)
+                    || !root.verifyTile(shortTile, false)) return;
             if (!root.verifyRow(highlighted, true) || !root.verifyRow(multiline, true)
                     || !root.verifyRow(shortRow, false)) return;
             if (!root.check(highlighted.item.data.content === root.fullTitle && multiline.item.name === root.multilineTitle
@@ -96,10 +166,14 @@ ShellRoot {
             const markupTitle = root.textItems(markupRow)[0];
             if (!root.check(markupTitle.textFormat === Text.RichText && markupTitle.contentHeight >= 30,
                     "explicit dmenu rich markup preserves its CSS font size")) return;
-            console.warn("LAUNCHER_TEXT_PASS: highlighted and plain long titles, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
+            if (!root.check(root.tileLabel(markupTile).textFormat === Text.RichText
+                    && root.tileLabel(markupTile).contentHeight >= 30,
+                    "explicit tile dmenu rich markup preserves CSS font size")) return;
+            console.warn("LAUNCHER_TEXT_PASS: tiles at 180px/120px and rows; highlighted and plain long titles, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
             const evidence = Quickshell.env("DMS_LAUNCHER_EVIDENCE");
+            running = false;
             if (evidence) {
-                rows.grabToImage(result => { result.saveToFile(evidence); Qt.quit(); });
+                evidenceCanvas.grabToImage(result => { result.saveToFile(evidence); Qt.quit(); });
             } else {
                 Qt.quit();
             }
