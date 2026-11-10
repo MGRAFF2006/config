@@ -27,21 +27,36 @@ SUPPORTED_FILES = {
 }
 
 
+# 2.1 changed slider/control-center internals; only carry the launcher fix forward.
+VERSION_PATCHES = {
+    SUPPORTED_VERSION: PATCHES,
+    "v2.1.2": (PATCH.with_name("launcher-text-bounds-2.1.patch"),),
+}
+VERSION_FILES = {
+    SUPPORTED_VERSION: SUPPORTED_FILES,
+    "v2.1.2": {
+        Path("Modals/DLauncherV2/TileItem.qml"): "6679c676251188b12e93b513738f0ed450348445b1f456f81d3a775f31e772d7",
+        Path("Modals/DLauncherV2/Components/LauncherRow.qml"): "b0cc430c1a42ce99e100a2a34be1febacdbf144209aab7265204de752ad22247",
+        Path("Modals/DLauncherV2/Components/LauncherTile.qml"): "6d7ae180d3a092df5f29337bd7a7677cff464df5f26ddaed955600b28e37e03e",
+    },
+}
+
+
 def digest(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def patch_digest():
-    return hashlib.sha256(b"".join(bytes.fromhex(digest(path)) for path in PATCHES)).hexdigest()
+def patch_digest(version=SUPPORTED_VERSION):
+    return hashlib.sha256(b"".join(bytes.fromhex(digest(path)) for path in VERSION_PATCHES[version])).hexdigest()
 
 
-def patched_files(root):
-    return {str(path): digest(root / path) for path in SUPPORTED_FILES}
+def patched_files(root, version=SUPPORTED_VERSION):
+    return {str(path): digest(root / path) for path in VERSION_FILES[version]}
 
 
 def stage_intact(root, manifest):
-    return manifest.get("files_sha256") == patched_files(root)
+    return manifest.get("files_sha256") == patched_files(root, manifest["version"])
 
 
 def tree_digest(root):
@@ -62,14 +77,14 @@ def stage(source, output):
         if not original.exists():
             # /run is cleared on reboot. An unchanged, verified stage remains
             # reusable without its now-absent extraction directory.
-            if previous["version"] == SUPPORTED_VERSION and previous["patch_sha256"] == patch_digest() and previous.get("dms_binary_sha256") == digest(Path(shutil.which("dms"))) and stage_intact(source, previous):
+            if previous["version"] in VERSION_PATCHES and previous["patch_sha256"] == patch_digest(previous["version"]) and previous.get("dms_binary_sha256") == digest(Path(shutil.which("dms"))) and stage_intact(source, previous):
                 return source
             raise ValueError("Pristine source is unavailable and the staged UI no longer matches. Launch built-in DMS, then stage again.")
         source = original
     version = (source / "VERSION").read_text().strip()
-    if version != SUPPORTED_VERSION or patched_files(source) != {str(path): value for path, value in SUPPORTED_FILES.items()}:
-        raise ValueError("DMS version/UI differs from the reviewed 2.0.0 source; review and update the patches before staging.")
-    source_hash, patch_hash = tree_digest(source), patch_digest()
+    if version not in VERSION_FILES or patched_files(source, version) != {str(path): value for path, value in VERSION_FILES[version].items()}:
+        raise ValueError("DMS version/UI differs from the reviewed source; review and update the patches before staging.")
+    source_hash, patch_hash = tree_digest(source), patch_digest(version)
     target = output / (version + "-" + source_hash[:12] + "-" + patch_hash[:8])
     if target.exists():
         manifest = json.loads((target / "smooth-sliders.json").read_text())
@@ -88,14 +103,14 @@ def stage(source, output):
         shutil.copytree(source, temporary, dirs_exist_ok=True)
         for directory in [temporary, *(path for path in temporary.rglob("*") if path.is_dir())]:
             directory.chmod(directory.stat().st_mode | 0o700)
-        for path in SUPPORTED_FILES:
+        for path in VERSION_FILES[version]:
             (temporary / path).chmod(0o644)
-        for patch in PATCHES:
+        for patch in VERSION_PATCHES[version]:
             subprocess.run(["patch", "--dry-run", "--batch", "-p1", "-d", str(temporary), "-i", str(patch)], check=True, capture_output=True, text=True)
             subprocess.run(["patch", "--batch", "-p1", "-d", str(temporary), "-i", str(patch)], check=True, capture_output=True, text=True)
         manifest = {
             "version": version, "source": str(source), "source_sha256": source_hash,
-            "patch_sha256": patch_hash, "files_sha256": patched_files(temporary),
+            "patch_sha256": patch_hash, "files_sha256": patched_files(temporary, version),
             "dms_binary_sha256": digest(Path(shutil.which("dms"))),
         }
         (temporary / "smooth-sliders.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -115,7 +130,7 @@ def launch(output):
             manifest = json.loads((target / "smooth-sliders.json").read_text())
             version = subprocess.check_output(["dms", "version"], text=True).strip()
             match = re.search(r"v\d+\.\d+\.\d+(?:[-+][\w.-]+)?", version)
-            if match and match[0] == manifest["version"] and manifest["patch_sha256"] == patch_digest() and digest(Path(shutil.which("dms"))) == manifest.get("dms_binary_sha256") and stage_intact(target, manifest):
+            if match and match[0] == manifest["version"] and manifest["version"] in VERSION_PATCHES and manifest["patch_sha256"] == patch_digest(manifest["version"]) and digest(Path(shutil.which("dms"))) == manifest.get("dms_binary_sha256") and stage_intact(target, manifest):
                 candidate = target
         except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
             print(f"Cannot validate DMS UI override: {error}", file=sys.stderr)
