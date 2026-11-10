@@ -21,7 +21,7 @@ def main():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
-    source = args.source_dir or Path((runtime / "dms.path").read_text().strip())
+    source = args.source_dir or Path((Path(f"/run/user/{os.getuid()}") / "dms.path").read_text().strip())
     original_hash = module.tree_digest(source)
     with tempfile.TemporaryDirectory(prefix="launcher-text-check-") as directory:
         root = Path(directory)

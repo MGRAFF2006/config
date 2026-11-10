@@ -22,7 +22,7 @@ ShellRoot {
             anchors.fill: parent
             Column {
                 id: rows
-                width: root.phase === 0 ? parent.width : 320
+                width: root.phase === 0 ? 620 : 320
                 LauncherRow {
                     id: highlighted
                     item: ({ type: "clipboard", name: root.fullTitle, subtitle: "Text - Shift+Enter to paste a very long subtitle that must also fit the row",
