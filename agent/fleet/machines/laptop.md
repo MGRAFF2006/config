@@ -1,15 +1,5 @@
 # Laptop
 
-## Looking Glass desktop controls — configured 2026-11-11
-
-The viewer now starts windowed, grabs the keyboard only on explicit Right Ctrl
-capture, and filters both Super/Windows keys from guest input. This keeps Linux
-window controls available and avoids opening Windows Start during host shortcuts.
-Close and reopen the viewer to load these defaults; the VM can keep running.
-The installed B7-829 client accepted the profile and opened windowed in isolated
-Hyprland. Automated key injection did not exercise the shortcut path successfully;
-physical Super-drag and Windows Start behavior remain to be confirmed.
-
 Portable interactive workstation. User: `humunkulud`; OS: Arch Linux;
 Tailscale identity: `laptop` (`100.66.24.27`). Use the established Tailscale name
 for connections. The local hostname alone does not identify this device.

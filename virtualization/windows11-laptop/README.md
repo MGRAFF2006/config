@@ -7,26 +7,15 @@ the VM when necessary; closing the viewer leaves Windows running. Use one
 viewer at a time and close the Virtual Machine Manager console first. Tap
 **Right Ctrl** to toggle input capture; hold it for Looking Glass's menu.
 
-The viewer starts as a normal tiled window, with a requested size of 1920 × 1200.
-Automatic guest resizing stays enabled so Windows follows the viewport. Linux
-keeps keyboard shortcuts by default, and Super/Windows-key presses are never
-forwarded to Windows. This prevents its Start menu from opening when using Linux
-shortcuts or moving the viewer.
-
-- **Super + left drag** moves the viewer; **Super + right drag** resizes it.
-- **Super + Shift + T** toggles floating; **Super + Shift + arrows** moves a tile.
-- **Super + Q** closes the viewer; Windows keeps running.
-- **Right Ctrl + F** toggles the viewer's fullscreen mode.
-- **Right Ctrl** explicitly captures/releases input for guest shortcuts such as
-  Alt+Tab. Release capture before moving the viewer. Workspace switching and
-  Super+Q remain available during capture through Hyprland's `dont_inhibit` binds.
-- **Ctrl + Esc** opens Windows Start without forwarding the Super key.
-
-Close and reopen the viewer after changing its configuration; the running VM
-does not need a restart. If Windows-key shortcuts are needed inside Windows,
-change `input:ignoreWindowsKeys` to `no` in the saved profile and reopen the
-viewer, then use Right Ctrl to capture input. That also lets Windows see the
-Super key used for Linux shortcuts, so keep `yes` for normal desktop use.
+The viewer starts fullscreen at the laptop's usual 1920 × 1200 size, matching
+the saved Windows display mode at 60 Hz. Automatic guest resizing stays enabled
+so Windows follows the viewport when the viewer is tiled or resized. The viewer
+grabs the keyboard while focused
+so Windows receives its normal shortcuts, including Alt+Tab and the Windows key.
+Hyprland's workspace bindings use `dont_inhibit` to keep workspace switching and
+moving windows between workspaces available even while the keyboard is grabbed.
+**Super + Q** also bypasses capture to close the viewer; Windows keeps running.
+**Right Ctrl + F** toggles the viewer's fullscreen mode.
 
 Virtual Machine Manager remains available for VM management and recovery:
 
