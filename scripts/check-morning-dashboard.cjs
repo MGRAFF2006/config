@@ -26,10 +26,13 @@ test("Official Garmin paths project health data, preserve missing values and iso
         new URL(url).pathname + new URL(url).search,
         options.headers.Authorization,
       ]);
-      if (url.includes("personal-api-key/token"))
-        return new Response(
-          JSON.stringify({ access_token: "private-test-token" }),
-        );
+      if (url.includes("personal-api-key/token")) {
+        assert.equal(options.method, "POST");
+        assert.notEqual(options.headers.Accept, "application/json");
+        return new Response("private-test-token\n", {
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
       if (url.includes("/hrv/")) return new Response("", { status: 503 });
       if (url.includes("/dailySleep"))
         return new Response(
