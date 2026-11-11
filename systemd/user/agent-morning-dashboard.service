@@ -1,0 +1,17 @@
+[Unit]
+Description=Private morning dashboard on homelab-dev
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node %h/Documents/config/scripts/agent-morning-dashboard.cjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
