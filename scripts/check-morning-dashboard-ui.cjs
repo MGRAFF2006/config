@@ -125,6 +125,21 @@ const assert = require("node:assert/strict");
       "stale/partial/error and untrusted markup execution checks passed",
     );
     await page.unroute("**/morning/data");
+    for (const label of ["Coverage:", "**Coverage:**", "**Coverage**:"]) {
+      await page.route("**/morning/data", (r) => r.fulfill({json: {
+        date: "2000-01-01",
+        report: `## Actions\n- First action\n- Second action\n\n${label} Calendar cache has no known sync time.\nThe next sentence is also a coverage limitation.`,
+        health: {scope: "Local only", services: {}}
+      }}));
+      await refresh();
+      const limits = page.locator("#report-limits");
+      assert.equal(await limits.getByText(/Calendar cache has no known sync time/).isVisible(), true);
+      assert.equal(await limits.getByText(/next sentence is also a coverage limitation/).isVisible(), true);
+      assert.equal(await page.locator("#priorities .more-items").getAttribute("open"), null);
+      assert.equal(await page.locator("#full-brief").getAttribute("open"), null);
+      await page.unroute("**/morning/data");
+    }
+    console.log("plain and bold coverage paragraphs stay visible outside collapsed actions");
     await page.route("**/morning/data", (r) => r.fulfill({json: {
       date: "2000-01-01", report: "## Actions\n- A retained priority",
       garmin: {state: "partial", data: {

@@ -85,7 +85,7 @@ function overview(text) {
   let current;
   for (const line of (text || "").split("\n")) {
     const heading = line.match(/^#{1,6}\s+(.+)$/) || line.match(/^\*\*([^*]+)\*\*$/);
-    const coverage = line.match(/^\*\*(Coverage:)\*\*\s*(.*)$/i);
+    const coverage = line.match(/^\s*(Coverage:|\*\*Coverage:\*\*|\*\*Coverage\*\*:)\s*(.*)$/i);
     if (heading || coverage) {
       current = { title: (heading || coverage)[1], lines: coverage ? [coverage[2]] : [] };
       sections.push(current);
