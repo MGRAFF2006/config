@@ -107,6 +107,9 @@ the page. Local same-user/root access is trusted. Tailscale Funnel is not used.
 ```sh
 node scripts/check-agent-life.cjs
 node --test scripts/check-morning-dashboard.cjs
+# Optional deployed UI check using an existing Playwright installation and Chromium:
+# MORNING_PLAYWRIGHT_MODULE=/path/to/playwright MORNING_BROWSER=/usr/bin/chromium \
+#   node scripts/check-morning-dashboard-ui.cjs
 systemctl --user status agent-morning-dashboard.service agent-morning-brief.service
 systemctl --user show agent-morning-brief.service -p Result -p ExecMainStatus
 journalctl --user -u agent-morning-dashboard.service -n 30
@@ -136,4 +139,6 @@ unsafe markup and connection failure. Screenshots remain private under
 This host's resolver did not resolve its own MagicDNS name during testing. HTTPS
 was verified with the real hostname and certificate using the current verified
 Tailscale address (`curl --resolve` / Chromium host resolver mapping), not by
-bypassing TLS. External-client DNS, reboot and live Garmin are remaining checks.
+bypassing TLS. Use `MORNING_TAILSCALE_IP` only with a freshly verified host address to repeat
+that resolver workaround in the UI check. External-client DNS, reboot and live
+Garmin are remaining checks.
