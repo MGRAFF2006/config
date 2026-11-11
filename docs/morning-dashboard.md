@@ -51,7 +51,7 @@ must provision it privately in **`~/.config/agent-life/garmin-api-key`**, owned 
 humunkulud, mode **0600**; keep its parent directory private (0700). Optional
 `GARMIN_API_KEY` overrides the file for an explicitly configured service process.
 Never put the key in source, a command argument, browser storage or a public
-systemd environment file. No key was supplied during implementation.
+systemd environment file. Keep the key in the existing Garmin Bitwarden item as a hidden `personal-api-key` field, with a separate `personal-api-key-expires` field for renewal.
 
 After provision, regenerate the brief. Keys and access tokens remain server-side;
 tokens are exchanged per collection and never persisted. No Garmin password or
@@ -67,8 +67,10 @@ Official documentation consulted 2026-11-11:
 - [Official OpenAPI schemas](https://developer.garmin.com/gc-developer-program/personal/swagger-docs/)
 
 Requests use the documented Personal API host. Token POST uses `ApiKey` auth;
-subsequent requests use a bearer `access_token`. Live token-response compatibility
-and actual wearable readings remain unverified until a key is configured.
+subsequent requests use the returned bearer token. The token endpoint returns
+**plain text**, and rejects `Accept: application/json` with HTTP 406; do not
+negotiate or parse JSON for token exchange. Data endpoints return JSON.
+Live token exchange and all four data endpoints were verified on 2026-11-11.
 The reviewed public OpenAPI v1.0.0 supplies these paths and fields:
 
 | Resource | Request | Published fields |
@@ -140,5 +142,4 @@ This host's resolver did not resolve its own MagicDNS name during testing. HTTPS
 was verified with the real hostname and certificate using the current verified
 Tailscale address (`curl --resolve` / Chromium host resolver mapping), not by
 bypassing TLS. Use `MORNING_TAILSCALE_IP` only with a freshly verified host address to repeat
-that resolver workaround in the UI check. External-client DNS, reboot and live
-Garmin are remaining checks.
+that resolver workaround in the UI check. External laptop DNS/HTTPS and live Garmin collection were subsequently verified. Reboot remains untested.

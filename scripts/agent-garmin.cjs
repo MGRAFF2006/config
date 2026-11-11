@@ -41,15 +41,19 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
       attemptedAt: now(),
       repair: "Configure a Garmin Personal API key on homelab-dev.",
     };
-  async function request(endpoint, authorization, method = "GET") {
+  async function request(endpoint, authorization, method = "GET", format = "json") {
     const response = await fetchImpl(base + endpoint, {
       method,
-      headers: { Authorization: authorization, Accept: "application/json" },
+      headers: {
+        Authorization: authorization,
+        ...(format === "json" ? { Accept: "application/json" } : {}),
+      },
       signal: AbortSignal.timeout(20000),
       redirect: "error",
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.status === 204 ? null : response.json();
+    if (response.status === 204) return null;
+    return format === "text" ? response.text() : response.json();
   }
   let token;
   try {
@@ -57,9 +61,10 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
       "/personalapitoken-service/personal-api/personal-api-key/token",
       `ApiKey ${key.trim()}`,
       "POST",
+      "text",
     );
-    token = result?.access_token;
-    if (typeof token !== "string" || !token)
+    token = typeof result === "string" ? result.trim() : "";
+    if (!token || /\s/.test(token))
       throw new Error("Unsupported token response");
   } catch {
     return {
