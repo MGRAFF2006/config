@@ -43,26 +43,27 @@ function inline(node, text) {
     else node.append(document.createTextNode(part));
   }
 }
-function report(text) {
-  $("report").replaceChildren();
+function report(text, root = $("report")) {
+  root.replaceChildren();
   let list;
   for (const line of text.split("\n")) {
     if (!line.trim()) {
       list = null;
       continue;
     }
-    const heading = line.match(/^(#{1,6})\s+(.+)/);
+    const heading = line.match(/^(#{1,6})\s+(.+)/) ||
+      line.match(/^(\*\*)([^*]+)\*\*$/);
     const bullet = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)/);
     let node;
     if (heading) {
       list = null;
       node = element(heading[1].length === 1 ? "h2" : "h3");
       inline(node, heading[2]);
-      $("report").append(node);
+      root.append(node);
     } else if (bullet) {
       if (!list) {
         list = element("ul");
-        $("report").append(list);
+        root.append(list);
       }
       node = element("li");
       inline(node, bullet[1]);
@@ -71,9 +72,60 @@ function report(text) {
       list = null;
       node = element("p");
       inline(node, line);
-      $("report").append(node);
+      root.append(node);
     }
   }
+}
+// Derive modules only from the already published, preference-filtered report.
+// Keep unknown sections in the overview and retain the full original below it.
+function overview(text) {
+  for (const id of ["priorities", "agenda", "followups", "report-limits"])
+    $(id).replaceChildren();
+  const sections = [];
+  let current;
+  for (const line of (text || "").split("\n")) {
+    const heading = line.match(/^#{1,6}\s+(.+)$/) || line.match(/^\*\*([^*]+)\*\*$/);
+    const coverage = line.match(/^\*\*(Coverage:)\*\*\s*(.*)$/i);
+    if (heading || coverage) {
+      current = { title: (heading || coverage)[1], lines: coverage ? [coverage[2]] : [] };
+      sections.push(current);
+    } else if (current) current.lines.push(line);
+    else if (line.trim()) {
+      current = { title: "From this edition", lines: [line] };
+      sections.push(current);
+    }
+  }
+  let hasPriorities = false;
+  for (const section of sections) {
+    if (!section.lines.some((line) => line.trim())) continue;
+    const title = section.title.replace(/\*\*/g, "");
+    const limits = /coverage|limitations|sources/i.test(title);
+    const priority = /actions|priorities/i.test(title);
+    const target = limits ? "report-limits" : priority ? "priorities" :
+      /today|deadlines|next seven|upcoming|calendar/i.test(title) ? "agenda" : "followups";
+    const node = element("section", undefined, limits ? "" : "report-module");
+    node.append(element("h2", title));
+    const content = element("div");
+    const lines = section.lines;
+    // Collapse extra bullets, never discard their text or contextual caveats.
+    const bullets = lines.map((line, i) => /^\s*(?:[-*]|\d+\.)\s+/.test(line) ? i : -1).filter((i) => i >= 0);
+    const visibleItems = priority ? 1 : 2;
+    if (!limits && bullets.length > visibleItems) {
+      const cut = bullets[visibleItems];
+      report(lines.slice(0, cut).join("\n"), content);
+      const rest = element("details", undefined, "more-items");
+      rest.append(element("summary", `More from this section (${bullets.length - visibleItems})`));
+      const body = element("div");
+      report(lines.slice(cut).join("\n"), body);
+      rest.append(body);
+      content.append(rest);
+    } else report(lines.join("\n"), content);
+    node.append(content);
+    $(target).append(node);
+    if (priority) hasPriorities = true;
+  }
+  if (!hasPriorities) $("priorities").append(element("h2", "Priorities"),
+    element("p", text ? "No priorities section in this edition. See the report sections below." : "No brief published. The overview will appear after a successful morning edition."));
 }
 const names = {
   mail: "Mail",
@@ -109,11 +161,10 @@ function wearable(g) {
           : "No readings available. Check the Garmin key and source health.",
       ),
     );
-    return;
   }
-  const sleep = g.data.sleep?.data,
-    daily = g.data.daily?.data,
-    hrv = g.data.hrv?.data;
+  const sleep = g?.data?.sleep?.data,
+    daily = g?.data?.daily?.data,
+    hrv = g?.data?.hrv?.data;
   const values = [
     [
       "Sleep",
@@ -141,12 +192,13 @@ function wearable(g) {
     dl,
     element(
       "p",
-      `Requested day: ${g.date}. Missing readings are shown as —. Garmin data may lag device sync.`,
+      `Requested day: ${g?.date || "unavailable"}. Missing readings are shown as —. Garmin data may lag device sync.`,
       "meta",
     ),
   );
-  for (const [name, result] of Object.entries(g.data)) {
-    root.append(
+  $("endpoint-times").replaceChildren(element("h3", "Garmin endpoint times"));
+  for (const [name, result] of Object.entries(g?.data || {})) {
+    $("endpoint-times").append(
       element(
         "p",
         `${name}: ${result.state}${result.data?.date ? `; day ${result.data.date}` : ""}; fetched ${format(result.collectedAt || result.attemptedAt)}${result.data?.observedAt ? `; observed ${result.data.observedAt}` : ""}`,
@@ -154,17 +206,21 @@ function wearable(g) {
       ),
     );
   }
-  const activities = g.data.activities?.data;
+  const activities = g?.data?.activities?.data;
+  const activityRoot = $("activities");
+  activityRoot.replaceChildren();
   if (activities?.length) {
-    root.append(element("h3", "Recent activities"));
-    for (const a of activities)
-      root.append(
+    const more = element("details", undefined, "more-items");
+    more.append(element("summary", `More activities (${Math.max(0, activities.length - 2)})`));
+    for (const [index, a] of activities.entries())
+      (index < 2 ? activityRoot : more).append(
         element(
           "p",
           `${a.name} · ${a.startTimeGMT || "Time unavailable"}${a.durationSeconds == null ? "" : ` · ${Math.round(a.durationSeconds / 60)} min`}`,
         ),
       );
-  }
+    if (activities.length > 2) activityRoot.append(more);
+  } else activityRoot.append(element("p", `No recent activities available (${g?.data?.activities?.state || g?.state || "not collected"}).`));
 }
 async function load() {
   $("refresh").disabled = true;
@@ -191,9 +247,10 @@ async function load() {
         .map((s) => names[s.name] || s.name) || [];
     $("notice").hidden = false;
     $("notice").textContent =
-      d.error ||
+      (d.error ? `${d.error} ` : "") +
       (stale ? "This is an older brief. " : "") +
-        `A morning edition, not a live agenda: times are as reported when prepared. ${failed.length ? `Limited coverage: ${failed.join(", ")}.` : ""}`;
+        `A morning edition, not a live agenda. Collected ${format(d.sourceCollectedAt)}; times are as reported when prepared. ${failed.length ? `Limited coverage: ${failed.join(", ")}.` : ""}`;
+    overview(d.report);
     if (d.report) report(d.report);
     else
       $("report").replaceChildren(
@@ -232,10 +289,11 @@ async function load() {
       $("sources").append(row);
     }
     $("health").replaceChildren(
-      element("h3", "Local service health"),
-      element("p", d.health.scope, "meta"),
+      element("p", d.health?.scope || "Local homelab-dev services only; status unavailable.", "meta"),
     );
-    for (const [unit, h] of Object.entries(d.health.services)) {
+    if (!Object.keys(d.health?.services || {}).length)
+      $("health").append(element("p", "No local service statuses available."));
+    for (const [unit, h] of Object.entries(d.health?.services || {})) {
       const row = element("div", undefined, "source");
       row.append(
         element("span", unit.replace("agent-", "")),

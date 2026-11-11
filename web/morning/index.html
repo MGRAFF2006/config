@@ -8,7 +8,7 @@
     <script src="/morning/app.js" defer></script>
   </head>
   <body>
-    <a class="skip" href="#report">Skip to your brief</a>
+    <a class="skip" href="#overview">Skip to dashboard</a>
     <div class="shell">
       <header>
         <a href="/morning/" class="wordmark">Morning</a>
@@ -19,36 +19,28 @@
       </header>
       <main>
         <div class="opening">
-          <div>
-            <p class="date" id="date">Europe/Berlin</p>
-            <h1>A little clarity<br /> for the day ahead.</h1>
-          </div>
-          <div class="edition">
-            <p id="freshness" role="status">Loading your brief…</p>
-            <button id="refresh" type="button">Refresh</button>
-          </div>
+          <div><h1>Your morning dashboard</h1><p class="date" id="date">Europe/Berlin</p></div>
+          <div class="edition"><p id="freshness" role="status">Loading your edition…</p><button id="refresh" type="button">Refresh</button></div>
         </div>
         <div id="notice" class="notice" role="status" hidden></div>
-        <div class="layout">
-          <article id="report" aria-label="Your morning brief">
-            <h2>Your brief</h2>
-            <p>Loading the latest published report from homelab-dev.</p>
-          </article>
-          <aside>
-            <section aria-labelledby="wearable-title">
-              <h2 id="wearable-title">Wearable context</h2>
-              <div id="garmin"></div>
-            </section>
-            <section aria-labelledby="photos-title">
-              <h2 id="photos-title">Photo backup</h2>
-              <div id="photos"></div>
-            </section>
-          </aside>
+        <div id="overview" tabindex="-1" aria-label="Edition overview">
+          <div id="priorities" class="priorities panel"><h2>Priorities</h2><p>Loading the published edition.</p></div>
+          <section class="wearable panel" aria-labelledby="wearable-title"><h2 id="wearable-title">Garmin readings</h2><div id="garmin"></div></section>
+          <div id="agenda" class="agenda"></div>
+          <div id="followups" class="followups"></div>
+          <div class="operations">
+
+          <section class="photos panel" aria-labelledby="photos-title"><h2 id="photos-title">Photo backup</h2><div id="photos"></div></section>
+          <section class="health panel" aria-labelledby="health-title"><h2 id="health-title">Local service health</h2><div id="health"></div></section>
+          <section class="activities panel" aria-labelledby="activities-title"><h2 id="activities-title">Recent activities</h2><div id="activities"></div></section>
+          </div>
         </div>
+        <div id="report-limits" class="report-limits"></div>
+        <details id="full-brief"><summary>Full original brief &amp; citations</summary><article id="report" aria-label="Your morning brief"><p>Loading the latest published report from homelab-dev.</p></article></details>
         <details id="coverage">
-          <summary>Sources &amp; local service health</summary>
+          <summary>Sources &amp; collection details</summary>
           <div id="sources"></div>
-          <div id="health"></div>
+          <div id="endpoint-times"></div>
         </details>
       </main>
       <footer>
