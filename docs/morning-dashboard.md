@@ -44,6 +44,18 @@ The page labels this as a morning edition, not a live agenda, and warns for
 older editions. The report's coverage paragraph preserves upstream cache and
 missing-account limitations.
 
+## Dashboard overview
+
+The compact overview uses the existing published report only. It recognizes
+Markdown and standalone bold section headings, places actions first and groups
+reported dates together. The first action and first two items of other sections
+are visible; additional items expand in place. Unknown sections remain visible,
+and the full original brief and citations are available below the overview.
+Coverage remains visible; collection details and Garmin endpoint times expand
+separately. Six Garmin readings keep missing values explicit. Photo cleanup
+pause, local service scope and failed states remain visible. Refresh only
+reloads the existing edition and local status.
+
 ## Garmin Personal API
 
 Create a key at Garmin Connect's Personal API Key settings. The parent/user
