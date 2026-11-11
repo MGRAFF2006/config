@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Morning · Mathis</title>
+    <link rel="stylesheet" href="/morning/style.css" />
+    <script src="/morning/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#report">Skip to your brief</a>
+    <div class="shell">
+      <header>
+        <a href="/morning/" class="wordmark">Morning</a>
+        <div>
+          <time id="clock"></time
+          ><span class="private">Private on your homelab</span>
+        </div>
+      </header>
+      <main>
+        <div class="opening">
+          <div>
+            <p class="date" id="date">Europe/Berlin</p>
+            <h1>A little clarity<br /> for the day ahead.</h1>
+          </div>
+          <div class="edition">
+            <p id="freshness" role="status">Loading your brief…</p>
+            <button id="refresh" type="button">Refresh</button>
+          </div>
+        </div>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <div class="layout">
+          <article id="report" aria-label="Your morning brief">
+            <h2>Your brief</h2>
+            <p>Loading the latest published report from homelab-dev.</p>
+          </article>
+          <aside>
+            <section aria-labelledby="wearable-title">
+              <h2 id="wearable-title">Wearable context</h2>
+              <div id="garmin"></div>
+            </section>
+            <section aria-labelledby="photos-title">
+              <h2 id="photos-title">Photo backup</h2>
+              <div id="photos"></div>
+            </section>
+          </aside>
+        </div>
+        <details id="coverage">
+          <summary>Sources &amp; local service health</summary>
+          <div id="sources"></div>
+          <div id="health"></div>
+        </details>
+      </main>
+      <footer>
+        <span>Runs on homelab-dev, even when your laptop is asleep.</span
+        ><span>Read-only • Europe/Berlin</span>
+      </footer>
+    </div>
+  </body>
+</html>
