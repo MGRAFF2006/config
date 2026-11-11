@@ -7,6 +7,11 @@ const assert = require("node:assert/strict");
     process.env.HOME + "/.local/state/agent-life/dashboard-verification",
     { recursive: true, mode: 0o700 },
   );
+  // mkdir's mode does not tighten a verification directory from an earlier run.
+  require("node:fs").chmodSync(
+    process.env.HOME + "/.local/state/agent-life/dashboard-verification",
+    0o700,
+  );
   const browser = await chromium.launch({
     executablePath: process.env.MORNING_BROWSER || "/usr/bin/chromium",
     headless: true,
