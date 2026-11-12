@@ -1,5 +1,15 @@
 # Laptop
 
+## PDFium AUR upgrade hold — verified 2026-11-09
+
+Pacman includes `/etc/pacman.d/pypdfium2-hold.conf` in its options, holding only
+`python-pypdfium2` at the working bundled 5.14.0-1 build. The AUR 5.15.1-1
+system-library dependency stops yay resolution without this hold. With it,
+yay reaches build selection; no upgrades were installed during verification.
+Import, a small PDF-page render and pacman's database check pass. This remains
+a workaround that defers updates to this package and its bundled PDFium.
+See [installation and recovery](../../../docs/pypdfium2-hold.md).
+
 ## Login-screen appearance — verified 2026-11-05
 
 The DMS greeter now uses live per-account settings, wallpaper/session data and
