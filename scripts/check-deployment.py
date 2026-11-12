@@ -56,6 +56,79 @@ def main():
             assert result.returncode == expected, result.stdout + result.stderr
             return result
 
+        def snapshot(directory):
+            result = {}
+            for path in directory.rglob("*"):
+                if path.is_symlink():
+                    value = ("link", str(path.readlink()))
+                elif path.is_file():
+                    value = ("file", path.read_bytes())
+                else:
+                    value = ("directory",)
+                result[str(path.relative_to(directory))] = value
+            return result
+
+        alias = root / "checkout alias"
+        alias.symlink_to(repo, target_is_directory=True)
+        shared_before = snapshot(repo)
+        for name, destination, shared in (
+            ("shared-config", ".config", "home/.config"),
+            ("shared-outside-home", ".config", "agent"),
+            ("shared-headless", ".config/mise", "headless"),
+            ("shared-units", ".config/systemd/user", "systemd/user"),
+            ("shared-ssh", ".ssh", "ssh"),
+            ("shared-backups", ".local/share/config-link-backups", "agent"),
+            ("shared-backup-parent", ".local/share", "agent"),
+        ):
+            isolated = root / name
+            isolated.mkdir()
+            (isolated / ".zshrc").write_text("original shell\n")
+            target = isolated / destination
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(repo / shared, target_is_directory=True)
+            before = snapshot(isolated)
+            safety_env = dict(env, CONFIG_LINK_HOME=str(isolated))
+            command = ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"]
+            for mode in ("--dry-run", "--check"):
+                subprocess.run(command + [mode], env=safety_env, capture_output=True, text=True)
+                assert snapshot(isolated) == before, name
+                assert snapshot(repo) == shared_before, name
+            result = subprocess.run(command, env=safety_env, capture_output=True, text=True)
+            assert result.returncode == 1, name + result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr, name
+            assert snapshot(isolated) == before, name
+            assert snapshot(repo) == shared_before, name
+
+        safety_env = dict(env, CONFIG_LINK_HOME=str(alias / "home"))
+        result = subprocess.run(
+            ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"],
+            env=safety_env, capture_output=True, text=True,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert snapshot(repo) == shared_before
+
+        # Local aliases and relative paths remain supported, including backups.
+        custom = root / "custom home"
+        custom.mkdir()
+        local_config = root / "local config"
+        local_config.mkdir()
+        local_backups = root / "local backups"
+        local_backups.mkdir()
+        (custom / ".config").symlink_to(local_config, target_is_directory=True)
+        (custom / ".local/share").mkdir(parents=True)
+        (custom / ".local/share/config-link-backups").symlink_to(local_backups, target_is_directory=True)
+        (custom / ".zshrc").write_text("local shell\n")
+        custom_env = dict(env, CONFIG_LINK_HOME="missing/../custom home")
+        command = ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"]
+        for args in ([], ["--check"], []):
+            result = subprocess.run(command + args, cwd=root, env=custom_env, capture_output=True, text=True)
+            assert result.returncode == 0, result.stdout + result.stderr
+        assert (custom / ".zshrc").resolve() == repo / "home/.zshrc"
+        backups = list(local_backups.iterdir())
+        assert len(backups) == 1
+        assert (backups[0] / ".zshrc").read_text() == "local shell\n"
+        assert snapshot(repo) == shared_before
+
         for machine in ("laptop", "desktop"):
             home = root / f"{machine} home"
             home.mkdir()
@@ -189,7 +262,7 @@ def main():
         run("link-home.sh", "laptop", expected=1)
         run("install.sh", "laptop", expected=1)
         assert list(untouched.iterdir()) == []
-    print("PASS: workstation/headless/system profiles, preview/check, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
+    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup safety, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
 
 
 if __name__ == "__main__":
