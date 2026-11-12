@@ -1,5 +1,20 @@
 # Laptop
 
+## Ladybird upgrade repair — verified 2026-11-09
+
+`ladybird 20261101-2.1` is installed from the local
+[recipe and recovery guide](../../../packages/aur-builds/ladybird/README.md).
+It replaces four deprecated Rust atomic calls with their supported replacements,
+retaining the upstream source pins and warnings-as-errors policy. The complete
+`makepkg --noextract --force` build, including compilation of the Rust test
+workspace, succeeded using the existing prepared AUR tree.
+All 37 UTF-16 string tests passed. The installed browser passed a headless page
+check with a temporary profile, exercising JavaScript, CSSOM mutation, computed
+style, node cloning and Unicode text. Pacman's installed-file and database
+checks passed. A headless screenshot rendered the expected text and styling
+despite a Fontconfig config-access warning. The native GUI and an empty-cache
+build were not exercised.
+
 ## Login-screen appearance — verified 2026-11-05
 
 The DMS greeter now uses live per-account settings, wallpaper/session data and
