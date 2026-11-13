@@ -28,6 +28,7 @@ if ! command -v rustup >/dev/null 2>&1; then
 fi
 
 bash "$repo/scripts/link-home.sh" homelab-dev
+bash "$repo/scripts/setup-homelab-t3-memory.sh"
 mise trust "$repo/headless/mise.toml"
 mise install
 mise reshim
