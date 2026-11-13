@@ -34,6 +34,8 @@ if [[ -e "$destination" || -L "$destination" ]]; then
 fi
 install -m 644 -- "$source_file" "$destination"
 systemctl daemon-reload
-systemctl reset-failed "flm@$account.service"
+if systemctl is-failed --quiet "flm@$account.service"; then
+  systemctl reset-failed "flm@$account.service"
+fi
 systemctl enable "flm@$account.service"
 systemctl restart "flm@$account.service"
