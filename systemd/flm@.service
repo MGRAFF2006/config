@@ -1,0 +1,25 @@
+[Unit]
+Description=FastFlowLM NPU inference for %i
+After=local-fs.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i
+Environment=HOME=/home/%i
+Environment=FLM_DISABLE_UPDATE_CHECK=1
+ExecStart=/usr/bin/flm serve --host 127.0.0.1 --port 52625 --backend flm --ctx-len 32768 --prefix-cache-mb 512 --pmode default --cors 0
+LimitMEMLOCK=infinity
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/.config/flm
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
