@@ -1,0 +1,35 @@
+--- a/Modals/Clipboard/ClipboardEntry.qml
++++ b/Modals/Clipboard/ClipboardEntry.qml
+@@ -179,10 +179,11 @@
+             spacing: Theme.spacingXS
+ 
+             StyledText {
++                id: typeLabel
+                 text: {
+                     switch (entryType) {
+                     case "image":
+-                        return I18n.tr("Image") + " • " + entryPreview;
++                        return I18n.tr("Image") + " • " + entryPreview.replace(/[\r\n\u2028\u2029]/g, " ");
+                     case "long_text":
+                         return I18n.tr("Long Text");
+                     default:
+@@ -193,14 +194,17 @@
+                 color: root.colorForRole(Theme.primary)
+                 font.weight: Theme.fontWeightMedium
+                 width: parent.width
++                wrapMode: Text.NoWrap
++                maximumLineCount: 1
+                 elide: Text.ElideRight
+             }
+ 
+             StyledText {
+-                text: entryPreview
++                text: entryPreview.replace(/[\r\n\u2028\u2029]/g, " ")
+                 font.pixelSize: Theme.fontSizeMedium
+                 color: root.contentColor
+                 width: parent.width
++                height: Math.min(implicitHeight, Math.max(0, root.height - typeLabel.height - contentColumn.spacing - Theme.spacingXS * 2))
+-                wrapMode: Text.WordWrap
++                wrapMode: Text.Wrap
+                 maximumLineCount: entryType === "long_text" ? 3 + Math.min(0, Theme.densityLevel) : 1
+                 elide: Text.ElideRight
