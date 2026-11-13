@@ -30,7 +30,8 @@ alsa-firmware
 # Ryzen AI XDNA2 inference (see docs/laptop-npu.md for the XRT plugin repair)
 fastflowlm # setup:ai
 xrt # setup:ai
-xrt-plugin-amdxdna # setup:ai
+# FastFlowLM pulls the plugin dependency on fresh installs. Do not explicitly
+# target it here: pacman -S would downgrade the newer repaired local package.
 
 # Wayland clipboard (KDE/Wayland)
 wl-clipboard

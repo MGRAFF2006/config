@@ -19,7 +19,7 @@ The kernel must expose `/dev/accel/accel0` through `amdxdna` and report firmware
 1.1.2.64; no reboot or kernel replacement was needed.
 
 ```bash
-sudo pacman -S --needed fastflowlm xrt xrt-plugin-amdxdna
+sudo pacman -S --needed fastflowlm xrt
 ```
 
 Arch's XRT 2.25.0 and plugin 2.21.75 packages have an ABI mismatch. Install the
