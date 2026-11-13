@@ -1,0 +1,10 @@
+{
+  "id": "laptopIdleDim",
+  "name": "Laptop idle dimming",
+  "description": "Dim the built-in panel before DMS turns it off; respect Keep Awake and media inhibitors.",
+  "version": "1.0.0",
+  "author": "humunkulud",
+  "type": "daemon",
+  "component": "./LaptopIdleDim.qml",
+  "requires_dms": ">=2.1.2"
+}
