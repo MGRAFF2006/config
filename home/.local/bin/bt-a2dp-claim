@@ -28,6 +28,8 @@ claim_a2dp() {
 }
 
 hold_lid_open() {
+  # The laptop now uses DMS's explicit Keep Awake toggle for this exception.
+  [[ "${BT_A2DP_INHIBIT_LID:-1}" == 1 ]] || return 0
   if [[ -n "$inhibitor_pid" ]] && kill -0 "$inhibitor_pid" 2>/dev/null; then
     return
   fi
