@@ -30,6 +30,31 @@ internals. The version, binary and each patched renderer must match before the
 override launches. An upgrade to another version falls back to built-in DMS
 until its source is reviewed again.
 
+The 2.1.2 clipboard-history patch also covers the bar popout and centered history
+modal, which share `ClipboardEntry.qml`. Image captions stay on one line, and
+previews wrap long words and elide within the row's remaining height. Newlines
+are flattened only for display; the stored preview, accessible name and copy,
+paste, edit and pin actions retain the original data. This renderer is included
+in the source and launch fingerprints.
+
+Run `agent-desktop run python3 scripts/check-dms-clipboard-history-text.py
+--source-dir /path/to/pristine/dms-ui` in the private agent desktop. The actual
+history rows are checked at 550/320 px, 115%/150% text scale, and normal/dense
+spacing with multiline text, unbroken URLs, image captions, literal markup and
+short text. `--unpatched` reproduces the overflow; `--evidence /absolute/path.png`
+saves a synthetic rendering. The check does not exercise the clipboard backend
+or change the human clipboard.
+
+As of 2026-11-13 the upstream history renderer is identical to the installed
+2.1.2 renderer; the separate launcher fix has landed on upstream `master`.
+The history patch can be submitted independently against
+`quickshell/Modals/Clipboard/ClipboardEntry.qml` (apply with `patch -p1 -d
+quickshell`). Upstream's [contribution policy](https://github.com/duxlabs-dev/dux-shell/blob/master/CONTRIBUTING.md#generative-ai)
+allows AI-assisted code, requires disclosure and human review, and requires
+human-written PR descriptions, issues and comments. The local config PR records
+the fix and verification; an upstream submission still needs Mathis to review
+the code and write its description.
+
 Check actual launcher components with synthetic clipboard data in the separate
 agent desktop (no physical desktop input or clipboard access):
 
