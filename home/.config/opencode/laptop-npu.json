@@ -1,0 +1,106 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": [
+    "npu"
+  ],
+  "model": "npu/qwen3.5:4b",
+  "small_model": "npu/qwen3.5:4b",
+  "share": "disabled",
+  "autoupdate": false,
+  "snapshot": false,
+  "provider": {
+    "npu": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Laptop NPU",
+      "options": {
+        "baseURL": "http://127.0.0.1:52625/v1",
+        "apiKey": "local",
+        "timeout": 300000
+      },
+      "models": {
+        "qwen3.5:4b": {
+          "name": "Qwen3.5 4B · NPU",
+          "tool_call": true,
+          "attachment": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          },
+          "options": {
+            "reasoningEffort": "none"
+          },
+          "variants": {
+            "low": {
+              "disabled": true
+            },
+            "medium": {
+              "disabled": true
+            },
+            "high": {
+              "disabled": true
+            },
+            "xhigh": {
+              "disabled": true
+            },
+            "none": {
+              "reasoningEffort": "none"
+            },
+            "thinking": {
+              "reasoningEffort": "medium"
+            }
+          }
+        },
+        "qwen3.5:9b": {
+          "name": "Qwen3.5 9B · NPU",
+          "tool_call": true,
+          "attachment": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          },
+          "options": {
+            "reasoningEffort": "none"
+          },
+          "variants": {
+            "low": {
+              "disabled": true
+            },
+            "medium": {
+              "disabled": true
+            },
+            "high": {
+              "disabled": true
+            },
+            "xhigh": {
+              "disabled": true
+            },
+            "none": {
+              "reasoningEffort": "none"
+            },
+            "thinking": {
+              "reasoningEffort": "medium"
+            }
+          }
+        }
+      }
+    }
+  }
+}

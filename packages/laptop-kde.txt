@@ -27,6 +27,11 @@ wireless_tools
 sof-firmware
 alsa-firmware
 
+# Ryzen AI XDNA2 inference (see docs/laptop-npu.md for the XRT plugin repair)
+fastflowlm # setup:ai
+xrt # setup:ai
+xrt-plugin-amdxdna # setup:ai
+
 # Wayland clipboard (KDE/Wayland)
 wl-clipboard
 

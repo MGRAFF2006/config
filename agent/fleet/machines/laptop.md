@@ -82,8 +82,8 @@ for connections. The local hostname alone does not identify this device.
 
 Ryzen AI 7 350, Radeon 860M integrated GPU, about 30 GiB usable RAM. Prefer it for
 interactive coding, research, review, and light checks. Battery, heat, travel,
-and suspension matter more than its memory capacity. There is no locally
-configured model runtime in this kit; cloud coding agents use their provider.
+and suspension matter more than its memory capacity. Its XDNA2 NPU runs local
+models through FastFlowLM; see [the setup and operation guide](../../../docs/laptop-npu.md).
 
 Verified on 2026-10-02: current session is Hyprland on Wayland. KDE Plasma is
 also part of the documented setup; do not assume which session is running.
