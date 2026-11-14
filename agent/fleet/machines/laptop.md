@@ -1,5 +1,23 @@
 # Laptop
 
+## Howdy login and lock — verified 2026-11-14
+
+The laptop's greetd and dankshell PAM stacks now try Howdy first, then password.
+DMS 2.1 explicitly selects `/etc/pam.d/dankshell` via `lockPamPath`; its
+externally-managed default otherwise selects the distro `login` stack. The
+guarded shell patch starts one face attempt when the secured screen wakes,
+retains password fallback and retries after display-off/sleep when no secret was
+typed. Sudo, camera configuration and enrolled faces are unchanged.
+
+The installed PAM files pass libpam control-flow checks for face success,
+password fallback, failed authentication and prerequisite guards. Fifteen
+headless checks of the production lock controller pass, including wake retry
+and its stalled-PAM watchdog. The staged controller is loaded in the current
+session; physical lock/unlock with the final settings remains untested.
+System-file backups: `/var/backups/howdy-login-lock-20261114-163020/`.
+Face-only login leaves the encrypted KWallet locked and can prompt separately.
+See [authentication setup](../../../docs/hyprland-dms.md#keyring--howdy).
+
 ## Quick-access detail pages — verified 2026-11-04
 
 The guarded DMS 2.0 UI override replaces the control-center tile grid with

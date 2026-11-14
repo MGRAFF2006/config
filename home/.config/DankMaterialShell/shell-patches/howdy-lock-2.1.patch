@@ -1,0 +1,43 @@
+--- a/Modules/Lock/Pam.qml
++++ b/Modules/Lock/Pam.qml
+@@ -16,0 +17,35 @@
++
++    // One attempt when the secured screen wakes. Leave the password prompt
++    // waiting after a timeout; only retry after another sleep/display-off cycle.
++    property bool howdyAutoStarted: false
++    readonly property bool howdyScreenInactive: SessionService.preparingForSleep
++        || SessionService.sleepRequested || IdleService.monitorsOff
++    readonly property bool howdyAutoReady: root.lockSecured
++        && !AdminPolicy.disableCustomLockPam
++        && SettingsData.lockPamExternallyManaged
++        && SettingsData.lockPamPath === "/etc/pam.d/dankshell"
++        && root.customPamActive
++        && /(?:^|\n)\s*auth\s+[^\n]*\bpam_howdy\.so\b/.test(customPamWatcher.text())
++        && !root.unlockInProgress && !root.u2fPending
++        && !root.howdyScreenInactive
++
++    onHowdyScreenInactiveChanged: {
++        // Preserve any submitted/typed password and a pending second factor.
++        if (howdyScreenInactive && howdyAutoStarted && !root.buffer
++                && !root.responseSubmitted && !root.unlockInProgress && !root.u2fPending) {
++            passwd.abort();
++            root.howdyAutoStarted = false;
++        }
++    }
++
++    onHowdyAutoReadyChanged: {
++        if (howdyAutoReady && !howdyAutoStarted && !passwd.active) {
++            // The lock transition also resets PAM; start after it completes.
++            Qt.callLater(() => {
++                if (!root.howdyAutoReady || root.howdyAutoStarted || passwd.active)
++                    return;
++                root.howdyAutoStarted = true;
++                passwd.start();
++            });
++        }
++    }
+@@ -304 +339 @@
+-                if (root.responseSubmitted)
++                if (root.responseSubmitted || root.howdyAutoStarted)
+@@ -653,0 +689 @@
++            root.howdyAutoStarted = false;
