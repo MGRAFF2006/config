@@ -194,14 +194,22 @@ PAM (managed under `system/pam.d/`, install with
 
 | Stack | Role |
 |-------|------|
-| `greetd` | Password/PIN first, Howdy fallback; `pam_kwallet5` + `ksecretd` |
-| `sddm` | Same order for Plasma (fixes “wallet password again” after login) |
-| `dankshell` | Same on DMS lock (`lockPamExternallyManaged=true`) |
+| `greetd` | Howdy first, password/PIN fallback; `pam_kwallet5` + `ksecretd` |
+| `sddm` | Password first, Howdy fallback for Plasma |
+| `dankshell` | Howdy first, password/PIN fallback on DMS lock |
 | `sudo` | Howdy first, password fallback (terminal) |
 | `polkit-1` | Password-only for the graphical DMS elevation prompt |
 
-Greeter/lock: correct PIN skips the camera. Terminal `sudo`: camera first. Graphical polkit prompts remain password-only.
+Greeter/lock and terminal `sudo`: camera first. Graphical polkit prompts remain password-only.
 Set `greeterPamExternallyManaged=true` so DMS does not rewrite `/etc/pam.d/greetd`.
+For DMS 2.1, keep `lockPamExternallyManaged=true` and explicitly set
+`lockPamPath=/etc/pam.d/dankshell`; otherwise it selects the distro `login` stack.
+The guarded `howdy-lock-2.1.patch` starts the managed Howdy stack once when the
+secured lock screen becomes active, and retries after a display-off/sleep cycle
+when no password was typed. After a timeout, the password prompt stays usable.
+Stage it through `python scripts/configure-dms-smooth-sliders.py --apply` and
+use the staged UI on the next shell start. Unknown DMS versions use the packaged
+UI and require reviewing the patch again; manual Submit still starts PAM.
 
 **Typed login password** unlocks `kdewallet` only if the wallet password equals
 the login password. **Face-only login** cannot unlock the wallet (no AUTHTOK) —

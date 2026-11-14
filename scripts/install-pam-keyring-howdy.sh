@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install-pam-keyring-howdy.sh — greetd/SDDM/DMS-lock PAM for Howdy + KWallet unlock
 #
-# Password/PIN first, Howdy fallback for login/lock; Howdy first for sudo.
+# Howdy first for greetd, DMS lock and sudo; SDDM retains password first.
 # Polkit stays password-only because graphical agents do not reliably handle
 # Howdy's separate PAM conversation before their password prompt.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
@@ -100,6 +100,9 @@ for key in ("greeterPamExternallyManaged", "lockPamExternallyManaged"):
     if data.get(key) is not True:
         data[key] = True
         changed = True
+if data.get("lockPamPath") != "/etc/pam.d/dankshell":
+    data["lockPamPath"] = "/etc/pam.d/dankshell"
+    changed = True
 if changed:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
