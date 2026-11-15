@@ -1,8 +1,9 @@
 #%PAM-1.0
 # Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
-# Keep graphical authorization password-only. DMS's Polkit agent cannot
-# reliably handle Howdy's separate conversation before the password prompt.
+# DMS 2.1 supports face authentication followed by the normal password prompt.
+# The polkit helper also needs the managed camera-only sandbox drop-in.
 
+auth       sufficient                   pam_howdy.so
 auth       include                      system-auth
 account    include                      system-auth
 password   include                      system-auth

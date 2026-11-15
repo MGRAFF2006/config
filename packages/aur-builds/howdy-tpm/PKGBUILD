@@ -1,0 +1,34 @@
+# Pinned upstream PAM token supplier with account/service and timeout safeguards.
+pkgname=howdy-tpm
+pkgver=0.1.r6.g6483553
+pkgrel=1
+pkgdesc='TPM-protected KWallet password handoff after successful Howdy login'
+arch=('x86_64')
+url='https://github.com/jibsta210/howdy-tpm'
+license=('MIT')
+depends=('pam' 'systemd' 'coreutils')
+_commit=6483553f7f7b163b5790f9c763f6fa1e08624ddd
+source=("howdy-tpm-${_commit}.tar.gz::https://github.com/jibsta210/howdy-tpm/archive/${_commit}.tar.gz"
+        'hardening.patch')
+sha256sums=('cf258a4658b7dca30697151912258fdb2aae98ef8de9da7ea1047d264140b5b0'
+            '0fc998ad1bd9984543f07dbe7ee65c791c6b6b6a6a9f56aa98658f38b2591a15')
+
+prepare() {
+  cd "howdy-tpm-${_commit}"
+  patch --fuzz=0 -p1 -i "${srcdir}/hardening.patch"
+}
+
+build() {
+  cd "howdy-tpm-${_commit}"
+  cc ${CFLAGS} -D_GNU_SOURCE -Wall -Wextra -Werror -fPIC -shared \
+    ${LDFLAGS} -o pam_howdy_tpm.so src/pam_howdy_tpm.c -lpam
+}
+
+package() {
+  cd "howdy-tpm-${_commit}"
+  install -Dm755 pam_howdy_tpm.so "${pkgdir}/usr/lib/security/pam_howdy_tpm.so"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/UPSTREAM.md"
+  install -dm700 "${pkgdir}/etc/howdy-tpm"
+  # Enrollment is managed by config/scripts/install-howdy-kwallet-tpm.py.
+}

@@ -198,9 +198,13 @@ PAM (managed under `system/pam.d/`, install with
 | `sddm` | Password first, Howdy fallback for Plasma |
 | `dankshell` | Howdy first, password/PIN fallback on DMS lock |
 | `sudo` | Howdy first, password fallback (terminal) |
-| `polkit-1` | Password-only for the graphical DMS elevation prompt |
+| `polkit-1` | Howdy first, normal system password fallback; camera-only helper sandbox access |
 
-Greeter/lock and terminal `sudo`: camera first. Graphical polkit prompts remain password-only.
+Greeter/lock, terminal `sudo` and graphical polkit prompts try the camera first.
+`scripts/install-howdy-polkit.py` installs polkit PAM and the matching camera-only
+helper drop-in together. The helper keeps its private `/dev`, closed device
+policy and all other vendor sandbox restrictions. No wallet password or TPM
+access is supplied to polkit.
 Set `greeterPamExternallyManaged=true` so DMS does not rewrite `/etc/pam.d/greetd`.
 For DMS 2.1, keep `lockPamExternallyManaged=true` and explicitly set
 `lockPamPath=/etc/pam.d/dankshell`; otherwise it selects the distro `login` stack.
@@ -212,8 +216,12 @@ use the staged UI on the next shell start. Unknown DMS versions use the packaged
 UI and require reviewing the patch again; manual Submit still starts PAM.
 
 **Typed login password** unlocks `kdewallet` only if the wallet password equals
-the login password. **Face-only login** cannot unlock the wallet (no AUTHTOK) —
-blank wallet password or a TPM bridge (howdy-tpm) if you want zero prompts.
+the login password. **Face-only login** needs the optional account-bound TPM
+bridge to supply that token. Build the local `howdy-tpm` package, then enroll
+through `scripts/install-howdy-kwallet-tpm.py`. The wallet remains encrypted;
+missing/unavailable credentials retain manual password fallback. See
+[setup, security tradeoff and recovery](../packages/aur-builds/howdy-tpm/README.md).
+This does not unlock independent application vaults such as Bitwarden.
 
 Re-apply PAM after greeter/package changes:
 
