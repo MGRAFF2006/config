@@ -7,6 +7,7 @@ import configparser
 from datetime import datetime
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -126,9 +127,31 @@ def configure_desktop_defaults() -> None:
     print("defaults: Nautilus for folders and Zen for web links; start DMS to generate application colors")
 
 
+def configure_onlyoffice() -> None:
+    if not shutil.which("onlyoffice-desktopeditors"):
+        return
+    # The custom frame reserves invisible shadow padding inside Hyprland tiles.
+    settings = CONFIG_HOME / "onlyoffice/DesktopEditors.conf"
+    content = settings.read_text() if settings.exists() else ""
+    general = re.search(r"(?ms)^\[General\]\n(.*?)(?=^\[|\Z)", content)
+    if general:
+        section, count = re.subn(r"(?m)^titlebar=[^\n]*", "titlebar=system", general[1])
+        if not count:
+            section = "titlebar=system\n" + section
+        updated = content[:general.start(1)] + section + content[general.end(1):]
+    else:
+        updated = content.rstrip("\n") + "\n[General]\ntitlebar=system\n"
+    # Edit just this key: KDE's INI writer rewrites QSettings' geometry escapes.
+    if updated != content:
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(updated)
+    print("OnlyOffice: system window frame enabled; reopen OnlyOffice to remove the extra window gaps.")
+
+
 def main() -> int:
     configure_zen()
     configure_desktop_defaults()
+    configure_onlyoffice()
     print("Restart Zen once to load its managed theme and performance preferences.")
     return 0
 

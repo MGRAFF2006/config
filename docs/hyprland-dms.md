@@ -166,6 +166,14 @@ Restart Zen after first applying the integration or after changing managed
 preferences. DMS color changes are picked up from the generated stylesheet on
 the next Zen restart.
 
+When OnlyOffice is installed, this integration also sets its saved
+`General/titlebar=system` preference. Its custom frame includes invisible shadow
+padding that leaves a large gap inside a Hyprland tile. Save any documents and
+fully close and reopen OnlyOffice to apply the change. Revert with
+`onlyoffice-desktopeditors --custom-title-bar` after closing it; the next setup
+application restores the system frame. See the
+[OnlyOffice window-frame flags](https://api.onlyoffice.com/docs/desktop-editors/usage-api/command-line-flags/).
+
 WiFi: prefer **system** NetworkManager secrets (not KWallet). Helper:
 `nm-wifi-system-secret "SSID"` for networks that still prompt.
 
