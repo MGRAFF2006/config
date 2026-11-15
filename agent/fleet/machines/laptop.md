@@ -1,5 +1,14 @@
 # Laptop
 
+## Boot/storage protection — audited 2026-11-15
+
+Mathis chose encrypted storage and authenticated boot before TPM-based KWallet
+auto-unlock. Current root/home are unencrypted Btrfs, Secure Boot is disabled,
+and no verified complete laptop backup or booted recovery media is available.
+The homelab mirror has candidate backup capacity. See the
+[verified inventory, migration proposal and recovery prerequisites](../LAPTOP-PROTECTION.md).
+No disk, boot, firmware or wallet-enrollment changes have been made.
+
 ## Howdy login and lock — verified 2026-11-14
 
 The laptop's greetd and dankshell PAM stacks now try Howdy first, then password.
