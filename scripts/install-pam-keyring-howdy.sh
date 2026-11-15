@@ -2,8 +2,7 @@
 # install-pam-keyring-howdy.sh — greetd/SDDM/DMS-lock PAM for Howdy + KWallet unlock
 #
 # Howdy first for greetd, DMS lock and sudo; SDDM retains password first.
-# Polkit stays password-only because graphical agents do not reliably handle
-# Howdy's separate PAM conversation before their password prompt.
+# DMS 2.1 supports face-first polkit; its socket helper needs camera-only access.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
 #
 # Needs sudo. Idempotent.
@@ -66,7 +65,7 @@ install_pam greetd
 install_pam sddm
 install_pam dankshell
 install_pam sudo
-install_pam polkit-1
+# The polkit installer updates its PAM and camera sandbox exception together.
 
 # Keep distro system-auth Howdy stub disabled — sudo owns face auth explicitly.
 # Re-enabling it there would prompt for a password before the camera.
@@ -83,6 +82,9 @@ if [[ -f "$howdy_cfg" ]]; then
   install -m 644 "$howdy_cfg" /etc/howdy/config.ini
   ok "Installed /etc/howdy/config.ini"
 fi
+
+# Preserve polkit's private /dev; expose only the configured capture device.
+python3 "$repo_root/scripts/install-howdy-polkit.py" --apply
 
 # Stop DMS greeter from rewriting /etc/pam.d/greetd (would drop Howdy).
 dms_settings="${SUDO_USER:+/home/$SUDO_USER}/.config/DankMaterialShell/settings.json"
@@ -116,5 +118,5 @@ fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"
 warn "Wallet unlock on typed password requires kdewallet password == login password."
-warn "Face-only login cannot unlock KWallet without a sealed secret (blank wallet or howdy-tpm)."
+warn "Face-only KWallet unlock requires separate TPM enrollment via install-howdy-kwallet-tpm.py."
 ok "Done. Fully log out and back in for greetd/session PAM to apply."
