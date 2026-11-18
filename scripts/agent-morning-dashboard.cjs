@@ -5,6 +5,10 @@ const path = require("node:path");
 const os = require("node:os");
 const http = require("node:http");
 const { photosStatus, localHealth } = require("./agent-life-status.cjs");
+const {
+  projectCalendar,
+  projectGithub,
+} = require("./agent-dashboard-sources.cjs");
 const state =
   process.env.MORNING_STATE_DIR ||
   path.join(os.homedir(), ".local/state/agent-life");
@@ -12,24 +16,167 @@ const assets = path.join(__dirname, "../web/morning");
 const iso = () => new Date().toISOString();
 function sanitizeReport(text) {
   return text
-    .replace(/https?:\/\/[^\s<>"')\]]+/g, (raw) => {
+    .replace(/https?:\/\/[^\s<>"')\]]+/gi, (raw) => {
       try {
         const url = new URL(raw);
         if (/auth|token|login|verify|unsubscribe|confirm/i.test(url.pathname))
           return "[private link omitted]";
-        for (const name of [...url.searchParams.keys()])
-          if (
-            !["id", "d"].includes(name) ||
-            !/^\d+$/.test(url.searchParams.get(name))
+        if (url.protocol !== "https:") return "[private link omitted]";
+        if (
+          url.hostname === "github.com" &&
+          /^(?:\/[\w.-]+\/[\w.-]+\/(?:pull|issues|projects)\/\d+|\/(?:users|orgs)\/[\w.-]+\/projects\/\d+|\/[\w.-]+\/[\w.-]+\/commit\/[0-9a-f]{40})$/.test(
+            url.pathname,
           )
-            url.searchParams.delete(name);
-        url.hash = "";
-        return url.toString();
+        )
+          return url.origin + url.pathname;
+        if (
+          url.hostname === "moodle.tu-dortmund.de" &&
+          [
+            "/course/view.php",
+            "/mod/assign/view.php",
+            "/mod/forum/discuss.php",
+            "/mod/forum/view.php",
+            "/mod/choice/view.php",
+          ].includes(url.pathname)
+        ) {
+          const query = new URLSearchParams();
+          for (const name of ["id", "d"])
+            if (/^\d+$/.test(url.searchParams.get(name) || ""))
+              query.set(name, url.searchParams.get(name));
+          return url.origin + url.pathname + (query.size ? "?" + query : "");
+        }
+        // Unknown hosts may carry signed credentials in path segments as well as queries.
+        return "[private link omitted]";
       } catch {
         return "[link omitted]";
       }
     })
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      "[private identifier omitted]",
+    )
     .replace(/\b(?:Bearer|ApiKey)\s+\S+/gi, "[credential omitted]");
+}
+// Re-project at publication: snapshots are private inputs, not trusted public schemas.
+function projectGarmin(input) {
+  const stateOf = (value) =>
+    ["ok", "partial", "no_data", "unavailable", "not_connected"].includes(value)
+      ? value
+      : "unavailable";
+  const dateOf = (value) => {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+      return null;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === value
+      ? value
+      : null;
+  };
+  const timeOf = (value) => {
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    )
+      return null;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  };
+  const rangeOf = (value) => {
+    const start = dateOf(value?.start),
+      end = dateOf(value?.end);
+    return start && end && start <= end ? { start, end } : null;
+  };
+  const numberOf = (value) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? value
+      : null;
+  const readings = (value, fields) =>
+    Object.fromEntries([
+      ["date", dateOf(value?.date)],
+      ["observedAt", timeOf(value?.observedAt)],
+      ...fields.map((field) => [field, numberOf(value?.[field])]),
+    ]);
+  const fields = {
+    sleep: ["seconds", "score"],
+    daily: [
+      "steps",
+      "restingHeartRate",
+      "bodyBattery",
+      "distanceMeters",
+      "activeKilocalories",
+      "stressAverage",
+      "moderateIntensityMinutes",
+      "vigorousIntensityMinutes",
+      "floorsAscended",
+    ],
+    hrv: ["overnightAverage"],
+  };
+  const data = {};
+  for (const name of [
+    "sleep",
+    "daily",
+    "hrv",
+    "activities",
+    "sleepHistory",
+    "stepsHistory",
+  ]) {
+    const endpoint = input?.data?.[name];
+    if (!endpoint || typeof endpoint !== "object") continue;
+    let projected;
+    if (name === "activities")
+      projected = Array.isArray(endpoint.data)
+        ? endpoint.data.slice(0, 100).map((activity) => ({
+            name:
+              typeof activity?.name === "string"
+                ? sanitizeReport(activity.name).slice(0, 150)
+                : "Activity",
+            date: dateOf(activity?.date),
+            startTimeGMT: timeOf(activity?.startTimeGMT),
+            type:
+              typeof activity?.type === "string" &&
+              /^[a-z_]{1,60}$/.test(activity.type)
+                ? activity.type
+                : null,
+            durationSeconds: numberOf(activity?.durationSeconds),
+            distanceMeters: numberOf(activity?.distanceMeters),
+            averageHeartRate: numberOf(activity?.averageHeartRate),
+          }))
+        : [];
+    else if (name.endsWith("History"))
+      projected = Array.isArray(endpoint.data)
+        ? endpoint.data
+            .slice(0, 14)
+            .map((value) =>
+              readings(
+                value,
+                name === "sleepHistory"
+                  ? fields.sleep
+                  : ["steps", "distanceMeters"],
+              ),
+            )
+        : [];
+    else projected = readings(endpoint.data, fields[name]);
+    data[name] = {
+      state: stateOf(endpoint.state),
+      source: "Garmin Personal API",
+      requestedAt: timeOf(endpoint.requestedAt),
+      collectedAt: timeOf(endpoint.collectedAt),
+      attemptedAt: timeOf(endpoint.attemptedAt),
+      requestedRange: rangeOf(endpoint.requestedRange),
+      observedRange: rangeOf(endpoint.observedRange),
+      truncated: endpoint.truncated === true,
+      data: projected,
+    };
+  }
+  return {
+    state: stateOf(input?.state || "not_connected"),
+    date: dateOf(input?.date),
+    collectedAt: timeOf(input?.collectedAt),
+    attemptedAt: timeOf(input?.attemptedAt),
+    activityRange: rangeOf(input?.activityRange),
+    historyRange: rangeOf(input?.historyRange),
+    data,
+  };
 }
 async function publish() {
   const reportPath = path.join(state, "latest-brief.md");
@@ -40,26 +187,81 @@ async function publish() {
   ]);
   if (!report.trim() || report.length > 150000)
     throw new Error("Brief is empty or too large");
-  const sources = Object.entries(snapshot.sources || {}).map(
-    ([name, source]) => ({
+  const sourceNames = [
+    "mail",
+    "universityMail",
+    "localCalendar",
+    "reviewedAttachments",
+    "github",
+    "garmin",
+    "photoMigration",
+    "localHealth",
+  ];
+  const sourceStates = [
+    "ok",
+    "partial",
+    "unavailable",
+    "not_connected",
+    "no_data",
+  ];
+  const timestamp = (value) =>
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T/.test(value) &&
+    Number.isFinite(Date.parse(value))
+      ? new Date(value).toISOString()
+      : null;
+  const sources = Object.entries(snapshot.sources || {})
+    .filter(([name]) => sourceNames.includes(name))
+    .map(([name, source]) => ({
       name,
-      state: source.state,
-      collectedAt: source.collectedAt || null,
-      attemptedAt: source.attemptedAt || null,
-    }),
-  );
+      state: sourceStates.includes(source?.state)
+        ? source.state
+        : "unavailable",
+      collectedAt: timestamp(source?.collectedAt),
+      attemptedAt: timestamp(source?.attemptedAt),
+    }));
+  let preferences = "";
+  try {
+    preferences = await fs.readFile(
+      path.join(state, "brief-preferences.txt"),
+      "utf8",
+    );
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   const data = {
     publishedAt: iso(),
     report: sanitizeReport(report),
     reportUpdatedAt: stat.mtime.toISOString(),
-    sourceCollectedAt: snapshot.collectedAt,
-    date: snapshot.date,
+    sourceCollectedAt: timestamp(snapshot.collectedAt),
+    date:
+      typeof snapshot.date === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(snapshot.date) &&
+      Number.isFinite(Date.parse(snapshot.date))
+        ? snapshot.date
+        : null,
     timeZone: "Europe/Berlin",
     sources,
-    garmin: snapshot.sources?.garmin || { state: "not_connected" },
-    photos: snapshot.sources?.photoMigration?.data || null,
+    garmin: projectGarmin(snapshot.sources?.garmin),
+    photos: snapshot.sources?.photoMigration?.data
+      ? {
+          updatedAt: timestamp(snapshot.sources.photoMigration.data.updatedAt),
+          verifiedAt: timestamp(
+            snapshot.sources.photoMigration.data.verifiedAt,
+          ),
+          backupVerified:
+            snapshot.sources.photoMigration.data.backupVerified === true,
+          cleanupPaused:
+            snapshot.sources.photoMigration.data.cleanupPaused === true,
+          cloudMediaChanged:
+            snapshot.sources.photoMigration.data.cloudMediaChanged === true,
+          subscriptionChanged:
+            snapshot.sources.photoMigration.data.subscriptionChanged === true,
+        }
+      : null,
+    calendar: projectCalendar(snapshot.sources?.localCalendar, preferences),
+    github: projectGithub(snapshot.sources?.github),
   };
-  // Garmin collector already projects only allowlisted health fields, without profile IDs or tokens.
   const target = path.join(state, "dashboard.json");
   await fs.writeFile(`${target}.pending`, JSON.stringify(data), {
     mode: 0o600,
@@ -123,7 +325,7 @@ function createServer() {
     }
   });
 }
-module.exports = { publish, createServer, sanitizeReport };
+module.exports = { publish, createServer, sanitizeReport, projectGarmin };
 if (require.main === module) {
   process.umask(0o077);
   if (process.argv[2] === "publish")

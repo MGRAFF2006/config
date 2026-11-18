@@ -19,24 +19,103 @@
       </header>
       <main>
         <div class="opening">
-          <div><h1>Your morning dashboard</h1><p class="date" id="date">Europe/Berlin</p></div>
-          <div class="edition"><p id="freshness" role="status">Loading your edition…</p><button id="refresh" type="button">Refresh</button></div>
+          <div>
+            <h1>Your morning dashboard</h1>
+            <p class="date" id="date">Europe/Berlin</p>
+          </div>
+          <div class="edition">
+            <p id="freshness" role="status">Loading your edition…</p>
+            <button id="refresh" type="button">Refresh</button>
+          </div>
         </div>
         <div id="notice" class="notice" role="status" hidden></div>
-        <div id="overview" tabindex="-1" aria-label="Edition overview">
-          <div id="priorities" class="priorities panel"><h2>Priorities</h2><p>Loading the published edition.</p></div>
-          <section class="wearable panel" aria-labelledby="wearable-title"><h2 id="wearable-title">Garmin readings</h2><div id="garmin"></div></section>
-          <div id="agenda" class="agenda"></div>
-          <div id="followups" class="followups"></div>
-          <div class="operations">
-
-          <section class="photos panel" aria-labelledby="photos-title"><h2 id="photos-title">Photo backup</h2><div id="photos"></div></section>
-          <section class="health panel" aria-labelledby="health-title"><h2 id="health-title">Local service health</h2><div id="health"></div></section>
-          <section class="activities panel" aria-labelledby="activities-title"><h2 id="activities-title">Recent activities</h2><div id="activities"></div></section>
+        <div id="overview" tabindex="-1" aria-label="Calendar and daily brief">
+          <section
+            class="calendar-panel panel"
+            aria-labelledby="calendar-title"
+          >
+            <div class="calendar-heading">
+              <h2 id="calendar-title">Your calendar</h2>
+              <div class="view-switch" aria-label="Calendar view">
+                <button id="week-view" type="button" aria-pressed="true">
+                  Week</button
+                ><button id="month-view" type="button" aria-pressed="false">
+                  Month
+                </button>
+              </div>
+            </div>
+            <div class="calendar-navigation">
+              <div>
+                <button id="previous" aria-label="Previous week" type="button">
+                  ‹</button
+                ><button id="today" type="button">Today</button
+                ><button id="next" aria-label="Next week" type="button">
+                  ›
+                </button>
+              </div>
+              <h3 id="calendar-period" aria-live="polite"></h3>
+              <label class="date-picker"
+                >Go to date <input id="go-date" type="date"
+              /></label>
+            </div>
+            <fieldset id="calendar-filters">
+              <legend>Show sources</legend>
+            </fieldset>
+            <p id="calendar-coverage" class="meta"></p>
+            <div id="calendar-grid" aria-label="Calendar days"></div>
+            <p class="meta">
+              Shared calendars are context, not your attendance. Garmin entries
+              are recorded history.
+            </p>
+          </section>
+          <aside class="daily-rail">
+            <section class="panel daily-brief">
+              <h2>Today’s brief</h2>
+              <div id="priorities"></div>
+              <p>
+                <a href="#full-brief" id="read-brief"
+                  >Read full brief &amp; citations</a
+                >
+              </p>
+            </section>
+            <section
+              class="panel selected-panel"
+              aria-labelledby="selected-date"
+            >
+              <h2 id="selected-date">Selected day</h2>
+              <div id="selected-agenda" aria-live="polite"></div>
+            </section>
+          </aside>
+          <div class="supporting">
+            <section class="wearable panel" aria-labelledby="wearable-title">
+              <h2 id="wearable-title">Garmin readings</h2>
+              <div id="garmin"></div>
+              <h3>Recent recorded activities</h3>
+              <div id="activities"></div>
+              <div id="garmin-history"></div>
+            </section>
+            <section class="panel">
+              <h2>GitHub</h2>
+              <div id="github"></div>
+            </section>
+            <section class="panel">
+              <h2>Photo backup &amp; services</h2>
+              <div id="photos"></div>
+              <div id="health"></div>
+            </section>
+          </div>
+          <div class="report-extras">
+            <div id="agenda"></div>
+            <div id="followups"></div>
           </div>
         </div>
         <div id="report-limits" class="report-limits"></div>
-        <details id="full-brief"><summary>Full original brief &amp; citations</summary><article id="report" aria-label="Your morning brief"><p>Loading the latest published report from homelab-dev.</p></article></details>
+        <details id="full-brief">
+          <summary>Full original brief &amp; citations</summary>
+          <article id="report" aria-label="Your morning brief">
+            <p>Loading the latest published report from homelab-dev.</p>
+          </article>
+        </details>
         <details id="coverage">
           <summary>Sources &amp; collection details</summary>
           <div id="sources"></div>

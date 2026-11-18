@@ -8,10 +8,65 @@ const number = (value) =>
   typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : null;
+function day(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+    ? value
+    : null;
+}
+function timestamp(value, gmt = false) {
+  if (value == null) return null;
+  if (typeof value === "string" && /^\d{13}$/.test(value))
+    value = Number(value);
+  if (
+    typeof value === "string" &&
+    gmt &&
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+  )
+    value = value.replace(" ", "T") + "Z";
+  if (
+    typeof value !== "number" &&
+    !(
+      typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    )
+  )
+    return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+const berlinDay = (value) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(
+    new Date(value),
+  );
+const offsetDay = (date, amount) =>
+  new Date(Date.parse(date + "T12:00:00Z") + amount * 86400000)
+    .toISOString()
+    .slice(0, 10);
+const safeName = (value) =>
+  typeof value === "string"
+    ? value
+        .replace(/https?:\/\/\S+/gi, "[link withheld]")
+        .replace(
+          /[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/gi,
+          "[identifier withheld]",
+        )
+        .slice(0, 150)
+    : "Activity";
+const projectSleep = (raw) => ({
+  date: day(raw?.calendarDate),
+  seconds: number(raw?.sleepTimeSeconds),
+  score: number(raw?.sleepScores?.overall?.value),
+  observedAt: timestamp(raw?.sleepEndTimestampGMT),
+});
 async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
   date ||= new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Berlin",
   }).format(new Date());
+  if (!day(date)) throw new Error("Invalid Garmin requested date");
   if (key === undefined) {
     key = process.env.GARMIN_API_KEY;
     if (!key) {
@@ -41,7 +96,12 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
       attemptedAt: now(),
       repair: "Configure a Garmin Personal API key on homelab-dev.",
     };
-  async function request(endpoint, authorization, method = "GET", format = "json") {
+  async function request(
+    endpoint,
+    authorization,
+    method = "GET",
+    format = "json",
+  ) {
     const response = await fetchImpl(base + endpoint, {
       method,
       headers: {
@@ -74,54 +134,99 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
         "Garmin token exchange failed. Check key expiry and official API availability.",
     };
   }
+  const activityRange = { start: offsetDay(date, -30), end: date };
+  const historyRange = { start: offsetDay(date, -13), end: date };
+  // Official Personal API Swagger verified 2026-11-18:
+  // https://developer.garmin.com/gc-developer-program/personal/swagger-docs/
+  // Bounded six data requests; no FIT files, GPS traces, account IDs or notes.
   const endpoints = {
     sleep: `/sleep-service/sleep/dailySleep?date=${date}`,
     daily: `/usersummary-service/usersummary/daily?calendarDate=${date}`,
     hrv: `/hrv-service/hrv/${date}`,
-    activities:
-      "/activitylist-service/activities/search/activities?start=0&limit=5&sortOrder=desc",
+    activities: `/activitylist-service/activities/search/activities?start=0&limit=100&sortOrder=desc&startDate=${activityRange.start}&endDate=${activityRange.end}`,
+    sleepHistory: `/sleep-service/sleep/dailySleepSummariesByDate?startDate=${historyRange.start}&endDate=${historyRange.end}`,
+    stepsHistory: `/usersummary-service/stats/steps/daily/${historyRange.start}/${historyRange.end}`,
   };
   const results = {};
   await Promise.all(
     Object.entries(endpoints).map(async ([name, endpoint]) => {
+      const requestedAt = now();
+      const requestedRange =
+        name === "activities"
+          ? activityRange
+          : name.endsWith("History")
+            ? historyRange
+            : { start: date, end: date };
+      const metadata = {
+        source: "Garmin Personal API",
+        requestedAt,
+        requestedRange,
+      };
       try {
         const raw = await request(endpoint, `Bearer ${token}`);
         let data;
-        if (name === "sleep")
-          data = {
-            date: raw?.calendarDate ?? null,
-            seconds: number(raw?.sleepTimeSeconds),
-            score: number(raw?.sleepScores?.overall?.value),
-            observedAt: raw?.sleepEndTimestampGMT ?? null,
-          };
+        if (name === "sleep") data = projectSleep(raw);
         if (name === "daily")
           data = {
-            date: raw?.calendarDate ?? null,
+            date: day(raw?.calendarDate),
             steps: number(raw?.totalSteps),
             restingHeartRate: number(raw?.restingHeartRate),
             bodyBattery: number(raw?.bodyBatteryMostRecentValue),
-            observedAt: raw?.wellnessEndTimeGmt ?? null,
+            observedAt: timestamp(raw?.wellnessEndTimeGmt, true),
+            distanceMeters: number(raw?.totalDistanceMeters),
+            activeKilocalories: number(raw?.activeKilocalories),
+            stressAverage: number(raw?.averageStressLevel),
+            moderateIntensityMinutes: number(raw?.moderateIntensityMinutes),
+            vigorousIntensityMinutes: number(raw?.vigorousIntensityMinutes),
+            floorsAscended: number(raw?.floorsAscended),
           };
         if (name === "hrv")
           data = {
-            date: raw?.hrvSummary?.calendarDate ?? null,
+            date: day(raw?.hrvSummary?.calendarDate),
             overnightAverage: number(raw?.hrvSummary?.lastNightAvg),
-            observedAt: raw?.endTimestampGMT ?? null,
+            observedAt: timestamp(raw?.endTimestampGMT),
           };
         if (name === "activities") {
           if (raw !== null && !Array.isArray(raw))
             throw new Error("Unsupported activity response");
-          data = (raw || [])
-            .slice(0, 5)
-            .map((a) => ({
-              name:
-                typeof a.activityName === "string"
-                  ? a.activityName.slice(0, 150)
-                  : "Activity",
-              startTimeGMT: a.startTimeGMT ?? null,
+          data = (raw || []).slice(0, 100).map((a) => {
+            const startTimeGMT = timestamp(a.startTimeGMT, true);
+            return {
+              name: safeName(a.activityName),
+              startTimeGMT,
+              date: startTimeGMT ? berlinDay(startTimeGMT) : null,
+              type:
+                typeof a.activityType?.typeKey === "string" &&
+                /^[a-z_]+$/.test(a.activityType.typeKey)
+                  ? a.activityType.typeKey
+                  : null,
               durationSeconds: number(a.duration),
               distanceMeters: number(a.distance),
-            }));
+              averageHeartRate: number(a.averageHR),
+            };
+          });
+        }
+        if (name.endsWith("History")) {
+          if (raw !== null && !Array.isArray(raw))
+            throw new Error("Unsupported history response");
+          data = (raw || [])
+            .slice(0, 14)
+            .map((a) =>
+              name === "sleepHistory"
+                ? projectSleep(a)
+                : {
+                    date: day(a.calendarDate),
+                    steps: number(a.totalSteps),
+                    distanceMeters: number(a.totalDistance),
+                  },
+            )
+            .filter(
+              (a) =>
+                a.date &&
+                a.date >= historyRange.start &&
+                a.date <= historyRange.end,
+            )
+            .sort((a, b) => a.date.localeCompare(b.date));
         }
         const empty =
           raw === null ||
@@ -131,12 +236,35 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
                 .filter(([k]) => !["date", "observedAt"].includes(k))
                 .every(([, v]) => v === null));
         results[name] = {
-          state: empty ? "no_data" : "ok",
+          ...metadata,
+          state: empty
+            ? "no_data"
+            : name === "activities" && raw?.length >= 100
+              ? "partial"
+              : "ok",
+          truncated: name === "activities" && raw?.length >= 100,
+          observedRange: Array.isArray(data)
+            ? (() => {
+                const dates = data
+                  .map((a) => a.date)
+                  .filter(Boolean)
+                  .sort();
+                return dates.length
+                  ? { start: dates[0], end: dates.at(-1) }
+                  : null;
+              })()
+            : data.date
+              ? { start: data.date, end: data.date }
+              : null,
           collectedAt: now(),
           data,
         };
       } catch {
-        results[name] = { state: "unavailable", attemptedAt: now() };
+        results[name] = {
+          ...metadata,
+          state: "unavailable",
+          attemptedAt: now(),
+        };
       }
     }),
   );
@@ -148,6 +276,8 @@ async function collectGarmin({ fetchImpl = fetch, key, date } = {}) {
         : "ok",
     collectedAt: now(),
     date,
+    activityRange,
+    historyRange,
     data: results,
   };
 }
