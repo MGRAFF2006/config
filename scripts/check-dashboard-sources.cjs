@@ -288,3 +288,13 @@ test("Outstanding undated and overdue tasks survive collection and Berlin briefi
   assert.deepEqual(brief.events.map(e => e.title), ["Early event", "Old deadline", "Yesterday deadline", "Early deadline"]);
   assert.equal(brief.undatedTasks[0].title, "Undated");
 });
+
+test("Briefing boundaries use the offset at Berlin midnight on both DST transitions", () => {
+  for (const [date, before, within] of [
+    ["2026-03-29", "2026-03-28T22:30:00Z", "2026-03-28T23:30:00Z"],
+    ["2026-10-25", "2026-10-24T21:30:00Z", "2026-10-24T22:30:00Z"],
+  ]) {
+    const events = [before, within].map((start, i) => ({title: String(i), start, end: new Date(Date.parse(start) + 600000).toISOString(), kind: "event", allDay: false}));
+    assert.deepEqual(calendarForBrief({events}, date).events.map(e => e.title), ["1"]);
+  }
+});

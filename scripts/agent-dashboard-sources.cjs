@@ -61,20 +61,22 @@ function calendarRange(now = new Date()) {
   };
 }
 function berlinMidnight(date) {
-  const offset = new Intl.DateTimeFormat("en", {
-    timeZone: "Europe/Berlin",
-    timeZoneName: "shortOffset",
-  })
-    .formatToParts(new Date(date + "T12:00:00Z"))
-    .find((p) => p.type === "timeZoneName").value;
-  const match = offset.match(/GMT([+-])(\d+)(?::(\d+))?/);
-  const minutes = match
-    ? (Number(match[2]) * 60 + Number(match[3] || 0)) *
-      (match[1] === "+" ? 1 : -1)
-    : 0;
-  return new Date(
-    Date.parse(date + "T00:00:00Z") - minutes * 60000,
-  ).toISOString();
+  const utcMidnight = Date.parse(date + "T00:00:00Z");
+  const formatter = new Intl.DateTimeFormat("en", {
+    timeZone: "Europe/Berlin", timeZoneName: "shortOffset",
+  });
+  let candidate = utcMidnight;
+  // Resolve the offset at midnight itself, including dates whose offset changes later.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const offset = formatter.formatToParts(new Date(candidate))
+      .find((part) => part.type === "timeZoneName").value;
+    const match = offset.match(/GMT([+-])(\d+)(?::(\d+))?/);
+    const minutes = match ? (Number(match[2]) * 60 + Number(match[3] || 0)) * (match[1] === "+" ? 1 : -1) : 0;
+    const resolved = utcMidnight - minutes * 60000;
+    if (resolved === candidate) break;
+    candidate = resolved;
+  }
+  return new Date(candidate).toISOString();
 }
 async function collectCalendar(call, now = new Date()) {
   const range = calendarRange(now),
