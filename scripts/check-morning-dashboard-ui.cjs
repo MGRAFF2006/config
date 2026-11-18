@@ -35,7 +35,7 @@ const path = require("node:path");
       sourceCollectedAt: "2000-01-01T05:00:00Z",
       reportUpdatedAt: "2000-01-01T05:00:00Z",
       report:
-        "## Actions\n- Review today’s work [source](https://github.com/example/repo/issues/1)\n- <img src=x onerror=alert(1)>\n\nCoverage: Calendar is cached.",
+        "# Morning brief\n\n## Today\n- Review today’s work [source](https://github.com/example/repo/issues/1)\n- <img src=x onerror=alert(1)>\n\nCoverage: Calendar is cached.",
       sources: [{ name: "calendar", state: "partial" }],
       calendar: {
         state: "ok",
@@ -141,6 +141,7 @@ const path = require("node:path");
       // Stale edition must not set current date or initial calendar selection.
       assert.doesNotMatch(await page.locator("#date").innerText(), /2000/);
       assert.match(await page.locator("#notice").innerText(), /older brief/);
+      assert.match(await page.locator("#priorities").innerText(), /Review today’s work/);
       await choose("2026-11-18");
       await page.locator("#garmin-history summary").click();
       assert.match(

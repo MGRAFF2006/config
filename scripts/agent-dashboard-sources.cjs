@@ -281,7 +281,12 @@ function projectCalendar(source, preferences = "") {
       if (kind === "deadline") undatedTasks.push(result);
       return;
     }
-    if (!range || day(start) >= range.end || day(end || start) < range.start)
+    if (!range) return;
+    const rangeStart = allDay ? range.start : berlinMidnight(range.start);
+    const rangeEnd = allDay ? range.end : berlinMidnight(range.end);
+    // Timed values are UTC instants; the advertised range uses Berlin dates.
+    // Intervals end exclusively, while deadlines without a span are points.
+    if (start >= rangeEnd || (end && end > start ? end <= rangeStart : start < rangeStart))
       return;
     events.push(result);
   }

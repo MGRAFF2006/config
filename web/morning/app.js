@@ -535,9 +535,13 @@ function dailySummary(text) {
   }
   // A short excerpt of the synthesized edition; keep the full report and citations intact.
   const sections = text.split(/\n(?=#{1,6}\s|\*\*[^*]+\*\*\s*$)/m);
+  const substantive = sections.filter((s) =>
+    s.split("\n").some((line) => line.trim() && !/^(#{1,6}\s|\*\*[^*]+\*\*\s*$)/.test(line)),
+  );
   const main =
-    sections.find((s) => /actions|priorities/i.test(s.split("\n")[0])) ||
-    sections[0];
+    substantive.find((s) => /actions|priorities/i.test(s.split("\n")[0])) ||
+    substantive.find((s) => !/coverage|limitations|sources/i.test(s.split("\n")[0])) ||
+    substantive[0] || "";
   const lines = main
     .split("\n")
     .filter((l) => l.trim() && !/^(#{1,6}\s|\*\*[^*]+\*\*\s*$)/.test(l));

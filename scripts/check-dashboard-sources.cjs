@@ -258,3 +258,16 @@ test("Publication denies arbitrary fields, preference IDs and signed URL paths",
     await fs.rm(state, { recursive: true, force: true });
   }
 });
+
+test("Berlin coverage includes midnight appointments and excludes exclusive boundaries", () => {
+  const result = projectCalendar({ state: "ok", data: {
+    range: { start: "2026-10-01", end: "2027-01-01" },
+    events: [
+      event({ title: "Opening midnight", startDate: "2026-10-01T00:15:00+02:00", endDate: "2026-10-01T00:45:00+02:00" }),
+      event({ title: "Before closing midnight", startDate: "2026-12-31T23:15:00+01:00", endDate: "2026-12-31T23:45:00+01:00" }),
+      event({ title: "Ends at opening", startDate: "2026-09-30T23:00:00+02:00", endDate: "2026-10-01T00:00:00+02:00" }),
+      event({ title: "Starts at closing", startDate: "2027-01-01T00:00:00+01:00", endDate: "2027-01-01T00:45:00+01:00" }),
+    ], tasks: [],
+  } }, preferences);
+  assert.deepEqual(result.events.map(e => e.title), ["Opening midnight", "Before closing midnight"]);
+});
