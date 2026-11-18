@@ -422,13 +422,13 @@ async function load() {
   }
 }
 
-const dayKey = (value) =>
-  new Intl.DateTimeFormat("en-CA", {
+const berlinDayFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Berlin",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date(value));
+  });
+const dayKey = (value) => berlinDayFormatter.format(new Date(value));
 const dateOf = (key) => new Date(`${key}T12:00:00Z`);
 const shift = (key, days) => {
   const d = dateOf(key);

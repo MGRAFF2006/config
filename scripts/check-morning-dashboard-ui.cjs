@@ -105,6 +105,11 @@ const path = require("node:path");
         },
       },
     };
+    // Real calendars contain hundreds of entries; exercise navigation at that scale.
+    fixture.calendar.events.push(...Array.from({length: 600}, (_, i) => ({
+      title: `Historical fixture ${i}`, start: "2026-10-10T09:00:00Z",
+      end: "2026-10-10T10:00:00Z", category: "own",
+    })));
     let data = fixture;
     await page.route("**/morning/data", (r) => r.fulfill({ json: data }));
     async function refresh() {
