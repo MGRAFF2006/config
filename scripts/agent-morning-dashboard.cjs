@@ -16,7 +16,7 @@ const assets = path.join(__dirname, "../web/morning");
 const iso = () => new Date().toISOString();
 function sanitizeReport(text) {
   return text
-    .replace(/https?:\/\/[^\s<>"')\]]+/g, (raw) => {
+    .replace(/https?:\/\/[^\s<>"')\]]+/gi, (raw) => {
       try {
         const url = new URL(raw);
         if (/auth|token|login|verify|unsubscribe|confirm/i.test(url.pathname))

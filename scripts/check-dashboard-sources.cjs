@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const {
   collectCalendar,
+  calendarForBrief,
   projectCalendar,
   calendarRange,
   collectGithub,
@@ -208,7 +209,7 @@ test("Publication denies arbitrary fields, preference IDs and signed URL paths",
     await fs.writeFile(path.join(state, "brief-preferences.txt"), preferences);
     await fs.writeFile(
       path.join(state, "latest-brief.md"),
-      `Brief ${own} [signed](https://unknown.test/private/pathSecret?sig=otherSecret) [Moodle](https://moodle.tu-dortmund.de/mod/assign/view.php?id=123&sesskey=secret)`,
+      `Brief ${own} [signed](HTTPS://unknown.test/private/pathSecret?sig=otherSecret) [auth](Https://github.com/login/AUTH_SECRET) [safe](HTTPS://github.com/example/repo/issues/1) [Moodle](https://moodle.tu-dortmund.de/mod/assign/view.php?id=123&sesskey=secret)`,
     );
     await fs.writeFile(
       path.join(state, "snapshot.json"),
@@ -250,7 +251,7 @@ test("Publication denies arbitrary fields, preference IDs and signed URL paths",
     );
     assert.doesNotMatch(
       output,
-      /11111111|pathSecret|otherSecret|sesskey|RAW MAIL|TOKEN|ARBITRARY|PRIVATE PHOTO FIELD|RAW TOP|RAW SOURCE|RAW PHOTO/,
+      /11111111|pathSecret|otherSecret|AUTH_SECRET|sesskey|RAW MAIL|TOKEN|ARBITRARY|PRIVATE PHOTO FIELD|RAW TOP|RAW SOURCE|RAW PHOTO/,
     );
     assert.match(output, /id=123/);
     assert.match(output, /Lecture/);
@@ -270,4 +271,20 @@ test("Berlin coverage includes midnight appointments and excludes exclusive boun
     ], tasks: [],
   } }, preferences);
   assert.deepEqual(result.events.map(e => e.title), ["Opening midnight", "Before closing midnight"]);
+});
+
+test("Outstanding undated and overdue tasks survive collection and Berlin briefing selection", async () => {
+  const data = await collectCalendar(async (name, args) => {
+    if (name === "listCalendars") return [{ id: own, name: "Studium", supportsTasks: true }];
+    assert.equal(name, "listTasks");
+    assert.equal(args.completed, false);
+    assert.equal(args.maxResults, 500);
+    // The real Thunderbird bridge excludes undated tasks if dueBefore is set.
+    assert.equal(args.dueBefore, undefined);
+    return [event({title: "Old deadline", dueDate: "2026-09-01"}), event({title: "Yesterday deadline", dueDate: "2026-11-17"}), event({title: "Undated", dueDate: null}), event({title: "Early deadline", dueDate: "2026-11-17T23:30:00Z"})];
+  }, new Date("2026-11-18T08:00:00Z"));
+  data.events = [event({title: "Early event", startDate: "2026-11-17T23:30:00Z", endDate: "2026-11-17T23:45:00Z"}), event({title: "Beyond local week", startDate: "2026-11-25T23:30:00Z", endDate: "2026-11-26T00:30:00Z"})];
+  const brief = calendarForBrief(projectCalendar({state: "ok", data}, preferences), "2026-11-18");
+  assert.deepEqual(brief.events.map(e => e.title), ["Early event", "Old deadline", "Yesterday deadline", "Early deadline"]);
+  assert.equal(brief.undatedTasks[0].title, "Undated");
 });

@@ -135,7 +135,6 @@ async function collectCalendar(call, now = new Date()) {
         const result = await call("listTasks", {
           calendarId: c.id,
           completed: false,
-          dueBefore: berlinMidnight(range.end),
           maxResults: 500,
         });
         if (!Array.isArray(result)) throw Error("Unavailable tasks");
@@ -286,7 +285,7 @@ function projectCalendar(source, preferences = "") {
     const rangeEnd = allDay ? range.end : berlinMidnight(range.end);
     // Timed values are UTC instants; the advertised range uses Berlin dates.
     // Intervals end exclusively, while deadlines without a span are points.
-    if (start >= rangeEnd || (end && end > start ? end <= rangeStart : start < rangeStart))
+    if (start >= rangeEnd || (kind !== "deadline" && (end && end > start ? end <= rangeStart : start < rangeStart)))
       return;
     events.push(result);
   }
@@ -492,8 +491,20 @@ function projectGithub(source) {
     limitations,
   };
 }
+// Keep outstanding deadlines even when overdue; only appointments use a lower bound.
+function calendarForBrief(calendar, date) {
+  const endDate = new Date(Date.parse(date + "T00:00:00Z") + 8 * 86400000).toISOString().slice(0, 10);
+  return { ...calendar, events: calendar.events.filter((event) => {
+    const start = event.allDay ? date : berlinMidnight(date);
+    const end = event.allDay ? endDate : berlinMidnight(endDate);
+    if (event.start >= end) return false;
+    if (event.kind === "deadline") return true;
+    return event.end && event.end > event.start ? event.end > start : event.start >= start;
+  }) };
+}
 module.exports = {
   collectCalendar,
+  calendarForBrief,
   projectCalendar,
   calendarRange,
   ownershipMap,
