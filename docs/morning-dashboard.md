@@ -4,8 +4,8 @@ URL: **https://homelab-dev.tail03caec.ts.net/morning/**
 
 The dashboard and collectors run as humunkulud on homelab-dev, with user linger
 already enabled. No laptop paths, browser sessions, tunnels or laptop process
-are required. The existing morning collector runs at **04:50 Europe/Berlin**.
-The separately managed T3 delivery runs at **05:00 Europe/Berlin** on homelab-dev;
+are required. The existing morning collector runs at **07:00 Europe/Berlin**.
+The separately managed T3 delivery runs at **07:10 Europe/Berlin** on homelab-dev;
 its configuration is outside this implementation. Setup below changes neither schedule.
 
 ## Operation
@@ -44,17 +44,33 @@ The page labels this as a morning edition, not a live agenda, and warns for
 older editions. The report's coverage paragraph preserves upstream cache and
 missing-account limitations.
 
-## Dashboard overview
+## Calendar workspace and daily edition
 
-The compact overview uses the existing published report only. It recognizes
-Markdown and standalone bold section headings, places actions first and groups
-reported dates together. The first action and first two items of other sections
-are visible; additional items expand in place. Unknown sections remain visible,
-and the full original brief and citations are available below the overview.
-Coverage remains visible; collection details and Garmin endpoint times expand
-separately. Six Garmin readings keep missing values explicit. Photo cleanup
-pause, local service scope and failed states remain visible. Refresh only
-reloads the existing edition and local status.
+The responsive dashboard opens on the current Berlin date independently of the
+published edition date. Week/month views have previous, next, Today and go-to-date
+controls. Selecting a day reveals every matching entry, including simultaneous
+and all-day events. The calendar occupies most desktop width; a narrow adjacent
+rail holds the short daily synthesis and selected-day agenda. Mobile places the
+calendar before the daily brief. Category filters distinguish own, club, study,
+shared context and recorded Garmin activity. Shared partner context is explicitly
+not attendance; unconfirmed ownership and optional/unconfirmed dates remain labelled.
+
+Calendar collection reads the previous, current and next calendar month. Each
+calendar/month is capped at 500 entries and the number of calendars is capped at 20. Recurrence expansion failures, request failures and collection caps mark the
+results partial. The UI distinguishes no matching events, partial results, and
+outside coverage; browsing outside the range never implies free time. Thunderbird
+client cache collection is not proof of server sync. Undated tasks remain separate.
+The existing bridge supports date ranges, so its source requires no modification.
+
+The short writeup is derived from the existing preference-filtered synthesized
+brief; the complete edition and citations remain accessible. Refresh reloads the
+published edition and local health, without collecting accounts or regenerating.
+A failed refresh retains the displayed edition and warns that it is retained.
+
+GitHub adds own open PRs, requested reviews, assigned issues, recent activity and
+accessible user projects to unread notifications. Each query is bounded; unavailable
+project permissions, bounded activity and organization-project gaps are explicit.
+Photo cleanup pause and local service scope/failed states remain visible.
 
 ## Garmin Personal API
 
@@ -73,7 +89,7 @@ explicit states. Missing values are null, not fabricated zeroes. Device sync may
 lag collection. The UI shows the requested day, observation times where supplied,
 per-endpoint collection times and recent activities. No health advice is generated.
 
-Official documentation consulted 2026-11-11:
+Official documentation consulted 2026-11-18:
 
 - [Personal API and token exchange](https://developer.garmin.com/gc-developer-program/personal/personal-api/)
 - [Official OpenAPI schemas](https://developer.garmin.com/gc-developer-program/personal/swagger-docs/)
@@ -82,15 +98,24 @@ Requests use the documented Personal API host. Token POST uses `ApiKey` auth;
 subsequent requests use the returned bearer token. The token endpoint returns
 **plain text**, and rejects `Accept: application/json` with HTTP 406; do not
 negotiate or parse JSON for token exchange. Data endpoints return JSON.
-Live token exchange and all four data endpoints were verified on 2026-11-11.
+Live token exchange and the original four data endpoints were verified on 2026-11-11. The expanded six data requests were verified on 2026-11-18; current-day readings were absent while historical records were available.
 The reviewed public OpenAPI v1.0.0 supplies these paths and fields:
 
-| Resource | Request | Published fields |
-| --- | --- | --- |
-| Sleep | `/sleep-service/sleep/dailySleep?date=YYYY-MM-DD` | calendarDate, sleepTimeSeconds, sleepScores.overall.value, sleepEndTimestampGMT |
-| Daily summary | `/usersummary-service/usersummary/daily?calendarDate=YYYY-MM-DD` | calendarDate, totalSteps, restingHeartRate, bodyBatteryMostRecentValue, wellnessEndTimeGmt |
-| HRV | `/hrv-service/hrv/YYYY-MM-DD` | hrvSummary.calendarDate, hrvSummary.lastNightAvg, endTimestampGMT |
-| Activities | `/activitylist-service/activities/search/activities?start=0&limit=5&sortOrder=desc` | activityName, startTimeGMT, duration, distance |
+| Resource      | Request                                                                                                                       | Published fields                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Sleep         | `/sleep-service/sleep/dailySleep?date=YYYY-MM-DD`                                                                             | calendarDate, sleepTimeSeconds, sleepScores.overall.value, sleepEndTimestampGMT            |
+| Daily summary | `/usersummary-service/usersummary/daily?calendarDate=YYYY-MM-DD`                                                              | calendarDate, totalSteps, restingHeartRate, bodyBatteryMostRecentValue, wellnessEndTimeGmt |
+| HRV           | `/hrv-service/hrv/YYYY-MM-DD`                                                                                                 | hrvSummary.calendarDate, hrvSummary.lastNightAvg, endTimestampGMT                          |
+| Activities    | `/activitylist-service/activities/search/activities?start=0&limit=100&sortOrder=desc&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` | activityName, startTimeGMT, activityType.typeKey, duration, distance, averageHR            |
+| Sleep history | `/sleep-service/sleep/dailySleepSummariesByDate?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`                                      | 14 days of projected sleep date, duration, score, observation                              |
+| Steps history | `/usersummary-service/stats/steps/daily/START/END`                                                                            | 14 days of calendarDate, totalSteps, totalDistance                                         |
+
+Daily summary also projects distance, active energy, average stress, moderate and
+vigorous intensity minutes, and floors climbed. Activity history spans 31 days,
+with a maximum of 100 entries; reaching that cap is partial. Sleep/steps history
+spans 14 days. Requests carry source/requested time and range, collection time,
+and observed date range where available. Missing values remain missing, including
+when today has no reading but earlier dates do. No advice is generated.
 
 ## Additional sources and privacy
 
@@ -104,9 +129,7 @@ added because a home location was not established.
 
 The server serves three fixed assets and `/data`, not a directory. `/data`
 contains the sanitized synthesized brief, selected Garmin readings, source
-status/times, the photo projection and local unit status. Raw snapshots, mail,
-partner calendars, prompts, logs, private preferences and credentials are never
-served. The brief itself is private personal content: do not publish screenshots
+status/times, the photo projection and local unit status. Raw snapshots, mail, full partner-calendar objects, prompts, logs, private preferences and credentials are never served. Calendar projection contains only safe event titles, dates, categories, ownership labels and opaque dashboard aliases; raw UUIDs, descriptions, attendees and arbitrary URLs are omitted. Garmin and GitHub also pass explicit publication allowlists. The brief itself is private personal content: do not publish screenshots
 or runtime JSON to GitHub. HTTP is read-only, cache-disabled, with restrictive
 CSP, no external assets, no referrers, HTML escaping through DOM text nodes and
 no arbitrary filesystem paths. Source links open with noreferrer/noopener;
@@ -120,8 +143,8 @@ the page. Local same-user/root access is trusted. Tailscale Funnel is not used.
 
 ```sh
 node scripts/check-agent-life.cjs
-node --test scripts/check-morning-dashboard.cjs
-# Optional deployed UI check using an existing Playwright installation and Chromium:
+node --test scripts/check-morning-dashboard.cjs scripts/check-agent-garmin.cjs scripts/check-dashboard-sources.cjs
+# Isolated local source UI check using an existing Playwright installation and Chromium:
 # MORNING_PLAYWRIGHT_MODULE=/path/to/playwright MORNING_BROWSER=/usr/bin/chromium \
 #   node scripts/check-morning-dashboard-ui.cjs
 systemctl --user status agent-morning-dashboard.service agent-morning-brief.service
@@ -155,3 +178,11 @@ was verified with the real hostname and certificate using the current verified
 Tailscale address (`curl --resolve` / Chromium host resolver mapping), not by
 bypassing TLS. Use `MORNING_TAILSCALE_IP` only with a freshly verified host address to repeat
 that resolver workaround in the UI check. External laptop DNS/HTTPS and live Garmin collection were subsequently verified. Reboot remains untested.
+
+Schedule evidence on 2026-11-18: actual systemd collector `OnCalendar=*-*-*
+07:00:00 Europe/Berlin`, `Persistent=true`, `AccuracySec=1s`; actual enabled T3
+fixed-time delivery 07:10 Europe/Berlin (next run 2026-11-19T06:10:00.000Z).
+This change modifies neither schedule. Historical verification above refers to
+the earlier deployed dashboard; the calendar implementation is verified locally
+with isolated headless Chromium and synthetic fixtures. Parent delivery owns
+private backup, deployment and deployed verification after independent review.
