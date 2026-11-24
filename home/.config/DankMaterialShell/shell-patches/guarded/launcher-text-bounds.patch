@@ -12,7 +12,7 @@
      property var item: null
      property var controller: null
      property int flatIndex: -1
-+    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!item?._hRich
++    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!controller?.dmenuMarkupRows && !!item?._hRich
 
      signal rightClicked(real mouseX, real mouseY)
 

@@ -10,15 +10,26 @@ ShellRoot {
         { width: 550, scale: 1.15, density: 0 },
         { width: 320, scale: 1.15, density: -2 },
         { width: 550, scale: 1.5, density: 0 },
-        { width: 320, scale: 1.5, density: 0 }
+        { width: 320, scale: 1.5, density: 0 },
+        { width: 550, scale: 1.5, density: -2 },
+        { width: 320, scale: 1.5, density: -2 }
     ]
     readonly property string multiline: "First line\nSecond line\r\nThird line\u2028Fourth line\u2029Fifth line " + "clipboard preview ".repeat(20)
+    // Strings are values: comparing against this list catches a renderer
+    // that rewrites entry.preview in place.
+    readonly property var previews: [
+        "gypqj text",
+        multiline,
+        "https://example.org/" + "verylongpath".repeat(30),
+        "Image filename\n" + "very long filename ".repeat(20),
+        "<b>literal clipboard markup</b>"
+    ]
     readonly property var entries: [
-        { id: 1, hash: "short", preview: "Short text", size: 10 },
-        { id: 2, hash: "long", preview: multiline, size: multiline.length },
-        { id: 3, hash: "url", preview: "https://example.org/" + "verylongpath".repeat(30), size: 500 },
-        { id: 4, hash: "image", preview: "Image filename\n" + "very long filename ".repeat(20), size: 100, isImage: true },
-        { id: 5, hash: "markup", preview: "<b>literal clipboard markup</b>", size: 30 }
+        { id: 1, hash: "short", preview: previews[0], size: 10 },
+        { id: 2, hash: "long", preview: previews[1], size: multiline.length },
+        { id: 3, hash: "url", preview: previews[2], size: 500 },
+        { id: 4, hash: "image", preview: previews[3], size: 100, isImage: true },
+        { id: 5, hash: "markup", preview: previews[4], size: 30 }
     ]
 
     QtObject {
@@ -98,8 +109,8 @@ ShellRoot {
                 }
                 if (!root.check(text[0].lineCount === 1, "caption is a single line")) return;
                 if (!root.check(text[1].textFormat === Text.PlainText, "clipboard markup is literal")) return;
-                if (!root.check(row.entry.preview === root.entries[i].preview, "original preview remains intact")) return;
-                if (i === 0 && !root.check(!text[1].truncated, "short text remains readable")) return;
+                if (!root.check(row.entry.preview === root.previews[i], "original preview remains intact")) return;
+                if (i === 0 && !root.check(!text[1].truncated, "short text remains readable: phase=" + root.phase)) return;
                 if ((i === 1 || i === 2) && !root.check(text[1].truncated, "long preview elides: entry=" + i + " phase=" + root.phase + " width=" + text[1].width + " lines=" + text[1].lineCount + " height=" + text[1].height + " implicit=" + text[1].implicitHeight + " type=" + row.entryType + " text=" + text[1].text.substring(0,60))) return;
                 if (i === 3 && !root.check(text[0].truncated, "long image caption elides")) return;
             }
@@ -109,7 +120,7 @@ ShellRoot {
                 interval = 250;
                 return;
             }
-            console.warn("CLIPBOARD_HISTORY_TEXT_PASS: real history rows at 550/320px, font scales 1.15/1.5, normal/dense density; multiline, URLs, image captions, literal markup, short text and unchanged previews");
+            console.warn("CLIPBOARD_HISTORY_TEXT_PASS: real history rows at 550/320px, font scales 1.15/1.5, normal/dense density including dense at 150%; multiline, URLs, image captions, literal markup, short text and unchanged previews");
             running = false;
             const evidence = Quickshell.env("DMS_CLIPBOARD_EVIDENCE");
             if (evidence)

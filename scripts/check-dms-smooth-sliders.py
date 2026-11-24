@@ -20,13 +20,17 @@ def isolated_ui_source(module, source, destination):
     manifest = destination / "smooth-sliders.json"
     if manifest.exists():
         recorded = json.loads(manifest.read_text())
+        stale = f"{source} was staged with a different patch set and cannot be reversed with the current patches. Rerun with --source-dir PRISTINE_DMS_{module.SUPPORTED_VERSION.lstrip("v")}_UI."
         if "files_sha256" in recorded:
-            assert recorded["patch_sha256"] == module.patch_digest()
+            if recorded["patch_sha256"] != module.patch_digest():
+                raise SystemExit(stale)
             assert module.stage_intact(destination, recorded)
             patches = module.PATCHES
         else:
-            # Existing slider-only stages can be used as isolated test input.
-            assert recorded["patch_sha256"] == module.digest(module.PATCH)
+            # Existing slider-only stages can be used as isolated test input
+            # only while the slider patch is unchanged since they were staged.
+            if recorded.get("patch_sha256") != module.digest(module.PATCH):
+                raise SystemExit(stale)
             assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
             patches = (module.PATCH,)
         for path in module.SUPPORTED_FILES:
@@ -49,6 +53,13 @@ def main():
 
     class Launched(Exception):
         pass
+
+    # The legacy 1.5.x installer applies every top-level shell-patches/*.patch
+    # without fingerprint checks; guarded patches must stay out of its reach.
+    legacy = {path.resolve() for path in (module.ROOT / "home/.config/DankMaterialShell/shell-patches").glob("*.patch")}
+    guarded = {path.resolve() for patches in module.VERSION_PATCHES.values() for path in patches}
+    assert all(path.is_file() for path in guarded), "guarded DMS patch missing"
+    assert legacy.isdisjoint(guarded), "guarded DMS patch visible to install-dms-shell-overrides.sh"
 
     with tempfile.TemporaryDirectory(prefix="smooth-slider-check-") as directory:
         root = Path(directory)
@@ -104,11 +115,28 @@ def main():
         else:
             raise AssertionError("Unknown version was accepted")
         assert not (root / "refused").exists()
-        print("PASS: guarded override launch, same-version binary update fallback, tamper/corrupt fallback, unknown-source refusal")
+        # A stage from an earlier patch set (current layout or the original
+        # slider-only layout) must ask for pristine input, not fail an assert.
+        for name, stale_manifest in (("stale-current", {**manifest, "patch_sha256": "outdated-patches"}), ("stale-slider-only", {"patch_sha256": "original-slider-patch", "slider_sha256": "original-slider", "source_sha256": "original-source"})):
+            stale_stage = root / name
+            shutil.copytree(target, stale_stage)
+            (stale_stage / "smooth-sliders.json").write_text(json.dumps(stale_manifest))
+            try:
+                isolated_ui_source(module, stale_stage, root / f"{name}-copy")
+            except SystemExit as error:
+                assert "--source-dir" in str(error), error
+            else:
+                raise AssertionError(f"{name} stage was accepted as UI input")
+        print("PASS: guarded override launch, same-version binary update fallback, tamper/corrupt fallback, unknown-source refusal, stale-stage --source-dir guidance")
 
         if args.ui:
             runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
             source = args.source_dir or Path((runtime / "dms.path").read_text().strip())
+            manifest = source / "smooth-sliders.json"
+            version = json.loads(manifest.read_text())["version"] if manifest.is_file() else (source / "VERSION").read_text().strip()
+            if version != module.SUPPORTED_VERSION:
+                raise SystemExit(f"--ui exercises the DMS {module.SUPPORTED_VERSION} slider patch; {source} is DMS {version}, which has no slider patch. "
+                                 "Check its launcher text patches with scripts/check-dms-launcher-text.py instead.")
             input_hash = module.tree_digest(source)
             pristine = isolated_ui_source(module, source, root / "pristine")
             staged = module.stage(pristine, root / "ui-staged")
