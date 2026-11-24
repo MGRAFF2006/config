@@ -9,10 +9,11 @@ doctor     Check the native Rust/LLVM tools against this kernel.
 configure  Generate ARM64 defconfig plus the Asahi configuration fragment.
 build      Build Image, modules and device trees, or the given targets:
            Image, Image.gz, modules, dtbs, or single files below the source
-           tree ending in .o, .ko, .s, .i or .lst. Anything else is refused.
+           tree ending in .o, .s, .i or .lst. Anything else is refused.
 
 ASAHI_OUTPUT sets the output directory (default: ~/.cache/asahi-linux/build).
 ASAHI_JOBS sets parallel jobs (default: 4). Outputs stay outside the source tree.
+Only one run at a time may use an output directory; a second run fails at once.
 Make runs with a cleared environment (PATH, HOME and LANG only), so variables
 such as KCONFIG_CONFIG or MAKEFLAGS cannot change the configuration or targets.
 EOF
@@ -64,8 +65,10 @@ check_config() {
 }
 
 # Single-file targets: path segments below the source tree (no "." or ".."
-# segments, no absolute paths) ending in an object, module or listing suffix.
-single_target='^([A-Za-z0-9_][A-Za-z0-9_+.-]*/)*[A-Za-z0-9_][A-Za-z0-9_+.-]*\.(o|ko|s|i|lst)$'
+# segments, no absolute paths) ending in an object or listing suffix. Kbuild
+# builds a single .ko by replacing modules.order and running modpost, which
+# would damage a full build's module metadata, so .ko is not allowed.
+single_target='^([A-Za-z0-9_][A-Za-z0-9_+.-]*/)*[A-Za-z0-9_][A-Za-z0-9_+.-]*\.(o|s|i|lst)$'
 
 check_target() {
   case "$1" in
@@ -73,7 +76,7 @@ check_target() {
   esac
   [[ $1 =~ $single_target ]] && return 0
   echo "Refusing make target '$1'." >&2
-  echo "Allowed: Image, Image.gz, modules, dtbs, or SOURCE-relative .o/.ko/.s/.i/.lst files." >&2
+  echo "Allowed: Image, Image.gz, modules, dtbs, or SOURCE-relative .o/.s/.i/.lst files." >&2
   exit 2
 }
 
@@ -95,19 +98,21 @@ main() {
   detect_toolchain
 
   output=${ASAHI_OUTPUT:-${XDG_CACHE_HOME:-$HOME/.cache}/asahi-linux/build}
-  mkdir -p -- "$output"
-  output=$(realpath -e -- "$output")
+  # Resolve the prospective path and refuse it before creating anything.
+  output=$(realpath -m -- "$output")
   case "$output/" in
     "$source_dir/"*) echo "Use an output directory outside the source tree." >&2; exit 1 ;;
   esac
+  mkdir -p -- "$output"
   # Claim the output directory for one source tree. Existing output without an
   # owner marker may belong to another tree, so only an empty directory is claimed.
   # The marker appears atomically with its content: a hard link fails if another
   # run claimed the directory first, and that run's owner is then compared below.
-  local marker="$output/.asahi-source" claim
+  # A directory that cannot be listed is treated as not empty.
+  local marker="$output/.asahi-source" claim entries
   if [[ ! -e $marker ]]; then
-    if [[ -n $(find "$output" -mindepth 1 -maxdepth 1 -print -quit) ]]; then
-      echo "Output directory is not empty and has no owner marker: $output" >&2
+    if ! entries=$(find "$output" -mindepth 1 -maxdepth 1 -print -quit) || [[ -n $entries ]]; then
+      echo "Output directory is not empty or not listable and has no owner marker: $output" >&2
       echo "Choose an empty or new ASAHI_OUTPUT." >&2
       exit 1
     fi
@@ -120,6 +125,14 @@ main() {
     echo "Output belongs to another source tree; choose a different ASAHI_OUTPUT." >&2
     exit 1
   fi
+  # Kbuild shares fixed-name temporary files in O=, so serialize every run on
+  # this output. The lock stays held by this shell and Make until they exit.
+  local lock_fd
+  exec {lock_fd}>>"$output/.asahi-lock"
+  flock -n "$lock_fd" || {
+    echo "Another asahi-build.sh run is using $output; wait for it or choose a different ASAHI_OUTPUT." >&2
+    exit 1
+  }
 
   # A cleared environment keeps KCONFIG_CONFIG, MAKEFLAGS, ARCH, CROSS_COMPILE
   # and similar caller variables from changing the config file or the build.

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the Asahi build wrapper with a stub make; no Rust or kernel sources needed."""
+import fcntl
 import os
 from pathlib import Path
 import shlex
@@ -125,7 +126,7 @@ def check_wrapper():
         expect(f.run("build", source), 0, "default build")
         assert "BUILT Image modules dtbs rust=y" in f.log(), f.log()
         accepted = ["Image", "Image.gz", "modules", "dtbs", "fs/exec.o",
-                    "drivers/gpu/drm/asahi/asahi.o", "net/core/skbuff.ko",
+                    "drivers/gpu/drm/asahi/asahi.o",
                     "kernel/fork.s", "kernel/fork.i", "fs/exec.lst"]
         f.clear_log()
         expect(f.run("build", source, *accepted), 0, "accepted targets")
@@ -164,7 +165,9 @@ def check_wrapper():
                        "rust-analyzer", "modules_install", "install", "dtbs_install",
                        "menuconfig", "olddefconfig", "headers", "-k", "--jobs=64",
                        "O=/tmp", "ARCH=x86", "KCONFIG_CONFIG=/tmp/x", "../evil.o",
-                       "fs/../../evil.o", "/abs/path.o", "./fs/exec.o", ".o", "fs/exec.c"):
+                       "fs/../../evil.o", "/abs/path.o", "./fs/exec.o", ".o", "fs/exec.c",
+                       # A single .ko rewrites modules.order and runs modpost.
+                       "net/core/skbuff.ko", "drivers/gpu/drm/asahi/asahi.ko", "fs/exec.mod"):
             f.clear_log()
             result = f.run("build", source, target)
             assert f.log() == "", f"'{target}' reached make:\n{f.log()}"
@@ -180,6 +183,38 @@ def check_wrapper():
         (other / "arch/arm64/configs/asahi.config").touch()
         expect(f.run("configure", str(other)), 1, "foreign output")
         expect(f.run("configure", source, output=f.source / "out"), 1, "output inside source")
+        # A refused in-tree output must not be created.
+        nested = f.source / "new-output/nested"
+        expect(f.run("configure", source, output=nested), 1, "new output inside source")
+        assert not (f.source / "new-output").exists(), "refused in-tree output was created"
+
+        # An unmarked directory that cannot be listed may hold another build.
+        # (Root can list it anyway; the existing .config still makes it nonempty.)
+        unlistable = f.base / "unlistable"
+        unlistable.mkdir()
+        (unlistable / ".config").write_text(NO_RUST_CONFIG)
+        unlistable.chmod(0o300)
+        f.clear_log()
+        try:
+            result = f.run("configure", source, output=unlistable)
+            claimed = (unlistable / ".asahi-source").exists()
+        finally:
+            unlistable.chmod(0o700)
+        assert f.log() == "", f"unlistable output reached make:\n{f.log()}"
+        assert not claimed, "unlistable output was claimed"
+        assert (unlistable / ".config").read_text() == NO_RUST_CONFIG
+        expect(result, 1, "unlistable output")
+
+        # A second run on the same output fails while the first holds the lock.
+        with open(f.output / ".asahi-lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            f.clear_log()
+            result = f.run("build", source, "modules")
+            assert f.log() == "", f"concurrent run reached make:\n{f.log()}"
+            expect(result, 1, "concurrent run on one output")
+        f.clear_log()
+        expect(f.run("build", source, "modules"), 0, "build after lock release")
+        assert "BUILT modules rust=y" in f.log(), f.log()
 
 
 def check_setup():

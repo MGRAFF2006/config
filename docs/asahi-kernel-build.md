@@ -61,15 +61,19 @@ bash scripts/asahi-build.sh build ~/Projects/asahi-linux
 Set `ASAHI_OUTPUT` for a different output directory and `ASAHI_JOBS` for parallel
 jobs. The default is four jobs and `~/.cache/asahi-linux/build`. Use a separate
 output directory for each source worktree: the first run claims an empty or new
-directory for its source tree, and other trees or unmarked nonempty directories
-are refused. Make runs with a cleared environment (only `PATH`, `HOME` and
+directory for its source tree, and other trees or unmarked directories that are
+nonempty or cannot be listed are refused. Only one command at a time may use an
+output directory; a second one fails immediately instead of sharing Kbuild's
+temporary files. Make runs with a cleared environment (only `PATH`, `HOME` and
 `LANG`), so variables such as `KCONFIG_CONFIG` or `MAKEFLAGS` cannot select a
 different configuration or change the build. Before compiling, `build` lets
 Kbuild resync `.config` with the current toolchain and refuses to continue
 unless the effective configuration still enables Rust, 16 KiB pages and the
 Asahi GPU driver. It accepts only `Image`, `Image.gz`, `modules`, `dtbs` and
-single files below the source tree ending in `.o`, `.ko`, `.s`, `.i` or `.lst`;
-every other target or argument is refused. The build command refuses to start
+single files below the source tree ending in `.o`, `.s`, `.i` or `.lst`;
+every other target or argument is refused. Single `.ko` targets are refused
+because Kbuild replaces `modules.order` and reruns modpost for them, which would
+damage a full build's module metadata; build `modules` instead. The build command refuses to start
 with less than 10 GiB free. Allow additional space for outputs; this guard is not a quota or a
 guarantee against exhausting a filesystem during a build.
 
