@@ -2,11 +2,15 @@
 //   node test-input-region.cjs [pristine app.asar]
 // The default path is the pristine archive that makepkg leaves in
 // src/squashfs-root. The test applies repair-overlays.py to a temporary copy and
-// drives the patched status renderer's report module (69096) and the patched
-// main-process shape controller (76127) with a stand-in X11 helper.
+// drives the patched status renderer's report module (69096), the patched
+// main-process shape controller (76127) and the patched status-window module
+// (72413) with a stand-in X11 helper.
 // 1. If the helper exits before applying a region and the popup stays still,
 //    the renderer sends no new report, yet the region must be applied again.
 // 2. A helper that keeps exiting is restarted a bounded number of times.
+// 3. While the feature tour suspends mouse input, neither a retry after a
+//    helper exit, an ordinary report nor the bar becoming visible may restore
+//    the control region; resuming restores it.
 const assert = require('node:assert');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -38,8 +42,9 @@ function readEntry(parts) {
 const mainBundle = readEntry(['.webpack', 'main', 'index.js']);
 const statusBundle = readEntry(['.webpack', 'renderer', 'status', 'index.js']);
 
-// Evaluate one webpack module with stubbed dependencies.
-function loadModule(bundle, id, dependencies) {
+// Evaluate one webpack module with stubbed dependencies. With `permissive`,
+// dependencies not listed resolve to an inert stub.
+function loadModule(bundle, id, dependencies, permissive = false) {
   const start = bundle.indexOf(`${id}(e,t,`);
   assert.ok(start > 0, `module ${id} not found`);
   const next = /\},\d+\(e,t,[a-z]\)\{/g;
@@ -48,6 +53,7 @@ function loadModule(bundle, id, dependencies) {
   const factory = new Function('require', `return ({${bundle.slice(start, end)}}})`)(require)[id];
   const exports = {};
   const load = dependency => {
+    if (permissive && !(dependency in dependencies)) return inert;
     assert.ok(dependency in dependencies, `module ${id} requires unexpected ${dependency}`);
     return dependencies[dependency];
   };
@@ -59,7 +65,13 @@ function loadModule(bundle, id, dependencies) {
   return exports;
 }
 
-const quietLog = { warn() {}, info() {}, error() {} };
+// Any property or call result of the inert stub is the inert stub again.
+const inert = new Proxy(function inert() {}, {
+  get: (target, key) => (key === Symbol.toPrimitive ? () => '' : key === Symbol.iterator ? [][Symbol.iterator] : inert),
+  apply: () => inert,
+  construct: () => inert,
+});
+const quietLog = { warn() {}, info() {}, error() {}, debug() {} };
 const electron = { app: { commandLine: { getSwitchValue: name => (name === 'ozone-platform' ? 'x11' : '') } } };
 const shapes = loadModule(mainBundle, 76127, { 84157: electron, 69493: quietLog });
 
@@ -151,6 +163,63 @@ async function staleRegionRecovers() {
   console.log('ok: a region lost with the helper is applied again although the renderer stays quiet');
 }
 
+async function suspensionHoldsAcrossRetry() {
+  const helper = helperDirectory('suspended', 'crash-once');
+  process.resourcesPath = helper.root;
+  // The status-window module creates its own controller; capture it.
+  let controller = null;
+  const capturing = {
+    ...shapes,
+    s0: class extends shapes.s0 { constructor() { super(); controller = this; } },
+  };
+  const state = { RA: { statusWindow: null } };
+  // IPC channels resolve to "group.name"; registered handlers are kept by channel.
+  const channels = new Proxy({}, { get: (_, group) => new Proxy({}, { get: (__, name) => `${String(group)}.${String(name)}` }) });
+  const handlers = new Map();
+  const ipc = { Z4: (channel, wait, handler) => handlers.set(channel, handler), Qt: (channel, wait, handler) => handlers.set(channel, handler), Bn() {} };
+  const mainElectron = { ...electron, app: { ...electron.app, prependOnceListener() {} } };
+  const status = loadModule(mainBundle, 72413, {
+    76127: capturing, 84157: mainElectron, 69493: quietLog, 69583: state, 48116: { H8: false, tD: false }, 17826: channels, 40789: ipc,
+  }, true);
+  assert.ok(controller, 'the status-window module did not create a shape controller');
+  status.B$(); // registers the status IPC handlers
+  assert.ok(handlers.has('EB.BarVisible'), 'the Flow Bar visibility handler was not registered');
+  let ignored = null;
+  const webContents = {};
+  const window = {
+    webContents,
+    isDestroyed: () => false,
+    isVisible: () => false,
+    getContentBounds: () => ({ x: 0, y: 0, width: 512, height: 614 }),
+    getNativeWindowHandle: () => { const handle = Buffer.alloc(4); handle.writeUInt32LE(0x1234); return handle; },
+    setIgnoreMouseEvents(value) { ignored = value; },
+    setShape() { throw new Error('the X11 path must not change the painted shape'); },
+  };
+  state.RA.statusWindow = window;
+  controller.replaceWindow(window);
+  controller.setEnabled(true);
+  const region = { x: 10, y: 20, width: 120, height: 40 };
+  const report = { rects: [region], shapeRects: [], viewport: { width: 512, height: 614 } };
+  assert.ok(controller.applyReport(webContents, report), 'report rejected');
+  await until(() => !fs.existsSync(helper.crashOnce), 2000);
+  await wait(100); // the first helper exited without applying the region; a retry is due
+  status.Kp(); // feature tour suspends mouse input
+  assert.strictEqual(ignored, true, 'suspension did not ignore mouse events');
+  const suspendedFrom = helper.appliedRects().length;
+  await wait(500 + 300); // past the retry delay
+  assert.ok(controller.applyReport(webContents, report), 'report rejected'); // an ordinary report while suspended
+  handlers.get('EB.BarVisible')(); // the bar becomes visible during the tour
+  await wait(300);
+  const whileSuspended = helper.appliedRects().slice(suspendedFrom);
+  assert.ok(whileSuspended.every(rects => !rects.some(rect => rect.width === region.width && rect.height === region.height)),
+    `the control region was restored while mouse input was suspended: ${JSON.stringify(whileSuspended)}`);
+  status.Zk(); // the tour ends
+  assert.strictEqual(ignored, false, 'resuming did not accept mouse events again');
+  await until(() => JSON.stringify(helper.appliedRects().at(-1)) === JSON.stringify([region]), 2000);
+  assert.deepStrictEqual(helper.appliedRects().at(-1), [region], 'resuming did not restore the control region');
+  console.log('ok: a suspended Flow Bar stays click-through across a helper retry, reports and becoming visible; resuming restores it');
+}
+
 async function retriesAreBounded() {
   const helper = helperDirectory('always-crash', 'always-crash');
   process.resourcesPath = helper.root;
@@ -164,6 +233,7 @@ async function retriesAreBounded() {
 
 (async () => {
   await staleRegionRecovers();
+  await suspensionHoldsAcrossRetry();
   await retriesAreBounded();
   cleanup();
   process.exit(0);

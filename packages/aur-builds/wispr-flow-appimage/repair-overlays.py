@@ -41,7 +41,13 @@ def main_bundle(original):
         (b'else if(M.H8){const e=n.getContentBounds()', b'else if($X){const e=n.getContentBounds()'),
     ):
         module = replace_once(module, old, new)
-    require(module.count(b'M.H8&&Q.') == 4, 'Unexpected shape-controller guards')
+    # On X11 the controller's region replaces the window's input shape, so it
+    # would undo setIgnoreMouseEvents(true). While the feature tour suspends
+    # input, disable the controller: reports and helper retries then re-apply
+    # "no region" until the resume handler enables it again.
+    module = replace_once(module, b'M.H8?J()?.setIgnoreMouseEvents(!0,{forward:!0}):d.RA.statusWindow', b'M.H8?J()?.setIgnoreMouseEvents(!0,{forward:!0}):($X&&Q.setEnabled(!1),d.RA.statusWindow)')
+    module = replace_once(module, b'M.H8&&Q.setEnabled(!0),re(d.RA.statusWindow)', b'(M.H8||$X&&!ne)&&Q.setEnabled(!0),re(d.RA.statusWindow)')
+    require(module.count(b'M.H8&&Q.') == 3, 'Unexpected shape-controller guards')
     module = module.replace(b'M.H8&&Q.', b'$X&&Q.')
     module = replace_once(module, b'e&&!e.isDestroyed()&&($=(0,g.Bi)(e))', b'e&&!e.isDestroyed()&&(M.H8||!$X?($=(0,g.Bi)(e)):(e.setIgnoreMouseEvents(!1),Q.lastShapeKey=null,Q.applyCurrentShape()))')
     patched = patched[:start] + module + patched[end:]

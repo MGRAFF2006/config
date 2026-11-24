@@ -30,12 +30,17 @@ Local package release 8 keeps the upstream download and SHA-256 check and repair
   controller's current shape from its cached report after a helper exit,
   without waiting for a new report. It retries three times with increasing
   delays and then waits for the next report, so a helper that keeps failing
-  cannot loop. Python and python-xlib are declared runtime dependencies.
+  cannot loop. The helper's region replaces the window's X11 input shape, so it
+  would undo the app's own mouse-event suspension during the feature tour. The
+  repair disables the shape controller for that suspension, so reports, retries
+  and the bar becoming visible keep the window click-through until the tour
+  ends. Python and python-xlib are declared runtime dependencies.
 
   After `makepkg`, `node test-input-region.cjs` checks this against the pristine
   bundle in `src/squashfs-root` (or a given `app.asar` path). It patches a copy
-  with `repair-overlays.py` and drives the patched renderer report module and
-  main-process shape controller with a stand-in helper.
+  with `repair-overlays.py` and drives the patched renderer report module,
+  main-process shape controller and status-window module with a stand-in
+  helper.
 - Hyprland window selection: in 0.57.0, floating XWayland windows are picked by
   their whole rectangle, even outside their input shape. An X11-only underlay
   test missed this; clicks to native Wayland windows were still blocked. The
