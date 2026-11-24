@@ -1,0 +1,33 @@
+# Userspace-only replacement for the repository's XRT 2.21 plugin.
+pkgname=xrt-plugin-amdxdna
+pkgver=2.25.0.r20260624
+epoch=1
+pkgrel=1
+pkgdesc='AMD XDNA userspace plugin rebuilt against Arch XRT 2.25'
+arch=('x86_64')
+url='https://github.com/amd/xdna-driver'
+license=('LicenseRef-AMD-Proprietary' 'Apache-2.0')
+# XRT's internal C++ interfaces are not stable across releases. Rebuild this
+# plugin when changing XRT, instead of silently loading an incompatible binary.
+depends=('glibc' 'libgcc' 'libstdc++' 'libdrm' 'xrt=1:2.25.0')
+makedepends=('git' 'cmake' 'ninja' 'boost')
+options=('!debug')
+source=(
+  'xdna-driver::git+https://github.com/amd/xdna-driver.git#commit=eb910d4da18ac87115e3ec6263fbb379600c23ac'
+  'XRT::git+https://github.com/Xilinx/XRT.git#commit=3923b2b5be55dfea72dee3c49d5cf13c02eda25a'
+  'GSL::git+https://github.com/microsoft/GSL.git#commit=a3534567187d2edc428efd3f13466ff75fe5805c'
+  'CMakeLists.txt'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' '4e3557e41108d1ebff0eb777903378175e7d9e318feca258952ef2fab2a3ea08')
+
+build() {
+  cmake -S "$srcdir" -B "$srcdir/build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/build" --parallel 4
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+  install -Dm644 "$srcdir/xdna-driver/LICENSE.amdnpu" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
