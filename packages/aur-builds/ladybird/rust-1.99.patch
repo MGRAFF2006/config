@@ -1,6 +1,6 @@
 --- a/AK/Rust/src/lib.rs
 +++ b/AK/Rust/src/lib.rs
-@@ -754,7 +754,7 @@
+@@ -939,7 +939,7 @@
      let header = unsafe { &*std::ptr::with_exposed_provenance::<Utf16StringDataHeader>(raw) };
      let result = header
          .reference_count
@@ -9,20 +9,20 @@
              (count != 0).then(|| count.checked_add(1)).flatten()
          });
      assert!(result.is_ok(), "invalid UTF-16 string reference count");
---- a/Libraries/LibWeb/Rust/src/css/style_sheet.rs
-+++ b/Libraries/LibWeb/Rust/src/css/style_sheet.rs
-@@ -406,7 +406,7 @@
-     pub(crate) fn new(rules: Rc<NativeRuleList>, media: MediaList) -> Rc<Self> {
-         Rc::new(Self {
-             identity: NEXT_SHEET_IDENTITY
--                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
-+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
-                 .expect("stylesheet identity overflow"),
-             rules,
-             media,
+--- a/Libraries/LibJS/Rust/src/parser/mod.rs
++++ b/Libraries/LibJS/Rust/src/parser/mod.rs
+@@ -88,7 +88,7 @@
+         // NB: The count stops at its largest value, for a compile job that holds the context for very many collections.
+         let idle_collections = source
+             .reparse_context_idle_collections
+-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
++            .try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                 Some(count.saturating_add(1))
+             })
+             .expect("the update always gives a value")
 --- a/Libraries/LibWeb/Rust/src/css/declaration_block.rs
 +++ b/Libraries/LibWeb/Rust/src/css/declaration_block.rs
-@@ -241,7 +241,7 @@
+@@ -862,7 +862,7 @@
              *state = DeclarationBlockState::Mutable(Rc::new(RefCell::new(DeclarationBlockOwner {
                  data: data.clone(),
                  identity: NEXT_DECLARATION_BLOCK_IDENTITY
@@ -33,7 +33,7 @@
              })));
 --- a/Libraries/LibWeb/Rust/src/css/rule.rs
 +++ b/Libraries/LibWeb/Rust/src/css/rule.rs
-@@ -775,7 +775,7 @@
+@@ -877,7 +877,7 @@
  
  fn reserve_rule_identities(count: u64) -> u64 {
      NEXT_RULE_IDENTITY
@@ -42,3 +42,65 @@
          .expect("rule identity overflow")
  }
  
+--- a/Libraries/LibWeb/Rust/src/css/style/pipeline/records.rs
++++ b/Libraries/LibWeb/Rust/src/css/style/pipeline/records.rs
+@@ -86,7 +86,7 @@
+         use std::sync::atomic::Ordering::Relaxed;
+         let _ = self
+             .0
+-            .fetch_update(Relaxed, Relaxed, |header| Some((header & !mask) | bits));
++            .try_update(Relaxed, Relaxed, |header| Some((header & !mask) | bits));
+     }
+ 
+     fn set_holds_image_values(&self, holds_image_values: bool) {
+@@ -125,7 +125,7 @@
+         assert!(id.slot() <= InstalledRecordID::MAX_SLOT && id.generation() <= InstalledRecordID::MAX_GENERATION);
+         let identity = u64::from(id.slot()) << Self::SLOT_SHIFT | u64::from(id.generation()) << Self::GENERATION_SHIFT;
+         self.0
+-            .fetch_update(Relaxed, Relaxed, |header| {
++            .try_update(Relaxed, Relaxed, |header| {
+                 ((header >> Self::SLOT_SHIFT) & Self::SLOT_MASK == Self::NO_SLOT)
+                     .then_some((header & !Self::IDENTITY_MASK) | identity)
+             })
+--- a/Libraries/LibWeb/Rust/src/css/style_sheet.rs
++++ b/Libraries/LibWeb/Rust/src/css/style_sheet.rs
+@@ -405,7 +405,7 @@
+     pub(crate) fn new(rules: Rc<NativeRuleList>, media: MediaList) -> Rc<Self> {
+         Rc::new(Self {
+             identity: NEXT_SHEET_IDENTITY
+-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
++                .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
+                 .expect("stylesheet identity overflow"),
+             rules,
+             media,
+--- a/Libraries/LibWeb/Rust/src/layout/tree_plan/planner.rs
++++ b/Libraries/LibWeb/Rust/src/layout/tree_plan/planner.rs
+@@ -857,7 +857,7 @@
+ 
+     fn take_jobs(&self, count: usize) -> bool {
+         self.jobs_left
+-            .fetch_update(
++            .try_update(
+                 std::sync::atomic::Ordering::Relaxed,
+                 std::sync::atomic::Ordering::Relaxed,
+                 |left| left.checked_sub(count),
+@@ -867,7 +867,7 @@
+ 
+     fn take_job(&self) -> bool {
+         self.jobs_left
+-            .fetch_update(
++            .try_update(
+                 std::sync::atomic::Ordering::Relaxed,
+                 std::sync::atomic::Ordering::Relaxed,
+                 |left| left.checked_sub(1),
+--- a/Libraries/LibWeb/Rust/src/web_audio/audio_param_timeline.rs
++++ b/Libraries/LibWeb/Rust/src/web_audio/audio_param_timeline.rs
+@@ -157,7 +157,7 @@
+         let version = u64::from(generation) << 32;
+         let previous_value = self
+             .current_value
+-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
++            .try_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                 Some(version | u64::from(current_value.map_or(value as u32, f32::to_bits)))
+             })
+             .unwrap();

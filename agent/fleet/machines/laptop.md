@@ -36,6 +36,10 @@ checks passed. A headless screenshot rendered the expected text and styling
 despite a Fontconfig config-access warning. The native GUI and an empty-cache
 build were not exercised.
 
+The AUR has since moved to tagged releases (`1:2026.47.7-1`). The recipe now
+targets `1:2026.47.7-1.1` with the Rust patch carried forward; that build has
+not been run or installed yet (2026-11-24).
+
 ## Login-screen appearance — verified 2026-11-05
 
 The DMS greeter now uses live per-account settings, wallpaper/session data and

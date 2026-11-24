@@ -1,58 +1,82 @@
-# Ladybird with Rust 1.99
+# Ladybird with Rust 1.99+
 
-Local variant of AUR `ladybird 20261101-2`, recipe commit
-`30b02ea87e8d21c742acc6f2dbe8b8b077289cc6`.
-The upstream source and existing three AUR patches remain pinned.
-Local release `20261101-2.1` adds `rust-1.99.patch`.
+Local variant of AUR `ladybird 1:2026.47.7-1`, recipe commit
+`7e0cad1` ("Retarget upstream releases"). The AUR recipe, its source pins
+(tag `2026.47.7`, resolving to commit
+`4e9acf4c02ca23239fe32224a303dcea4614562b`) and its two patches are kept
+unchanged. Local release `1:2026.47.7-1.1` only adds `rust-1.99.patch`.
 
 Rust 1.99 deprecated atomic `fetch_update` in favor of `try_update`.
-Ladybird treats Rust warnings as errors, so its AK crate fails to compile.
-The same call also occurs in three CSS implementation files. The patch updates
-all four calls without changing their closures or memory ordering; warnings
+Ladybird's CMake build passes `-Dwarnings` to its Rust crates, so the
+deprecation fails the build. The 2026.47.7 tree has ten calls in eight files
+(AK, LibJS, and LibWeb CSS, layout and Web Audio). The patch renames all ten
+without changing their closures, memory ordering or result handling; warnings
 remain errors. Rust documents the old method as an alias of the replacement:
 [atomic API](https://doc.rust-lang.org/std/sync/atomic/struct.Atomic.html).
+
+The epoch is the AUR's: its switch from date versions (`20261101`) to tagged
+releases needed `epoch=1`, so `1:2026.47.7-1.1` is newer than the installed
+`20261101-2.1` and the upgrade below does not downgrade. Packaging follows the
+AUR recipe, which now installs under `/opt/ladybird`.
+
+## Currently installed
+
+The laptop runs `ladybird 20261101-2.1`, built on 2026-11-09 from the previous
+version of this recipe (AUR `20261101-2` plus a four-call Rust patch). That
+recipe is in Git history only; do not rebuild it, because the tagged
+release supersedes it.
 
 ## Build and install
 
 Use mains power, keep at least 10 GiB free, and limit parallelism to available
-memory. Reuse source downloads from yay if available:
+memory:
 
 ```bash
 cd ~/Documents/config/packages/aur-builds/ladybird
 SRCDEST="$HOME/.cache/yay/ladybird" \
   CMAKE_BUILD_PARALLEL_LEVEL=8 CARGO_BUILD_JOBS=4 makepkg -s
-sudo pacman -U ./ladybird-20261101-2.1-x86_64.pkg.tar.zst
+sudo pacman -U ./ladybird-1:2026.47.7-1.1-x86_64.pkg.tar.zst
 pacman -Q ladybird
 sudo pacman -Qkk ladybird
 ```
 
-The first repaired build reused the configured `~/.cache/yay/ladybird/src`
-tree. Its recipe and new patch were copied into the yay build directory, and
-the patch was applied to the already prepared source before `makepkg -ef`.
-An ordinary fresh build applies the patch in `prepare()`.
-Do not use `--noextract` on a source tree that has not received the patch.
+`makepkg` applies the patch in `prepare()`. Do not use `--noextract` on a
+source tree that has not received it.
 
-When refreshing from AUR, compare the recipe and source revision and remove
-this workaround once upstream updates all affected calls. No package upgrade
-hold is needed: a newer upstream package release supersedes the local release.
+A plain AUR helper upgrade to a later `1:<version>-1` would replace this build
+and drop the patch. Before upgrading, compare the new AUR recipe with this one:
+port the patch again (keep the AUR epoch and use pkgrel `<n>.1`), or remove this
+workaround once upstream no longer calls `fetch_update`. Check with
+`git grep -n '\.fetch_update(' -- '*.rs'` in the new source.
 
 ## Recovery
 
-The previous `ladybird-20261004-1-x86_64.pkg.tar.zst` remains in
-`~/.cache/yay/ladybird/`. Restore it with `sudo pacman -U` if necessary.
-The 2026-11-09 repair's original recipe and AK source file are saved under
-`~/.local/state/ladybird-repair-2026-11-09/`, alongside the build log.
-That state directory is machine-local and must stay out of Git.
+The installed `ladybird-20261101-2.1-x86_64.pkg.tar.zst` and the earlier
+`ladybird-20261004-1-x86_64.pkg.tar.zst` remain in `~/.cache/yay/ladybird/`.
+If the new build misbehaves, reinstall one with `sudo pacman -U`; pacman
+reports the intentional downgrade. The 2026-11-09 repair's original recipe and
+AK source file are saved under `~/.local/state/ladybird-repair-2026-11-09/`,
+alongside the build log. That state directory is machine-local and must stay
+out of Git.
 
-## Verification — 2026-11-09
+## Verification
+
+### 2026-11-24 — `1:2026.47.7-1.1` recipe
+
+Not built or installed. The patch applies with zero fuzz and no offsets to tag
+`2026.47.7`, and the tree has no other `fetch_update` calls. The AUR's two
+patches also apply without fuzz. All three patch checksums match the recipe.
+See the PR for the focused `cargo check` result. A full `makepkg` build,
+installation and browser runtime are unverified.
+
+### 2026-11-09 — `20261101-2.1` (installed)
 
 The full `makepkg -ef` build succeeded on the laptop with system Rust 1.99.1,
-including compilation of the Rust test workspace. The four-file patch applies
-without fuzz to the pinned upstream sources. All 37 `TestUtf16String` cases
-passed, including ownership transfer and reference counting.
+including compilation of the Rust test workspace. All 37 `TestUtf16String`
+cases passed, including ownership transfer and reference counting.
 
-The installed `20261101-2.1` package passed `pacman -Qkk` (188 files, none altered),
-and `pacman -Dk` reported no database errors. A headless run of `/usr/bin/Ladybird`
+The installed package passed `pacman -Qkk` (188 files, none altered), and
+`pacman -Dk` reported no database errors. A headless run of `/usr/bin/Ladybird`
 with a temporary profile and separate XDG directories produced the expected
 JavaScript-generated Unicode text after CSSOM mutation, computed-style and
 node-cloning checks. The headless run logged a Fontconfig config-access warning,
