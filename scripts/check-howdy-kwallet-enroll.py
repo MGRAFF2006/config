@@ -191,9 +191,20 @@ def check_enrollment(enrollment, root):
     print("PASS: enrollment leaves PAM untouched on seal failure and restores only replaced files")
 
 
+def check_token_scope():
+    # The unsealed wallet password becomes PAM_AUTHTOK; any stack that loads the
+    # module after a face match would hand that password to its later modules.
+    # Only greetd, after its own successful authentication, may use it.
+    users = sorted(path.name for path in (ROOT / "system/pam.d").iterdir()
+                   if "pam_howdy_tpm" in path.read_text())
+    assert users == ["greetd"], f"pam_howdy_tpm outside greetd: {users}"
+    print("PASS: only the managed greetd stack loads the TPM token module (not sudo, polkit-1 or the lock)")
+
+
 def main():
     if os.geteuid() != 0:
         os.execvp("unshare", ["unshare", "-r", sys.executable, *sys.argv])
+    check_token_scope()
     enrollment = load_installer()
     with tempfile.TemporaryDirectory(prefix="howdy-kwallet-enroll-check-") as directory:
         root = Path(directory)

@@ -130,8 +130,7 @@ LIVE_INTERIM = {
                    "auth [success=1 default=bad] pam_unix.so try_first_pass nullok\n"
                    "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\n",
 }
-# polkit-1 is a separate opt-in (install-howdy-polkit.py), never routine maintenance.
-INSTALLED = ("greetd", "sddm", "dankshell", "sudo")
+INSTALLED = ("greetd", "sddm", "dankshell", "sudo", "polkit-1")
 
 
 def check_installer(pam_root):
@@ -190,7 +189,6 @@ def check_installer(pam_root):
                     assert [p.read_bytes() for p in (root / "pam.d").glob(f"{name}.backup-*")] == [text], (initial, name)
             assert (root / "pam.d/system-auth").read_bytes() == before["system-auth"], "system-auth changed"
             assert (root / "pam.d/sudo").read_bytes() == before["sudo"], "sudo changed"
-            assert not (root / "pam.d/polkit-1").exists(), "routine maintenance installed polkit-1"
             assert "system-auth still has an active pam_howdy" not in result.stdout + result.stderr
             assert (root / "howdy/config.ini").read_bytes() == (ROOT / "system/howdy/config.ini").read_bytes()
             assert json.loads((root / "config/dms/settings.json").read_text()) == settings, initial

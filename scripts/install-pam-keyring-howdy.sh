@@ -3,8 +3,8 @@
 #
 # Password/PIN first, Howdy fallback for greetd, SDDM and the DMS lock; Howdy
 # first for sudo. The DMS lock patch starts the fallback on wake.
-# Polkit is not touched here: face for polkit is a separate explicit install
-# (scripts/install-howdy-polkit.py) because it also changes the helper sandbox.
+# Polkit stays password-only because graphical agents do not reliably handle
+# Howdy's separate PAM conversation before their password prompt.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
 #
 # Needs sudo. Idempotent.
@@ -18,7 +18,7 @@ info() { printf '[INFO]  %s\n' "$*"; }
 ok()   { printf '[OK]    %s\n' "$*"; }
 warn() { printf '[WARN]  %s\n' "$*"; }
 
-for required in greetd sddm dankshell sudo; do
+for required in greetd sddm dankshell sudo polkit-1; do
   if [[ ! -f "$src/$required" ]]; then
     printf 'Missing managed PAM file: %s/%s\n' "$src" "$required" >&2
     exit 1
@@ -84,6 +84,7 @@ install_pam greetd
 install_pam sddm
 install_pam dankshell
 install_pam sudo
+install_pam polkit-1
 
 # Keep distro system-auth Howdy stub disabled — sudo owns face auth explicitly.
 # Re-enabling it there would prompt for a password before the camera.
@@ -110,7 +111,6 @@ elif ! python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home"
 fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"
-info "Graphical polkit unchanged; optional face for polkit: scripts/install-howdy-polkit.py --apply"
 warn "Wallet unlock on typed password requires kdewallet password == login password."
 warn "Face-only KWallet unlock requires separate TPM enrollment via install-howdy-kwallet-tpm.py."
 ok "Done. Fully log out and back in for greetd/session PAM to apply."

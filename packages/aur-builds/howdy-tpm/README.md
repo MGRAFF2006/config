@@ -50,9 +50,8 @@ To disable without deleting anything, move the credential aside:
 sudo mv /etc/howdy-tpm/humunkulud.cred /etc/howdy-tpm/humunkulud.cred.disabled
 ```
 
-The lock and sudo stacks do not receive this password. Separate app vaults such
-as Bitwarden retain their own unlock policy. Face for polkit is configured
-separately through `scripts/install-howdy-polkit.py`, with no TPM secret there.
+The lock, sudo and polkit stacks do not receive this password. Separate app
+vaults such as Bitwarden retain their own unlock policy.
 
 Verification uses a dummy secret and temporary PAM stacks:
 
@@ -64,8 +63,6 @@ sudo python scripts/check-howdy-tpm.py \
 unshare -r python scripts/check-howdy-tpm.py --decrypt-stub-only \
   --source packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/src/pam_howdy_tpm.c
 python scripts/check-howdy-kwallet-enroll.py
-python scripts/check-howdy-polkit.py
-sudo python scripts/check-howdy-polkit.py --sandbox --user humunkulud
 ```
 
 These checks never use the enrolled credential or capture camera frames.
