@@ -8,7 +8,6 @@ its clipboard, settings or services.
 
 import argparse
 import importlib.util
-import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -24,7 +23,7 @@ def main():
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
     module = helpers.load_configure()
-    source = args.source_dir or Path((Path(f"/run/user/{os.getuid()}") / "dms.path").read_text().strip())
+    source = args.source_dir or helpers.running_ui_source()
     source = source.resolve(strict=True)
     original_hash = module.tree_digest(source)
     with tempfile.TemporaryDirectory(prefix="clipboard-history-check-") as directory:

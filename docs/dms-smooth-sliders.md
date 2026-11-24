@@ -76,7 +76,7 @@ python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.
 python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.1.2_UI --unpatched  # reproduces the overflow
 ```
 
-It uses the launcher check's private staging, launch-guard checks and isolated
+It uses the launcher check's `dms.path` lookup, private staging, launch-guard checks and isolated
 headless desktop. The actual history rows are checked at 550/320 px, 115%/150%
 text scale and normal/dense spacing (including dense at 150%) with multiline
 text, unbroken URLs, image captions, literal markup and short text with

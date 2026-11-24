@@ -138,39 +138,41 @@ def self_test():
         (runtime / "dms.path").write_text(str(root / "stage") + "\n")
         with patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(runtime)}):
             assert running_ui_source() == root / "stage", "dms.path ignored XDG_RUNTIME_DIR"
-        # An intact active stage whose extraction was cleared on reboot and
-        # whose renderer is a symlink to an identical file outside the stage.
-        stage, outside = root / "stage", root / "outside"
-        outside.mkdir()
-        for path in module.SUPPORTED_FILES:
-            (stage / path.parent).mkdir(parents=True, exist_ok=True)
-            (stage / path).write_text(f"reviewed {path.name}\n")
-        (stage / "VERSION").write_text(module.SUPPORTED_VERSION + "\n")
-        linked = stage / list(module.SUPPORTED_FILES)[-1]
-        external = outside / linked.name
-        external.write_bytes(linked.read_bytes())
-        linked.unlink()
-        linked.symlink_to(external)
+        # For each supported version: an intact active stage whose extraction
+        # was cleared on reboot and whose every patched renderer (including
+        # 2.1.2's ClipboardEntry.qml) links to an identical file outside it.
         binary = root / "dms"
         binary.write_text("reviewed binary")
-        manifest = {"version": module.SUPPORTED_VERSION, "source": str(root / "extraction-cleared-on-reboot"),
-                    "patch_sha256": module.patch_digest(), "files_sha256": module.patched_files(stage),
-                    "dms_binary_sha256": module.digest(binary)}
-        (stage / "smooth-sliders.json").write_text(json.dumps(manifest))
-        expected = external.read_bytes()
-        launch = module.launch
+        for version, files in module.VERSION_FILES.items():
+            stage, outside = root / version / "stage", root / version / "outside"
+            outside.mkdir(parents=True)
+            external = {}
+            for path in files:
+                (stage / path.parent).mkdir(parents=True, exist_ok=True)
+                external[path] = outside / str(path).replace("/", "_")
+                external[path].write_text(f"reviewed {path}\n")
+                (stage / path).symlink_to(external[path])
+            (stage / "VERSION").write_text(version + "\n")
+            manifest = {"version": version, "source": str(root / version / "extraction-cleared-on-reboot"),
+                        "patch_sha256": module.patch_digest(version), "files_sha256": module.patched_files(stage, version),
+                        "dms_binary_sha256": module.digest(binary)}
+            (stage / "smooth-sliders.json").write_text(json.dumps(manifest))
+            expected = {path: target.read_bytes() for path, target in external.items()}
+            launch = module.launch
 
-        def watched_launch(output):
-            assert external.read_bytes() == expected, "launch-guard probe wrote through a symlink outside the private copy"
-            return launch(output)
+            def watched_launch(output):
+                for path, target in external.items():
+                    assert target.read_bytes() == expected[path], f"launch-guard probe wrote through a symlink outside the private copy ({path})"
+                return launch(output)
 
-        work = root / "work"
-        work.mkdir()
-        with patch.object(module.shutil, "which", return_value=str(binary)), patch.object(module, "launch", watched_launch):
-            staged = prepare_ui(module, stage, work, unpatched=False)
-        assert staged.resolve().is_relative_to(work.resolve())
-        assert linked.is_symlink() and external.read_bytes() == expected
-    print("PASS: dms.path honors XDG_RUNTIME_DIR; guard probes stay in the private copy when the input stage links outside it")
+            work = root / version / "work"
+            work.mkdir()
+            with patch.object(module.shutil, "which", return_value=str(binary)), patch.object(module, "launch", watched_launch):
+                staged = prepare_ui(module, stage, work, unpatched=False)
+            assert staged.resolve().is_relative_to(work.resolve())
+            for path, target in external.items():
+                assert (stage / path).is_symlink() and target.read_bytes() == expected[path]
+    print(f"PASS: dms.path honors XDG_RUNTIME_DIR; guard probes stay in the private copy when an input stage links outside it ({', '.join(module.VERSION_FILES)})")
 
 
 def main():
