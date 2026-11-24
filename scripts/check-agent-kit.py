@@ -176,6 +176,29 @@ def main():
         assert (custom / "AGENTS.md").resolve() == agent / "AGENTS.md"
         run("--check")
         env.pop("CODEX_HOME")
+        # Codex may share Claude's root. The new Claude skill link is then also
+        # the "legacy Codex" path; retiring it would back the same path up twice,
+        # and the second move would land inside the first backup's local target.
+        shared_home = root / "shared skill root home"
+        local_skill = root / "local example skill"
+        local_skill.mkdir()
+        (local_skill / "example").write_text("Keep my local file\n")
+        (shared_home / ".claude/skills").mkdir(parents=True)
+        (shared_home / ".claude/skills/example").symlink_to(local_skill, target_is_directory=True)
+        env["AGENT_KIT_HOME"] = str(shared_home)
+        env["CODEX_HOME"] = str(shared_home / ".claude")
+        run()
+        assert not (local_skill / "example").is_symlink(), "A second backup overwrote a local file"
+        assert (local_skill / "example").read_text() == "Keep my local file\n"
+        assert (shared_home / ".claude/skills/example").readlink() == agent / "skills/example"
+        saved_runs = list((shared_home / ".local/share/agent-kit-backups").iterdir())
+        assert len(saved_runs) == 1
+        assert (saved_runs[0] / ".claude/skills/example").readlink() == local_skill
+        run()
+        run("--check")
+        assert list((shared_home / ".local/share/agent-kit-backups").iterdir()) == saved_runs
+        env["AGENT_KIT_HOME"] = str(home)
+        env.pop("CODEX_HOME")
         # A historical whole-root link must never turn source skills into backups
         # or self-referential links. Exercise both roots and a second installation.
         for tool in (".codex", ".claude"):
