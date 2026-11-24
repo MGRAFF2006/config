@@ -76,6 +76,19 @@ Before disk or firmware changes:
    Mathis currently has neither a recovery USB nor an external backup disk.
    Homelab storage can replace the disk, but recovery boot remains an
    unresolved prerequisite.
+
+   Rehearse the chosen path under Secure Boot before relying on it, while
+   turning enforcement off again still works. A medium that boots with Secure
+   Boot off proves nothing about enforcement: `dbx`, for example, can reject a
+   shim even with Microsoft's CA in `db`. With a supervisor password set,
+   enable Secure Boot with the current keys, boot the exact rescue medium and
+   run step 4's typed LUKS2 unlock from it, then disable Secure Boot again
+   through firmware setup and boot the installed system. For the firmware
+   rollback option, this run is the rehearsal of that rollback. Record each
+   step's result. If the medium is rejected, choose another or fall back to the
+   rollback option before step 3. Media signed only with the future owner key
+   cannot pass this yet, so until that key is enrolled the rollback option is
+   the path that counts.
 3. Take the final backup with no writers. Shut the installed system down
    cleanly and boot the exact rescue medium from step 2. With only tools on
    that medium and credentials available without the laptop, mount partition 2
@@ -91,8 +104,13 @@ Before disk or firmware changes:
    `btrfs subvolume list` of the source; all six must be present and non-empty
    where the source is. Restore a sample (some files from each subvolume, a
    dirty project, account configuration and the ESP) and compare checksums with
-   the read-only source. Create a disposable LUKS2 container (a file-backed
-   loop device is enough) and unlock it by typing the passphrase.
+   the read-only source. Restore samples only into RAM (a tmpfs, with swap off
+   or only encrypted swap active in the rescue session) or onto encrypted
+   storage, never onto a writable rescue USB, a helper machine's plain disk or
+   other unencrypted scratch: those keep plaintext after the laptop is
+   sanitized. Delete the samples when compared. Create a disposable LUKS2
+   container (a file-backed loop device in that tmpfs is enough) and unlock it
+   by typing the passphrase.
 5. Prove the complete restore fits with a full trial restore of that exact
    backup. No size estimate replaces it. Restore all six subvolumes onto
    encrypted scratch storage on the homelab, such as a zvol in an encrypted ZFS
@@ -100,10 +118,21 @@ Before disk or firmware changes:
    or directory: it would leave a second plaintext copy of the installation.
    Size it exactly like the final mapping (partition 2 minus the LUKS2 header,
    16 MiB by default), use the same `mkfs.btrfs` options, mount options
-   (`compress=`) and restore commands as the real migration. Every subvolume
-   must restore completely, and `btrfs filesystem usage` must show at least 10%
-   free. Destroy the scratch volume afterwards. If it does not fit, reduce or
-   exclude data deliberately, then repeat steps 3–5.
+   (`compress=`) and restore commands as the real migration. `btrfs receive`
+   creates read-only subvolumes, and a received `@` holds only empty
+   directories where the nested subvolumes were. So the trial also assembles
+   the final writable layout with the same commands the migration will use:
+   writable `@`, `@home`, `@log` and `@pkg` (for example writable snapshots of
+   the received copies, then deleting those copies), and writable
+   `@/var/lib/portables` and `@/var/lib/machines` in place of their empty
+   directories inside the writable `@`. Then mount it with the final `fstab`
+   options (`subvol=` and `compress=`), check with `btrfs subvolume list` and
+   `btrfs property get <path> ro` that all six are present, writable and nested
+   as on the source, and create and delete a test file in each of them. Every
+   subvolume must restore completely, and after this assembly `btrfs
+   filesystem usage` must show at least 10% free. Destroy the scratch volume
+   afterwards. If it does not fit, reduce or exclude data deliberately, then
+   repeat steps 3–5.
 6. Keep the source quiescent from step 3 until the erase: leave the laptop
    powered off or in the rescue medium, and do not boot the installed system.
    If the installed system boots or anything else writes to partition 2 or the
@@ -156,7 +185,8 @@ restore the ESP from the backup. After any method, raw reads at several
 offsets, including some within the old data range, are a spot check only.
 
 Then create the partition layout and LUKS2 container, make the Btrfs filesystem,
-and restore all six subvolumes as subvolumes, not plain directories. The new
+and restore all six subvolumes as subvolumes, not plain directories, then
+assemble the writable layout exactly as in the step 5 trial. The new
 filesystem and LUKS UUIDs differ from the old ones. Update `fstab`, the
 `rd.luks` options and the UKI command line to match.
 
@@ -192,12 +222,18 @@ the firmware trusts it: read the live `db` (`mokutil --db` or
 `efi-readvar -v db`) and match the signing certificate's fingerprint
 (`openssl x509 -fingerprint`). Repeat after firmware updates or key changes.
 
-With Secure Boot enforced (`bootctl status`), boot each path once: the normal
-UKI, the fallback `EFI/BOOT/BOOTX64.EFI` (select the disk itself in the
-firmware boot menu), the recovery UKI and the independent recovery path.
-From the recovery path, unlock the actual LUKS volume manually with the
-passphrase and with the recovery key, mount the subvolumes and restore a
-sample from the backup. Verify this and the chosen TPM policy before
+Enroll the owner key and turn enforcement on only while the rehearsed way
+back still works: the supervisor password is known and disabling Secure Boot
+in firmware setup was tested in step 2. With Secure Boot enforced
+(`bootctl status`), boot each path once: the normal UKI, the fallback
+`EFI/BOOT/BOOTX64.EFI` (select the disk itself in the firmware boot menu), the
+recovery UKI and the independent recovery path. The final `db`/`dbx` differ
+from step 2's, so the independent recovery path must boot again here; if it
+is rejected, disable enforcement and fix it before relying on it. From the
+recovery path, unlock the actual LUKS volume manually with the passphrase and
+with the recovery key, mount the subvolumes and restore a sample from the
+backup into RAM or encrypted storage, as in step 4. Verify this and the
+chosen TPM policy before
 installing/enrolling the wallet bridge. Its physical TPM dummy-secret and
 restricted-polkit sandbox tests passed, but actual wallet and graphical
 authentication with the final integration remain unverified.
