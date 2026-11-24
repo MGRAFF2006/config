@@ -66,7 +66,7 @@ def main():
               "being required. Nothing was changed.", file=sys.stderr)
         if already:
             print("[ERROR] lockPamExternallyManaged is already true, so DMS is "
-                  "skipping the key now; turn it off in DMS to restore the key.", file=sys.stderr)
+                  "skipping the key now; set it to false to restore the key.", file=sys.stderr)
         print("[ERROR] To use the managed password/face lock instead, switch the "
               "security key to Alternative (OR) or turn it off in DMS, then re-run.",
               file=sys.stderr)
