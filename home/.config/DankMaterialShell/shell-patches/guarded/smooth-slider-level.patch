@@ -1,20 +1,57 @@
 --- a/DCommon/Widgets/DSlider.qml
 +++ b/DCommon/Widgets/DSlider.qml
-@@ -139,7 +139,19 @@
+@@ -139,7 +139,56 @@
      }
      readonly property real outsideCorner: Style.scaledRadius(trackCornerRadius, trackHeight / 2)
      readonly property real insideCorner: Style.scaledRadius(Style.sliderTrackInsideCornerRadius, trackHeight / 2)
 -    readonly property real visualRatio: mirrored ? 1 - ratio : ratio
-+    // Preserve velocity across held-key repeats; model values stay immediate.
-+    property real displayedRatio: ratio
++    // Critically damped tracking keeps velocity across held-key repeats instead
++    // of restarting an easing curve. It never passes the target or moves away
++    // from it, and covers 99% of a step within about 110 ms. Model values stay
++    // immediate.
++    readonly property bool smoothDisplay: !isDragging && !Style.reduceMotion && Style.currentAnimationSpeed !== Style.AnimationSpeed.None
++    property bool displayReady: false
++    property real displayedRatio: 0
++    property real displayedVelocity: 0
 +
-+    Behavior on displayedRatio {
-+        enabled: !slider.isDragging && !Style.reduceMotion && Style.currentAnimationSpeed !== Style.AnimationSpeed.None
-+        SmoothedAnimation {
-+            duration: 120
-+            velocity: -1
-+            reversingMode: SmoothedAnimation.Immediate
++    function snapDisplay() {
++        displayedRatio = ratio;
++        displayedVelocity = 0;
++    }
++
++    function advanceDisplay(frameTime) {
++        const omega = 60;
++        const t = Math.min(Math.max(frameTime, 0), 1 / 30);
++        const distance = ratio - displayedRatio;
++        // A reversal starts from rest rather than first moving away.
++        const velocity = displayedVelocity * distance > 0 ? displayedVelocity : 0;
++        const k = omega * distance - velocity;
++        const decay = Math.exp(-omega * t);
++        const remaining = (distance + k * t) * decay;
++        if (remaining * distance <= 0 || Math.abs(remaining) < 0.0005) {
++            snapDisplay();
++            return;
 +        }
++        displayedRatio = ratio - remaining;
++        displayedVelocity = (velocity + omega * k * t) * decay;
++    }
++
++    Component.onCompleted: {
++        snapDisplay();
++        displayReady = true;
++    }
++    onRatioChanged: {
++        if (!displayReady || !smoothDisplay)
++            snapDisplay();
++    }
++    onSmoothDisplayChanged: {
++        if (!smoothDisplay)
++            snapDisplay();
++    }
++
++    FrameAnimation {
++        running: slider.displayReady && slider.smoothDisplay && slider.displayedRatio !== slider.ratio
++        onTriggered: slider.advanceDisplay(frameTime)
 +    }
 +
 +    readonly property real visualRatio: mirrored ? 1 - displayedRatio : displayedRatio

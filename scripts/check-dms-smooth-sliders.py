@@ -21,7 +21,8 @@ def isolated_ui_source(module, source, destination):
     if manifest.exists():
         recorded = json.loads(manifest.read_text())
         if "files_sha256" in recorded:
-            assert recorded["patch_sha256"] == module.patch_digest()
+            if recorded["patch_sha256"] != module.patch_digest():
+                raise SystemExit(f"{source} was staged with a different patch set and cannot be reversed with the current patches. Rerun with --source-dir PRISTINE_DMS_{module.SUPPORTED_VERSION}_UI.")
             assert module.stage_intact(destination, recorded)
             patches = module.PATCHES
         else:
