@@ -61,18 +61,24 @@ to built-in DMS until its source is reviewed again.
 
 The 2.1.2 clipboard-history patch also covers the bar popout and centered history
 modal, which share `ClipboardEntry.qml`. Image captions stay on one line, and
-previews wrap long words and elide within the row's remaining height. Newlines
-are flattened only for display; the stored preview, accessible name and copy,
-paste, edit and pin actions retain the original data. This renderer is included
-in the source and launch fingerprints.
+previews wrap long words and elide within the height the row has left below
+the caption, so a single line keeps its full height even with dense spacing at
+150% text scale. Newlines are flattened only for display; the stored preview,
+accessible name and copy, paste, edit and pin actions retain the original data.
+This renderer is included in the source and launch fingerprints.
 
-Run `agent-desktop run python3 scripts/check-dms-clipboard-history-text.py
---source-dir /path/to/pristine/dms-ui` in the private agent desktop. The actual
-history rows are checked at 550/320 px, 115%/150% text scale, and normal/dense
-spacing with multiline text, unbroken URLs, image captions, literal markup and
-short text. `--unpatched` reproduces the overflow; `--evidence /absolute/path.png`
-saves a synthetic rendering. The check does not exercise the clipboard backend
-or change the human clipboard.
+```bash
+python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.1.2_UI
+python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.1.2_UI --unpatched  # reproduces the overflow
+```
+
+It uses the launcher check's private staging, launch-guard checks and isolated
+headless desktop. The actual history rows are checked at 550/320 px, 115%/150%
+text scale and normal/dense spacing (including dense at 150%) with multiline
+text, unbroken URLs, image captions, literal markup and short text with
+descenders, and the original previews must stay unchanged. `--evidence
+/absolute/path.png` saves a synthetic rendering. The check does not exercise
+the clipboard backend or touch the desktop clipboard.
 
 As of 2026-11-13 the upstream history renderer is identical to the installed
 2.1.2 renderer; the separate launcher fix has landed on upstream `master`.
@@ -91,6 +97,7 @@ changing any running shell, then check the launch guard and launcher text:
 python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
 python3 scripts/check-dms-launcher-text.py
+python3 scripts/check-dms-clipboard-history-text.py  # DMS 2.1.2 only
 ```
 
 On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
