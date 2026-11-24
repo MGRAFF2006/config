@@ -1,0 +1,175 @@
+{
+  "verifiedAt": "2026-10-25",
+  "upstreams": [
+    {
+      "repository": "https://github.com/anthropics/skills",
+      "revision": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+      "skills": [
+        "pdf",
+        "xlsx",
+        "docx",
+        "pptx"
+      ],
+      "license": "Per-skill LICENSE.txt; document skills are source-available",
+      "installation": "Official skill-installer, shared agent-kit destination",
+      "id": "anthropic-documents",
+      "localAdaptations": "Concise, format-specific descriptions; preserve the bundled document workflows and licenses."
+    },
+    {
+      "repository": "https://github.com/vercel-labs/agent-skills",
+      "revision": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "skills": [
+        "react-native-skills",
+        "react-best-practices"
+      ],
+      "license": "MIT",
+      "installation": "Official skill-installer, shared agent-kit destination",
+      "id": "vercel-engineering",
+      "localAdaptations": "Concise framework-specific selection descriptions; catalogue names retain the vercel- prefix."
+    },
+    {
+      "id": "effective-html",
+      "repository": "https://github.com/plannotator/effective-html",
+      "revision": "2ac1dfecb0f2474e75260cb6d3c9b9d6d9b5062e",
+      "skills": [
+        "html"
+      ],
+      "license": "MIT; skills/html/LICENSE",
+      "localAdaptations": "Personal monochrome default, scope selection and artifact verification."
+    },
+    {
+      "id": "anthropic-frontend",
+      "repository": "https://github.com/anthropics/skills",
+      "revision": null,
+      "skills": [
+        "frontend-design"
+      ],
+      "license": "Apache-2.0; skills/frontend-design/LICENSE.txt",
+      "installationEvidence": "t3-thread://v1/63485ada-a2cf-436c-80ca-80926f64d0ed",
+      "recordedInstalledAt": "2026-10-14",
+      "snapshotBeforeCleanupSha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+      "notes": "Upstream origin is recorded in the installation thread; an exact fetched commit was not recorded. Preserve this gap rather than invent a pin."
+    }
+  ],
+  "skills": {
+    "account-access": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "audit-agent-failures": {
+      "origin": "personal",
+      "basis": "Locally written adaptation of public instruction-authoring and history-audit methods; see agent/philosophy.md. No private Theo letter was imported."
+    },
+    "clarify-work": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "daily-brief": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "diagnose-bug": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "docx": {
+      "origin": "adapted",
+      "upstream": "anthropic-documents"
+    },
+    "frontend-design": {
+      "origin": "adapted",
+      "upstream": "anthropic-frontend"
+    },
+    "html": {
+      "origin": "adapted",
+      "upstream": "effective-html"
+    },
+    "jch-content": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "machines": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "mail-workflow": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "onboard-machine": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "pdf": {
+      "origin": "adapted",
+      "upstream": "anthropic-documents"
+    },
+    "ponytail": {
+      "origin": "unresolved",
+      "earliestKnownCommit": "870afe4",
+      "earliestKnownDate": "2026-10-02",
+      "declaredLicense": "MIT in SKILL.md",
+      "notes": "Existing local skill. Original external author/repository and import revision are unrecorded. Scope, completeness and communication conflicts were reconciled during cleanup."
+    },
+    "pptx": {
+      "origin": "adapted",
+      "upstream": "anthropic-documents"
+    },
+    "prune-agent-context": {
+      "origin": "personal",
+      "basis": "Locally written adaptation of public instruction-authoring and history-audit methods; see agent/philosophy.md. No private Theo letter was imported."
+    },
+    "react-best-practices": {
+      "origin": "adapted",
+      "upstream": "vercel-engineering",
+      "catalogueName": "vercel-react-best-practices"
+    },
+    "react-native-skills": {
+      "origin": "adapted",
+      "upstream": "vercel-engineering",
+      "catalogueName": "vercel-react-native-skills"
+    },
+    "release-readiness": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "research-notes": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "resume-work": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "reviewable-pr": {
+      "origin": "personal",
+      "recordedCreatedAt": "2026-10-17",
+      "evidence": "t3-thread://v1/96c30645-9a5c-4288-a626-aa928092bf26",
+      "basis": "Written for Mathis after reviewing existing PR skills. The original local version was recovered from homelab-dev; optional diagrams follow the newer shared development policy."
+    },
+    "scientific-documents": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "verify-app": {
+      "origin": "personal",
+      "basis": "Adapted for Mathis from observed tasks and explicit workflow preferences."
+    },
+    "write-agents-md": {
+      "origin": "personal",
+      "basis": "Locally written adaptation of public instruction-authoring and history-audit methods; see agent/philosophy.md. No private Theo letter was imported."
+    },
+    "xlsx": {
+      "origin": "adapted",
+      "upstream": "anthropic-documents"
+    }
+  },
+  "adaptationReferences": [
+    "https://me.daracloud.uk/articles/give-your-agent-your-psychosis/",
+    "https://github.com/mattpocock/skills/tree/5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+    "https://github.com/cursor/plugins/tree/main/pstack",
+    "https://github.com/obra/superpowers/tree/main/skills/systematic-debugging",
+    "https://github.com/trailofbits/skills"
+  ],
+  "notes": "This registry covers shared skill directories only. Provider/system and plugin skills remain managed outside the kit. Personal workflows are local adaptations, not wholesale imports of the referenced frameworks. Upstream revisions record provenance, not byte identity after local adaptation; null or unresolved origins remain explicit. Review upstream changes before replacing personal adaptations."
+}

@@ -1,59 +1,26 @@
 ---
 name: machines
-description: >-
-  Choose or operate Mathis's computers using verified machine context. Use for
-  remote work, desktop/laptop placement, Syncthing, AI readiness, or config sync.
+description: "Use when choosing or operating Mathis's computers, doing remote work, or managing Syncthing and agent-kit installation."
 ---
 
-# Machines
+# Work on the verified host
 
-Read `agent/fleet/README.md` and the relevant `agent/fleet/machines/<name>.md`
-in the config checkout. If locating the checkout from this installed skill,
-resolve the skill's symlink to its source under `agent/skills/`.
+Read the [fleet index](../../fleet/README.md) and the relevant machine record
+for current roles, constraints, SSH aliases and sync directions. Resolve this
+skill's symlink before following relative paths. Machine facts belong in those
+records rather than another table here.
 
-| Host | Role | Main constraint |
-|------|------|-----------------|
-| `desktop` | RX 7600 and unattended work | Verify online state; about 15 GiB RAM |
-| `laptop` | Interactive work and travel | Can suspend; about 30 GiB RAM |
+Verify the current device with `Self.HostName` from `tailscale status --json`
+and probe the required target's reachability. Follow the
+[environment workflow](../../workflows/environment.md) for placement, owned
+processes, GUI isolation and handoff to another computer. A bounded direct SSH
+operation remains appropriate when simpler than a handoff.
 
-## Reachability
+Before syncing, check the actual share, direction and exclusions; independent
+project checkouts may contain different dirty work. Keep credentials and runtime
+state machine-local. Do not infer that a path is shared on every computer.
 
-```bash
-tailscale status
-ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s'
-```
-
-The current device is `Self.HostName` in `tailscale status --json`. Do not infer
-identity from `/etc/hostname`. Probe only the host needed for the task. If it is
-unavailable, continue suitable local work and report remaining remote steps.
-
-## Syncthing shares (both devices when connected)
-
-| Path | Purpose |
-|------|---------|
-| `~/Documents/config/` | Dotfiles + **agent kit** (this skill's source) |
-| `~/Projects/` | Code |
-| `~/Documents/` | Docs (nested `config/` ignored via `.stignore`) |
-
-## Agent kit install
-
-Canonical: `~/Documents/config/agent/`
-
-```bash
-bash ~/Documents/config/scripts/install-agent-kit.sh
-bash ~/Documents/config/scripts/install-agent-kit.sh --check
-```
-
-Links the entire `agent/skills` directory into `~/.agents/skills`, shared by
-Codex, Cursor, and OpenCode, with individual compatibility links for Claude.
-All tools share `agent/GLOBAL.md`. The full dotfile installer is separate.
-
-## Rules of thumb
-
-- Prefer editing files under `Documents/config` or `Projects` over machine-local
-  copies of the same content.
-- Never assume laptop CPU/GPU/display is available for builds or UI checks.
-- Machine-specific packages live in `Documents/config/packages/*-{desktop,laptop}.txt`.
-- Put long remote jobs in tmux on the target host. Local tmux does not prevent
-  laptop suspension. Report the session and completion/failure.
-- Update machine records from verified facts, and keep credentials machine-local.
+Install shared instructions through `scripts/install-agent-kit.sh` in the config
+checkout, then run it with `--check`. New Claude per-skill links need an installer
+run; verify discovery in the intended runtime. Update the machine record after
+a verified capability or configuration change.

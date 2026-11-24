@@ -1,40 +1,33 @@
 ---
 name: audit-agent-failures
-description: >-
-  Mine recent agent/chat history for repeated failure modes and propose letter
-  or AGENTS.md one-liners. Use when the user asks to audit agent mistakes,
-  review thread history, tune the letter, or asks why agents keep failing.
+description: "Use when reviewing agent history for repeated mistakes or proposing evidence-based changes to instructions and skills."
 ---
 
-# Audit agent failures (Theo's history pass)
+# Learn from actual outcomes
 
-Theo's letter video method: do not invent rules from vibes alone. Ask an agent to
-scan real history for failure modes, then add **only** lines that earn tokens.
+Define the requested history scope and inventory available environments,
+projects and paginated threads. Include settled and archived records when the
+source supports them. Report offline hosts, inaccessible archives, truncation
+and other coverage gaps. Use supported history tools first; if an authorized
+local database read is needed, open it read-only and keep raw transcripts out
+of Git and durable documentation.
 
-## Process
+Distinguish human messages from agent relays and scheduled prompts using source
+metadata. Read the preceding response and outcome before classifying a
+correction: new scope, an old policy followed correctly, and an actual failure
+are different evidence. Count independent tasks, deduplicating copied histories
+and repeated worker messages; one large task tree is not many separate complaints.
 
-1. Scope: this repo's `.cursor` transcripts / agent logs if present, or the
-   user's described failures. Prefer concrete threads over guesses.
-2. Categorize (counts if possible):
-   - wrong process kills / environment damage
-   - unasked edits / overbuild
-   - draft PRs / bad PR titles/bodies
-   - repo-wide checks when focused would do
-   - stopping early / no verify
-   - glossary confusion (`user` vs maintainer)
-   - laptop/desktop assumptions
-3. For each top failure: propose **one** steering line for either:
-   - global `~/Documents/config/agent/GLOBAL.md`, or
-   - the project's `AGENTS.md`, or
-   - a skill whose **description** is only trigger keywords
-4. Prefer codebase/test fixes when the failure is a design smell.
-5. Show before/after snippets. Do not paste Theo's private letter verbatim —
-   copy the *process*, write humunkulud's words.
+For each recurring problem, record a short example, source thread/date, observed
+behavior, outcome and limits. Separate failures from positive examples and
+current capabilities from historical limitations. Never invent counts, measured
+gains or an upstream attribution.
 
-## Skill description reminder
+Prefer a code, type, architecture or runnable regression fix when it can prevent
+the mistake. Otherwise propose one targeted change in the root, project rule or
+existing skill, showing the current and suggested wording. Check current
+instructions first; avoid adding another rule for behavior already required.
 
-Descriptions are **triggers**, not manuals. Prefer:
-
-`Use when the user asks to monitor, watch, or babysit a PR.`
-
-over a paragraph that already contains the whole skill.
+Follow the public method of learning from concrete history, not someone else's
+private letter. Record only concise findings with source references. An audit
+or recommendation alone does not authorize applying its proposed changes.

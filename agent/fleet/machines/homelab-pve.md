@@ -12,7 +12,8 @@
   https://homelab-pve.tail03caec.ts.net, `root`, Linux PAM realm. Password is
   machine-local; choose it with `ssh -t homelab-pve passwd`, keep in Bitwarden.
 - VM 100 services: 2 vCPU, 16 GiB, 80 GiB SSD plus 1 TiB HDD data disk.
-- VM 110 development: 4 vCPU, 32 GiB, 160 GiB SSD; see its separate record.
+- VM 110 development: 4 vCPU, 32 GiB, 172 GiB SSD plus 512 GiB mirrored-HDD
+  worktree disk (storage verified 2026-11-03); see its separate record.
 - VM 120 CI: 4 vCPU with CPU limit 3, 32 GiB, 128 GiB SSD; 36 online
   repository runners, shared compute, trusted workflows only.
 - Three private guest bridges with outbound NAT; guest forwarding to private

@@ -5,6 +5,34 @@ Nothing is removed; log out and pick **Plasma** / use `startx` anytime.
 
 ## Status
 
+### Slow desktop after login while offline
+
+On the laptop, private SSH waits for `tailscale-online.target`. Starting that
+service directly from `multi-user.target` also delays services ordered after
+that target, including the power-profile service queried by DMS during loading.
+The 2026-11-03 startup log showed DMS taking 26 seconds to load while the
+Tailscale wait held the boot target for 65 seconds.
+
+For an existing Tailscale-ordered SSH setup, apply the focused migration:
+
+```bash
+bash scripts/install-ssh-startup.sh --dry-run
+sudo bash scripts/install-ssh-startup.sh
+bash scripts/install-ssh-startup.sh --check
+```
+
+The timer starts the same SSH service, retaining its Tailscale readiness check
+and listener configuration, without holding up `multi-user.target`. It does not
+restart SSH or the desktop, or change power profiles. Recheck after any setup
+flow that directly enables `sshd.service` again.
+
+To restore the previous direct boot start, run `sudo systemctl enable sshd.service`
+then `sudo systemctl disable --now sshd-tailscale.timer`. This restores the wait
+too. Previous timer files and enablement states are saved under
+`/var/backups/config-ssh-startup/`.
+
+### Session selection
+
 | Machine | Intent |
 |---------|--------|
 | laptop  | Try Hyprland + DMS first (this machine) |
@@ -85,10 +113,18 @@ python3 scripts/configure-dms-bar-panels.py --init
 dms restart
 ```
 
-The network panel shows a five-minute download/upload graph, live
-router/internet ping, DNS lookup time, traffic, address/gateway/DNS/MAC
-details, Wi‑Fi signal/link rate, and the current saved Wi‑Fi password
-(intentionally always visible inside the opened panel).
+The network panel uses DMS's live NetworkManager state for the connection
+summary and bar icon. Its Networks tab provides the stock Wi-Fi/Ethernet
+controls; Connection & diagnostics shows copyable IPv4/IPv6 details, traffic,
+and separate router/public-IP/DNS measurements. Internet access comes from
+NetworkManager's cached connectivity assessment for the whole device. Public-IP
+and DNS probes follow the system route, including VPNs; router ping is bound
+to the displayed interface. A missed ping is “No reply”,
+not “Offline”; an unavailable DNS lookup is labelled separately. Unknown or
+stale measurements never override the active connection. The helper samples
+the displayed interface, clears traffic history on connection changes, and
+refreshes without overlapping requests. It never retrieves Wi-Fi passwords.
+Run `python3 scripts/check-dms-network-status.py` for the focused logic checks.
 
 Audio uses DMS's standard volume, output, and input controls directly against
 PipeWire/WirePlumber. There are no persistent virtual sinks or automatic
@@ -184,6 +220,11 @@ symlinks automatically. `fix-howdy-libjxl.sh` is a legacy, version-specific work
 Verify face auth from a real session: `sudo howdy test`.
 
 Greeter: **greetd + DMS greeter**. Plasma stays selectable. Rollback DM: `dms greeter uninstall`.
+
+For an existing greeter whose colors, wallpaper or controls stopped matching the
+desktop, use `python3 scripts/install-dms-greeter-theme.py --apply`. This repair
+does not change PAM or restart the display manager. See [theme synchronization,
+renderer compatibility and recovery](dms-greeter-theme.md).
 
 Full DMS defaults live in [`home/.config/hypr/dms/binds.lua`](../home/.config/hypr/dms/binds.lua).
 DWM-style tags: [`home/.config/hypr/dms/workspaces.lua`](../home/.config/hypr/dms/workspaces.lua) + vendored `hyprsplit/`.

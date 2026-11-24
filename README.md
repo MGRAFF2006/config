@@ -4,7 +4,7 @@ My personal setup for a portable laptop and a stationary desktop: versioned dotf
 
 **Zsh + Starship · Neovim · Alacritty · Hyprland + DMS / KDE Plasma / DWM**
 
-The configuration lives here; home-directory files are linked into it. Syncthing keeps the repository shared between machines.
+The configuration lives here; home-directory files are linked into it. Git transfers this repository and software projects between machines; Syncthing is for personal files.
 
 Start with [package lists](packages/), [home configuration](home/), or the [Fleet records](agent/fleet/README.md). The [system manifest](docs/system-manifest.md) is a historical snapshot, not the deployment specification.
 
@@ -104,10 +104,11 @@ belongs in a package profile; it is never a removal list. Installed names may
 also differ from selected providers, such as `nodejs-lts-*` versus `nodejs`.
 
 For everyday changes: edit the repo, run the check, preview and apply links,
-verify the affected app, then commit when ready. After Syncthing delivers the
-changes to another host, rerun its linker if new paths were added. Avoid editing
-the same files on two machines simultaneously; Syncthing handles transfer while
-Git provides review and history. No automatic deployment workflow is needed.
+verify the affected app, then commit and push the reviewed change. Fetch and
+integrate it in the other host's independent checkout, preserving any local
+edits, then rerun its linker if new paths were added. Config and agent-kit
+edits no longer propagate through Syncthing. No automatic deployment workflow
+is needed.
 
 ## Coverage and remaining gaps (reviewed 2026-10-02)
 
@@ -124,7 +125,7 @@ It is not yet a complete backup or a one-command reconstruction of either host.
 | SSH / services | The linker installs SSH includes and the T3 PATH drop-in. T3 owns its generated base unit: with its CLI installed, run `t3 service install`, then reload user units. Provider logins and pairing remain local. |
 | System changes | PAM/greeter have focused scripts. Install the stored Bluetooth workaround with `bash scripts/install-bluetooth-config.sh`; `--dry-run`/`--check` are supported, and existing system files are backed up. It does not reload hardware or reboot. Network profiles, firewall rules, backups and boot setup need separate review. |
 | AUR build recipes | Recipe files are tracked directly by the parent repo; existing nested Git metadata stays local. No gitlinks or submodules are needed in a fresh clone. Optional GPU builds remain separate and require an online desktop; they were not rebuilt during this review. |
-| Version control | The deployment sources, agent kit, tests and AUR recipes are versioned. Other sessions may still have local edits; Git preserves committed recovery points and Syncthing transports live edits. |
+| Version control | The deployment sources, agent kit, tests and AUR recipes are versioned. Other sessions may still have local edits; Git transfers reviewed commits; dirty and untracked work stays machine-local. |
 
 Keep SSH private keys, Bitwarden data, browser/mail profiles, provider logins,
 chat databases, NetworkManager secrets and Syncthing identity local. Restore
@@ -171,7 +172,7 @@ config/
 │       ├── alacritty/      # alacritty.toml (base) + laptop.toml / desktop.toml
 │       ├── fastfetch/      # Fastfetch config
 │       ├── starship.toml   # Starship prompt (Nord theme)
-│       └── nvim/           # Neovim config (kickstart.nvim) — synced via Syncthing
+│       └── nvim/           # Neovim config (kickstart.nvim) — versioned with Git
 ├── agent/                  # Personal AI kit and machine context
 │   ├── README.md
 │   ├── AGENTS.template.md  # Minimal project AGENTS.md starter
@@ -201,21 +202,31 @@ config/
 
 Machine-specific overrides go in `~/.config/zshrc.d/<hostname>.zsh`.
 
-## Syncthing Folders
+## Syncthing folders
 
-| Folder | Direction |
-|---|---|
-| `~/Documents/` | ↔ bidirectional (ignores `/config` via `.stignore`) |
-| `~/Projects/` | ↔ bidirectional |
-| `~/Documents/config/` | ↔ bidirectional |
+Syncthing carries personal Documents, Downloads, Pictures, Music, Videos and
+Calibre Library between the workstations. Software under `~/Projects` and this
+config repository use Git. Commit and push reviewed changes, then fetch/integrate
+them on another machine; dirty work, credentials and runtime data stay local.
 
-`~/.config/nvim/` and `~/.config/alacritty/` are NOT separate Syncthing folders
-anymore — they are symlinked into this repo by `link-home.sh` and sync as part
-of the `config` folder. Never sync a path via Syncthing that is also a symlink
-into this repo (it creates self-referencing symlink loops).
+Preview or apply the scope migration while Syncthing is running:
 
-`~/Documents/.stignore` on each machine must contain `/config` so the nested
-config repo isn't double-synced (`.stignore` files are per-device, not synced).
+```bash
+python3 scripts/configure-personal-sync.py
+python3 scripts/configure-personal-sync.py --apply
+```
+
+The setup removes existing software-folder registrations without deleting or
+moving their files. It excludes known software checkouts inside Documents and
+generated caches while preserving personal notes, coursework, creative source
+files and each device's existing ignore rules. Policy lives in
+`syncthing/personal-files.json`. Run this setup on each device: ignore rules are
+device-local. It preserves existing personal-folder sharing; it does not create
+new shares or connect new devices. A protected local backup and exact restore
+command are printed before changes. See [scope and recovery](docs/personal-sync.md).
+
+`~/.config/nvim/` and `~/.config/alacritty/` are links into the Git checkout,
+not separate Syncthing folders. Do not sync those symlinked paths separately.
 
 ## Agent kit (letter + skills)
 

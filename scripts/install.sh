@@ -87,7 +87,9 @@ Workstation packages and config installed. Log out/in for shell and group change
 
 Next steps:
 - Configure Syncthing at http://localhost:8384 and authenticate Tailscale.
-- Sync Documents, Projects, and Documents/config; add /config to Documents/.stignore.
+- Sync personal Documents, Downloads, Pictures, Music, Videos and Calibre Library.
+- Use Git for Projects and Documents/config; run python3 scripts/configure-personal-sync.py
+  to preview exclusions, then add --apply to migrate existing shares with a backup.
   Do not separately sync ~/.config/nvim or ~/.config/alacritty (symlinked config).
 - Start nvim to install its plugins. Restore credentials from Bitwarden locally.
 - Review firewall rules before enabling ufw. Hyprland/DMS has a separate installer.

@@ -3,6 +3,9 @@
 Short reference when editing the global letter, project `AGENTS.md`, Cursor
 rules, or skills. Drawn from Theo (t3.gg):
 
+The [root instructions](AGENTS.md) define the current structure. This reference
+guides authoring; it does not add a separate layer of operating permissions.
+
 - *Delete your CLAUDE.md* — cut discoverable dumps; Band-Aid gotchas only
 - *I made Claude smarter by writing it a letter* — global file is a **hand-written
   letter** (tone + alignment + glossary), not a rules encyclopedia
@@ -13,11 +16,12 @@ rules, or skills. Drawn from Theo (t3.gg):
 
 | Layer | File | Job |
 |-------|------|-----|
-| **Letter (global)** | `agent/GLOBAL.md` (same source in every tool) | Who I am, tone match, default prefs, glossary, machines |
+| **Root** | `agent/AGENTS.md` (same source in every tool) | Preferences, permissions, ownership principles, and navigation to detailed branches |
 | **Project AGENTS.md** | repo root | How to change *this* codebase; landmines from real failures |
 
-Agents did not author the letter. You (or I with you) edit it by hand when
-preferences drift. Project files can be drafted with help, then you cut.
+The root records Mathis's preferences, refined with agent assistance from actual
+tasks and explicit decisions. It is a personal adaptation of public methods;
+it is not Theo's private letter. Preserve Mathis's intent when editing it.
 
 ## Hierarchy of fixes (prefer earlier)
 
@@ -57,12 +61,13 @@ preferences drift. Project files can be drafted with help, then you cut.
 ## Cross-tool layout
 
 ```
-~/Documents/config/agent/GLOBAL.md          # instructions and letter
-~/.cursor/rules/agent-kit.mdc -> …/GLOBAL.md
+~/Documents/config/agent/AGENTS.md          # canonical root
+~/Documents/config/agent/workflows/        # task-specific procedures
+~/AGENTS.md                -> …/agent/AGENTS.md
 ~/.agents/skills           -> …/skills
 ~/.claude/skills/<name>     -> …/skills/<name>
-~/.codex/AGENTS.md         -> …/GLOBAL.md
-~/.config/opencode/AGENTS.md -> …/GLOBAL.md
+~/.codex/AGENTS.md         -> …/agent/AGENTS.md
+~/.config/opencode/AGENTS.md -> …/agent/AGENTS.md
 AGENTS.md (per repo)
 CLAUDE.md -> AGENTS.md
 ```
