@@ -7,7 +7,11 @@ The installed 5.14.0-1 bundles PDFium; import and a 72 × 72 PDF-page render pas
 
 The focused installer below backs up pacman's configuration, installs
 `system/pacman/pypdfium2-hold.conf` under `/etc/pacman.d/`, and includes it in
-the `[options]` section. Run it from this checkout:
+the `[options]` section. It refuses to edit a symlinked `/etc/pacman.conf`, a
+layout without exactly one `[options]` header, or a configuration that already
+includes the hold file in another section; fix those by hand with
+`sudoedit /etc/pacman.conf`. `--check` requires the include under `[options]`
+and the effective `pacman-conf IgnorePkg` result. Run it from this checkout:
 
 ```bash
 bash scripts/install-pypdfium2-hold.sh --dry-run
