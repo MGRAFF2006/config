@@ -9,7 +9,44 @@ TestCase {
     name: "HowdyLock"
     when: true
 
-    Production.Pam { id: pam }
+    Production.Pam { id: lockPam }
+    property alias pam: lockPam
+
+    // Host for the pinned DMS password field: the check script pastes its key
+    // handling verbatim, so key presses take the real authBusy guard.
+    QtObject {
+        id: root
+        property bool demoMode: false
+        property bool unlocking: false
+        readonly property var pam: lockPam
+        readonly property var log: ({ debug: function() {} })
+        readonly property string passwordBuffer: lockPam.buffer
+        readonly property QtObject lockHost: QtObject {
+            function passwordEdited(text) { lockPam.buffer = text; }
+            function setInputRevealed(revealed) {}
+        }
+        function securityKeyShortcutMatches(event) { return false; }
+        function canStartSecurityKeyUnlock() { return false; }
+        function triggerSecurityKeyUnlock() {}
+    }
+    QtObject { id: keyboardController; property bool isKeyboardActive: false; function hide() {} }
+    QtObject { id: passwordBox; property bool showPassword: false }
+    QtObject { id: passwordDisplay; function selectAll() {} function deselect() {} }
+    Item {
+        id: passwordField
+        // PINNED_PASSWORD_FIELD
+    }
+
+    function press(key, text) {
+        const event = { key: key, text: text || "", modifiers: Qt.NoModifier, accepted: false };
+        passwordField.handleKey(event);
+        return event.accepted;
+    }
+
+    function type(text) {
+        for (const character of text)
+            verify(press(0, character), "key press was not consumed by the password field");
+    }
 
     function watchdog() {
         for (let i = 0; i < pam.data.length; ++i) {
@@ -68,7 +105,7 @@ TestCase {
         startAutomatic();
         compare(pam.passwd.config, "dankshell");
         compare(pam.passwd.configDirectory, "/etc/pam.d");
-        verify(pam.authBusy);
+        verify(!pam.authBusy, "The password field keeps taking keys during the face attempt");
         verify(watchdog().running, "Automatic authentication needs stall recovery");
         pam.passwd.askPassword(); // pam_unix asks first; an empty answer reaches Howdy.
         compare(pam.passwd.responses, [""]);
@@ -260,6 +297,7 @@ TestCase {
 
     function test_unlock_success_reaches_existing_unlock_signal() {
         startAutomatic();
+        pam.passwd.askPassword(); // Empty answer sent; Howdy matches.
         const spy = unlockSpy();
         pam.passwd.active = false;
         pam.passwd.completed(PamResult.Success);
@@ -286,6 +324,65 @@ TestCase {
         pam.passwd.active = false;
         pam.passwd.completed(PamResult.Success);
         compare(spy.count, 1);
+        spy.destroy();
+    }
+
+    // Review r2: password keys during the in-flight face attempt.
+    function test_key_during_automatic_attempt_reaches_password() {
+        startAutomatic();
+        pam.passwd.askPassword(); // Empty answer sent; Howdy is still running.
+        verify(watchdog().running);
+        type("t");
+        compare(pam.buffer, "t", "The first key must not be dropped");
+        verify(!pam.passwd.active, "Typing abandons the face attempt at once");
+        compare(pam.passwd.abortCount, 1);
+        verify(!watchdog().running);
+        type("est-only-password");
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 2, "Enter starts a fresh password attempt");
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["", "test-only-password"]);
+        const spy = unlockSpy();
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Success);
+        compare(spy.count, 1);
+        spy.destroy();
+    }
+
+    function test_key_before_empty_answer_is_kept_for_password() {
+        startAutomatic(); // pam_unix has not prompted yet.
+        type("k");
+        verify(!pam.passwd.active);
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 2);
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["k"], "The typed key, not the automatic empty answer");
+    }
+
+    function test_enter_on_empty_field_replaces_automatic_attempt() {
+        startAutomatic();
+        pam.passwd.askPassword();
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.abortCount, 1);
+        compare(pam.passwd.startCount, 2);
+        verify(pam.authBusy, "A submitted attempt is busy as before");
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["", ""]);
+    }
+
+    // Review r2: pam_unix nullok can succeed for a blank password before any
+    // prompt, without Howdy. An automatic attempt must not unlock from that.
+    function test_automatic_success_without_empty_answer_stays_locked() {
+        const spy = unlockSpy();
+        startAutomatic();
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Success); // No prompt was answered.
+        compare(spy.count, 0);
+        verify(!pam.unlockInProgress);
+        compare(pam.state, "");
+        verify(!pam.responseSubmitted);
+        wait(20);
+        compare(pam.passwd.startCount, 1, "No retry loop");
         spy.destroy();
     }
 }

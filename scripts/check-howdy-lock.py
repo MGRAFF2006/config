@@ -3,6 +3,7 @@
 
 No real PAM conversations, camera, desktop session or account files are opened.
 The 15-second stalled-authentication check intentionally uses the real timer.
+Key presses go through the pinned DMS password field's own handler.
 """
 
 import argparse
@@ -25,6 +26,24 @@ def write_module(root, name, files, singletons=()):
         prefix = "singleton " if component in singletons else ""
         entries.append(f"{prefix}{component} 1.0 {component}.qml")
     (directory / "qmldir").write_text("\n".join(entries) + "\n")
+
+
+def pinned_password_field(source):
+    """The DMS password field's state and key handling, verbatim, up to handleKey's end."""
+    widget = (source / 'Modules/Lock/Widgets/LockAuthWidget.qml').read_text()
+    start = widget.index('readonly property string text: root.passwordBuffer')
+    handler = widget.index('function handleKey(event) {', start)
+    depth, end = 0, None
+    for position in range(widget.index('{', handler), len(widget)):
+        depth += {'{': 1, '}': -1}.get(widget[position], 0)
+        if depth == 0:
+            end = position + 1
+            break
+    block = widget[start:end]
+    # The guard under test; fail closed if the pinned handler changed shape.
+    assert end and 'root.pam.retryFprintOnActivity();' in block and 'if (root.pam.authBusy) {' in block \
+        and 'insertText(event.text);' in block and 'root.pam.submitPassword();' in block, 'pinned key handler not found'
+    return block
 
 
 def main():
@@ -118,7 +137,8 @@ QtObject {
         }, ('SessionService', 'IdleService'))
         fixture = ROOT / 'scripts/fixtures/howdy-lock.qml'
         test = directory / 'tst_howdy_lock.qml'
-        test.write_text(fixture.read_text().replace('"PRODUCTION"', '"production"'))
+        test.write_text(fixture.read_text().replace('"PRODUCTION"', '"production"')
+                        .replace('// PINNED_PASSWORD_FIELD', pinned_password_field(source)))
         for name in ('runtime', 'config', 'cache', 'state', 'data'):
             (directory / name).mkdir(mode=0o700)
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
