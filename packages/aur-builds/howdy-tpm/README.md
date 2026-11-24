@@ -7,7 +7,8 @@ can follow its normal password-unlock path. It never authenticates a user itself
 
 The hardening patch requires an explicit matching PAM account and service,
 preserves typed passwords, bounds unsealing to five seconds plus a one-second
-kill deadline, and rejects unsafe or malformed credentials. Only the module is
+kill deadline, stops waiting after seven seconds even when the decrypt cannot be
+killed, and rejects unsafe or malformed credentials. Only the module is
 installed; upstream's enrollment and automatic PAM detection are not used.
 
 ```bash
@@ -58,6 +59,9 @@ Verification uses a dummy secret and temporary PAM stacks:
 ```bash
 sudo python scripts/check-howdy-tpm.py \
   --module packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/pam_howdy_tpm.so \
+  --source packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/src/pam_howdy_tpm.c
+# Substituted-decrypt timeouts only; no TPM, no sudo.
+unshare -r python scripts/check-howdy-tpm.py --decrypt-stub-only \
   --source packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/src/pam_howdy_tpm.c
 python scripts/check-howdy-kwallet-enroll.py
 python scripts/check-howdy-polkit.py
