@@ -63,6 +63,37 @@ to changed 2.1 internals. The version, binary and each patched renderer must
 match before the override launches. An upgrade to another version falls back
 to built-in DMS until its source is reviewed again.
 
+The 2.1.2 clipboard-history patch also covers the bar popout and centered history
+modal, which share `ClipboardEntry.qml`. Image captions stay on one line, and
+previews wrap long words and elide within the height the row has left below
+the caption, so a single line keeps its full height even with dense spacing at
+150% text scale. Newlines are flattened only for display; the stored preview,
+accessible name and copy, paste, edit and pin actions retain the original data.
+This renderer is included in the source and launch fingerprints.
+
+```bash
+python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.1.2_UI
+python3 scripts/check-dms-clipboard-history-text.py --source-dir PRISTINE_DMS_2.1.2_UI --unpatched  # reproduces the overflow
+```
+
+It uses the launcher check's `dms.path` lookup, private staging, launch-guard checks and isolated
+headless desktop. The actual history rows are checked at 550/320 px, 115%/150%
+text scale and normal/dense spacing (including dense at 150%) with multiline
+text, unbroken URLs, image captions, literal markup and short text with
+descenders, and the original previews must stay unchanged. `--evidence
+/absolute/path.png` saves a synthetic rendering. The check does not exercise
+the clipboard backend or touch the desktop clipboard.
+
+As of 2026-11-13 the upstream history renderer is identical to the installed
+2.1.2 renderer; the separate launcher fix has landed on upstream `master`.
+The history patch can be submitted independently against
+`quickshell/Modals/Clipboard/ClipboardEntry.qml` (apply with `patch -p1 -d
+quickshell`). Upstream's [contribution policy](https://github.com/duxlabs-dev/dux-shell/blob/master/CONTRIBUTING.md#generative-ai)
+allows AI-assisted code, requires disclosure and human review, and requires
+human-written PR descriptions, issues and comments. The local config PR records
+the fix and verification; an upstream submission still needs Mathis to review
+the code and write its description.
+
 Stage the reviewed change for the installed version (2.0.0 or 2.1.2) without
 changing any running shell, then check the launch guard and launcher text:
 
@@ -70,6 +101,7 @@ changing any running shell, then check the launch guard and launcher text:
 python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
 python3 scripts/check-dms-launcher-text.py
+python3 scripts/check-dms-clipboard-history-text.py  # DMS 2.1.2 only
 ```
 
 On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
