@@ -1,13 +1,15 @@
 #%PAM-1.0
 # Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
-# Howdy first, with password/PIN fallback after a timeout or camera failure.
+# Password/PIN first, so a typed secret never waits for the camera; submitting
+# an empty password falls through to Howdy. greetd runs one PAM service per
+# login attempt, so Howdy first would let a stalled camera block password login.
 # Use success=N (not "sufficient") so pam_kwallet5 still runs afterward.
 # Optional account-bound TPM bridge supplies the wallet token after face login.
 
 auth       required                     pam_securetty.so
 auth       requisite                    pam_nologin.so
-auth       [success=2 default=ignore]   pam_howdy.so
-auth       [success=1 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=1 default=ignore]   pam_howdy.so
 auth       requisite                    pam_deny.so
 -auth      optional                     pam_howdy_tpm.so user=humunkulud service=greetd cred=/etc/howdy-tpm/humunkulud.cred name=howdy-kwallet-humunkulud
 -auth      optional                     pam_kwallet5.so

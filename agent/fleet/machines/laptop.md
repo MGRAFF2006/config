@@ -18,6 +18,13 @@ System-file backups: `/var/backups/howdy-login-lock-20261114-163020/`.
 Face-only login leaves the encrypted KWallet locked and can prompt separately.
 See [authentication setup](../../../docs/hyprland-dms.md#keyring--howdy).
 
+Review on 2026-11-24 found that this Howdy-first order lets a stalled camera
+block password login and that a manual lock with the display on could unlock
+at once. The repository now keeps both stacks password-first and the lock patch
+starts face authentication only after a wake or lock-screen input. The
+laptop still runs the 2026-11-14 files until the installer and staging are
+deliberately reapplied.
+
 ## Power and sleep — verified 2026-11-13
 
 DMS now dims the built-in panel to 20% after 2 minutes idle, turns displays off
