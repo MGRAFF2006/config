@@ -77,18 +77,23 @@ Before disk or firmware changes:
    Homelab storage can replace the disk, but recovery boot remains an
    unresolved prerequisite.
 
-   Rehearse the chosen path under Secure Boot before relying on it, while
-   turning enforcement off again still works. A medium that boots with Secure
-   Boot off proves nothing about enforcement: `dbx`, for example, can reject a
-   shim even with Microsoft's CA in `db`. With a supervisor password set,
-   enable Secure Boot with the current keys, boot the exact rescue medium and
-   run step 4's typed LUKS2 unlock from it, then disable Secure Boot again
-   through firmware setup and boot the installed system. For the firmware
-   rollback option, this run is the rehearsal of that rollback. Record each
-   step's result. If the medium is rejected, choose another or fall back to the
-   rollback option before step 3. Media signed only with the future owner key
-   cannot pass this yet, so until that key is enrolled the rollback option is
-   the path that counts.
+   Rehearse the chosen path before step 3, with a supervisor password set,
+   while turning enforcement off again still works. Record each step's result.
+   - Signed media: enable Secure Boot with the current keys, boot the exact
+     rescue medium and run step 4's typed LUKS2 unlock from it, then disable
+     Secure Boot again through firmware setup and boot the installed system.
+     A medium that boots with Secure Boot off proves nothing about
+     enforcement: `dbx`, for example, can reject a shim even with Microsoft's
+     CA in `db`. If the medium is rejected, choose another or use the rollback
+     option. Media signed only with the future owner key cannot pass this
+     yet, so until that key is enrolled the rollback option is the path that
+     counts.
+   - Firmware rollback with unsigned media: enable Secure Boot, then disable it
+     again in firmware setup with the supervisor password, boot the exact
+     rescue medium and run step 4's typed LUKS2 unlock from it. Then boot the
+     installed system with Secure Boot still off; its current GRUB is unsigned,
+     so enforcement stays off until the migration. If any step fails, fix it
+     or choose signed media before step 3.
 3. Take the final backup with no writers. Shut the installed system down
    cleanly and boot the exact rescue medium from step 2. With only tools on
    that medium and credentials available without the laptop, mount partition 2
@@ -128,11 +133,32 @@ Before disk or firmware changes:
    directories inside the writable `@`. Then mount it with the final `fstab`
    options (`subvol=` and `compress=`), check with `btrfs subvolume list` and
    `btrfs property get <path> ro` that all six are present, writable and nested
-   as on the source, and create and delete a test file in each of them. Every
-   subvolume must restore completely, and after this assembly `btrfs
-   filesystem usage` must show at least 10% free. Destroy the scratch volume
-   afterwards. If it does not fit, reduce or exclude data deliberately, then
-   repeat steps 3–5.
+   as on the source.
+
+   Before the write test, compare the assembled trial with the quiescent,
+   read-only source from the rescue session, over SSH to the homelab, never
+   through unencrypted scratch. Subvolume and sample checks do not show a
+   missing directory or a lost attribute; this comparison is what proves the
+   backup is complete. For each of the six subvolumes, run
+   `rsync -aHAXn --numeric-ids --checksum --delete --itemize-changes` from the
+   source mount to the matching trial path, with exactly the recorded
+   exclusions as `--exclude`. That compares path coverage in both directions,
+   file contents, symlinks, hard links, device and special files, owners,
+   modes, times, ACLs and extended attributes (including file capabilities).
+   Compare `lsattr -R` of both sides too, for inode flags such as `C`
+   (no copy-on-write) that rsync does not check. Compare the ESP's files the
+   same way with `rsync -rcn --delete --itemize-changes`, and the backed-up
+   partition table with `sfdisk --dump` of the source. The output must be
+   empty except for directory times that the assembly itself changed (the
+   subvolume roots and the directories that hold the nested subvolumes). Any
+   other difference fails the gate: fix the backup and repeat steps 3–5.
+
+   Then create and delete a test file in each subvolume. Every subvolume must
+   restore completely, and after this assembly `btrfs filesystem usage` must
+   show at least 10% free. Destroy the scratch volume afterwards. If it does
+   not fit, reduce or exclude data deliberately, then repeat steps 3–5.
+   Record every deliberate exclusion (path and reason) in the maintenance
+   record before the erase; the comparison above uses exactly that list.
 6. Keep the source quiescent from step 3 until the erase: leave the laptop
    powered off or in the rescue medium, and do not boot the installed system.
    If the installed system boots or anything else writes to partition 2 or the
@@ -140,12 +166,13 @@ Before disk or firmware changes:
 
 ## Migration sequence and boundaries
 
-After the verified final backup, full trial restore and recovery proof, prefer
-creating a fresh LUKS2 container and restoring the existing Btrfs installation
-into it. That erases the current partition contents and therefore requires
-review of the exact disk, restore evidence and explicit authorization before
-execution. No such erase, partition, boot-order, firmware-key or reboot
-operation has been performed.
+After the verified final backup, a full trial restore with a clean
+source-to-trial comparison, and the recovery proof, prefer creating a fresh
+LUKS2 container and restoring the existing Btrfs installation into it. That
+erases the current partition contents and therefore requires review of the
+exact disk, restore evidence and explicit authorization before execution.
+No such erase, partition, boot-order, firmware-key or reboot operation has
+been performed.
 
 `luksFormat` only writes a header and keyslots. It does not overwrite the data
 area. A restore that never writes some sectors leaves the old plaintext in
@@ -153,8 +180,19 @@ them, readable from the raw device. Erase the old plaintext before
 restoring, from the recovery path, within the same authorized erase.
 
 First confirm the target: match the model and serial from `nvme list` to the
-recorded laptop drive and check `nvme list-ns` shows a single namespace. Then
-use the first supported method and verify that method, not another one.
+recorded laptop drive. Then inventory every namespace, not only the attached
+ones that `nvme list-ns` shows: `nvme list-ns --all` lists all allocated
+namespaces, including inactive ones (`nn` in `nvme id-ctrl` is the highest
+possible ID). Record each NSID with its size (`nvme id-ns --force -n <nsid>`
+also reads an inactive one) and the controller's `tnvmcap` and `unvmcap`.
+The erase authorization must name every listed namespace, and the chosen
+method must reach all of them; check this before any Sanitize or format runs.
+Sanitize covers every namespace in the subsystem. A format's secure erase
+covers all of them only when `fna` bit 1 is set; otherwise each namespace
+needs its own secure-erase format, and an inactive one must be attached
+first. The host overwrite reaches only partition 2, so it is ruled out when
+any other namespace exists. Then use the first supported method and verify
+that method, not another one.
 
 1. NVMe sanitize: crypto erase, or block erase if crypto erase is unsupported.
    Check `sanicap` in `nvme id-ctrl`. Sanitize is device-wide and reaches
@@ -225,15 +263,21 @@ the firmware trusts it: read the live `db` (`mokutil --db` or
 Enroll the owner key and turn enforcement on only while the rehearsed way
 back still works: the supervisor password is known and disabling Secure Boot
 in firmware setup was tested in step 2. With Secure Boot enforced
-(`bootctl status`), boot each path once: the normal UKI, the fallback
-`EFI/BOOT/BOOTX64.EFI` (select the disk itself in the firmware boot menu), the
-recovery UKI and the independent recovery path. The final `db`/`dbx` differ
-from step 2's, so the independent recovery path must boot again here; if it
-is rejected, disable enforcement and fix it before relying on it. From the
-recovery path, unlock the actual LUKS volume manually with the passphrase and
-with the recovery key, mount the subvolumes and restore a sample from the
-backup into RAM or encrypted storage, as in step 4. Verify this and the
-chosen TPM policy before
+(`bootctl status`), boot the normal UKI, the fallback `EFI/BOOT/BOOTX64.EFI`
+(select the disk itself in the firmware boot menu) and the recovery UKI once
+each. The final `db`/`dbx` differ from step 2's, so repeat the step 2
+rehearsal of the independent recovery path, with the recovery test below:
+
+- Signed media: boot the exact medium with enforcement on. If it is rejected,
+  disable enforcement and fix it before relying on it.
+- Firmware rollback: with enforcement on, disable it in firmware setup with
+  the supervisor password, boot the exact medium and run the recovery test.
+
+The recovery test: unlock the actual LUKS volume manually with the passphrase
+and with the recovery key, mount the subvolumes and restore a sample from the
+backup into RAM or encrypted storage, as in step 4. Afterwards re-enable
+enforcement if it was turned off, and verify that the normal UKI boots with
+Secure Boot enforced. Verify all of this and the chosen TPM policy before
 installing/enrolling the wallet bridge. Its physical TPM dummy-secret and
 restricted-polkit sandbox tests passed, but actual wallet and graphical
 authentication with the final integration remain unverified.
