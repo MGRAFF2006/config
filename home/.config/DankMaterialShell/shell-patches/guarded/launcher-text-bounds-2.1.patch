@@ -12,7 +12,7 @@
      property var item: null
      property var controller: null
      property int flatIndex: -1
-+    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!item?._hRich
++    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!controller?.dmenuMarkupRows && !!item?._hRich
  
      signal rightClicked(real mouseX, real mouseY)
  
@@ -78,7 +78,7 @@
      property bool externalHighlight: false
      readonly property color contentColor: isSelected ? Theme.onSelectedContainer : Theme.onSurface
      property var item: null
-+    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!item?._hRich
++    readonly property bool usesDmenuMarkup: item?.type === "dmenu" && !!controller?.dmenuMarkupRows && !!item?._hRich
      property bool isSelected: false
      property bool isHovered: itemArea.containsMouse
      property var controller: null

@@ -3,6 +3,7 @@
 
 No real PAM conversations, camera, desktop session or account files are opened.
 The 15-second stalled-authentication check intentionally uses the real timer.
+Key presses go through the pinned DMS password field's own handler.
 """
 
 import argparse
@@ -25,6 +26,24 @@ def write_module(root, name, files, singletons=()):
         prefix = "singleton " if component in singletons else ""
         entries.append(f"{prefix}{component} 1.0 {component}.qml")
     (directory / "qmldir").write_text("\n".join(entries) + "\n")
+
+
+def pinned_password_field(source):
+    """The DMS password field's state and key handling, verbatim, up to handleKey's end."""
+    widget = (source / 'Modules/Lock/Widgets/LockAuthWidget.qml').read_text()
+    start = widget.index('readonly property string text: root.passwordBuffer')
+    handler = widget.index('function handleKey(event) {', start)
+    depth, end = 0, None
+    for position in range(widget.index('{', handler), len(widget)):
+        depth += {'{': 1, '}': -1}.get(widget[position], 0)
+        if depth == 0:
+            end = position + 1
+            break
+    block = widget[start:end]
+    # The guard under test; fail closed if the pinned handler changed shape.
+    assert end and 'root.pam.retryFprintOnActivity();' in block and 'if (root.pam.authBusy) {' in block \
+        and 'insertText(event.text);' in block and 'root.pam.submitPassword();' in block, 'pinned key handler not found'
+    return block
 
 
 def main():
@@ -77,6 +96,8 @@ QtObject {
     function abort() { if (active) abortCount++; active = false; responseRequired = false; }
     function respond(value) { responses = responses.concat([value]); responseRequired = false; }
     function askPassword() { responseRequired = true; message = "Password: "; pamMessage(); }
+    // A PAM_TEXT_INFO/PAM_ERROR_MSG notice, e.g. Howdy's "Failure, timeout reached".
+    function notice(text) { responseRequired = false; message = text; pamMessage(); }
 }
 ''',
             'PamResult': 'pragma Singleton\nimport QtQml\nQtObject { enum Results { Success, Error, MaxTries, Failed } }\n',
@@ -97,13 +118,14 @@ QtObject {
     property string u2fMode: "or"
     property int maxFprintTries: 3
     property bool pamFilePresent: true
-    property string pamText: "auth [success=2 default=ignore] pam_howdy.so\\nauth required pam_unix.so\\n"
+    property string pamText: ""
 }
 ''',
             'AdminPolicy': 'pragma Singleton\nimport QtQml\nQtObject { property bool disableCustomLockPam: false }\n',
             'Paths': 'pragma Singleton\nimport QtQml\nQtObject { property string state: "/inert-state"; function strip(path) { return path; } }\n',
             'Log': 'pragma Singleton\nimport QtQml\nQtObject { function scoped(name) { return { warn: function(message) {} }; } }\n',
-        }, ('SettingsData', 'AdminPolicy', 'Paths', 'Log'))
+            'Theme': 'pragma Singleton\nimport QtQml\nQtObject { property real spacingM: 12; property real spacingXXS: 2 }\n',
+        }, ('SettingsData', 'AdminPolicy', 'Paths', 'Log', 'Theme'))
         write_module(imports, 'qs.Services', {
             'SessionService': '''pragma Singleton
 import QtQml
@@ -118,7 +140,8 @@ QtObject {
         }, ('SessionService', 'IdleService'))
         fixture = ROOT / 'scripts/fixtures/howdy-lock.qml'
         test = directory / 'tst_howdy_lock.qml'
-        test.write_text(fixture.read_text().replace('"PRODUCTION"', '"production"'))
+        test.write_text(fixture.read_text().replace('"PRODUCTION"', '"production"')
+                        .replace('// PINNED_PASSWORD_FIELD', pinned_password_field(source)))
         for name in ('runtime', 'config', 'cache', 'state', 'data'):
             (directory / name).mkdir(mode=0o700)
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software',
@@ -137,6 +160,10 @@ QtObject {
             raise SystemExit(result.returncode)
         if 'FAIL!' in result.stdout or 'QWARN' in result.stdout:
             raise SystemExit('Unexpected QML failure or warning')
+        # Unresolved bindings in the fixture or production code print here.
+        if '.qml:' in result.stderr:
+            print(result.stderr, end='')
+            raise SystemExit('Unexpected QML runtime warning')
 
 
 if __name__ == '__main__':

@@ -147,6 +147,9 @@ dms restart
 ```
 
 These patches are version-specific and are not part of normal installation.
+The installer applies only top-level `shell-patches/*.patch` files. Exact-version
+DMS 2.x patches live in `shell-patches/guarded/` and are applied only by the
+fingerprint-checked stager in [dms-smooth-sliders.md](dms-smooth-sliders.md).
 Recent DMS packages embed QML and may leave only old patched files under
 `/usr/share/quickshell/dms`; the presence of that directory alone is not proof
 that patching it will affect the running shell.
@@ -165,6 +168,15 @@ scripts/configure-dms-app-integration.py
 Restart Zen after first applying the integration or after changing managed
 preferences. DMS color changes are picked up from the generated stylesheet on
 the next Zen restart.
+
+OnlyOffice's default custom window frame includes invisible shadow padding
+that leaves a large gap inside a Hyprland tile. Switch it to the system frame
+once: save your documents, close OnlyOffice, then run
+`onlyoffice-desktopeditors --system-title-bar`. OnlyOffice saves this choice
+in its own settings, so later launches keep the system frame. Revert the same
+way with `--custom-title-bar`. The integration script prints this reminder when
+OnlyOffice is installed but never edits OnlyOffice's settings file. See the
+[OnlyOffice window-frame flags](https://api.onlyoffice.com/docs/desktop-editors/usage-api/command-line-flags/).
 
 WiFi: prefer **system** NetworkManager secrets (not KWallet). Helper:
 `nm-wifi-system-secret "SSID"` for networks that still prompt.
@@ -194,22 +206,66 @@ PAM (managed under `system/pam.d/`, install with
 
 | Stack | Role |
 |-------|------|
-| `greetd` | Howdy first, password/PIN fallback; `pam_kwallet5` + `ksecretd` |
+| `greetd` | Password/PIN first, Howdy fallback; `pam_kwallet5` + `ksecretd` |
 | `sddm` | Password first, Howdy fallback for Plasma |
-| `dankshell` | Howdy first, password/PIN fallback on DMS lock |
+| `dankshell` | Password/PIN first, Howdy fallback; face starts on wake (DMS lock) |
 | `sudo` | Howdy first, password fallback (terminal) |
 | `polkit-1` | Password-only for the graphical DMS elevation prompt |
 
-Greeter/lock and terminal `sudo`: camera first. Graphical polkit prompts remain password-only.
+Greeter and lock ask for the password before Howdy, so a typed password never
+waits for the camera, even when it hangs. Terminal `sudo` tries the camera
+first. Graphical polkit prompts remain password-only.
+Greeter: submit the empty password field to use your face.
 Set `greeterPamExternallyManaged=true` so DMS does not rewrite `/etc/pam.d/greetd`.
-For DMS 2.1, keep `lockPamExternallyManaged=true` and explicitly set
+For DMS 2.1, keep `lockPamExternallyManaged=true` and set
 `lockPamPath=/etc/pam.d/dankshell`; otherwise it selects the distro `login` stack.
-The guarded `howdy-lock-2.1.patch` starts the managed Howdy stack once when the
-secured lock screen becomes active, and retries after a display-off/sleep cycle
-when no password was typed. After a timeout, the password prompt stays usable.
-Stage it through `python scripts/configure-dms-smooth-sliders.py --apply` and
-use the staged UI on the next shell start. Unknown DMS versions use the packaged
-UI and require reviewing the patch again; manual Submit still starts PAM.
+The installer (via `scripts/configure-dms-lock-pam.py`) edits
+`$XDG_CONFIG_HOME/dms/settings.json`, the file DMS 2.1 reads, never the legacy
+`~/.config/DankMaterialShell/settings.json`. It sets an empty `lockPamPath`,
+keeps any custom one, and warns if DMS has not created its settings yet.
+It refuses, before changing any PAM or Howdy file, when DMS requires a security
+key as a second factor (Security key mode: Second factor (AND)). It reads that
+the way DMS 2.1.2 does: `settings.json`, then the visible `dms/config.d/*.json`
+files in DMS's order, then the `lock_settings` of `/usr/share/dms/cli-policy.json`
+and `/etc/dms/cli-policy.json`. A `DMS_POLICY_LOCK_SETTINGS` value in the
+caller's environment counts too (checked before `sudo`, which drops it). An
+unreadable overlay or policy stops the installer instead of being guessed at.
+An externally managed lock makes DMS skip the key step and `dankshell` has no
+`pam_u2f`, so the key would silently stop being required. Switch the key to
+Alternative (OR) or turn it off where it is set first if the managed
+password/face lock should replace it. DMS's own fingerprint and security-key
+(OR) unlock are not offered with the managed stack either; the installer warns
+when they are on.
+The settings file is replaced atomically, keeping its mode and owner, and is
+written before any PAM or Howdy file. If that write fails, the installer stops
+with an error and changes nothing else. PAM files written after it are not
+rolled back on a later failure; their `.backup-*` copies stay.
+
+The guarded `howdy-lock-2.1.patch` starts one face attempt after the display
+turns back on, after a resume from sleep, or after a key press or click on the
+lock screen. Locking alone does not start the camera, so a manual lock with the
+display on stays locked while you are still in front of it. A suspend that DMS
+requested but that never happened (refused or inhibited) is not a wake either.
+The attempt answers the managed stack's password prompt with an empty response,
+which falls through to Howdy. When no face matches it ends silently, including
+Howdy's "Failure, timeout reached" notice. Pressing Enter on the empty field
+starts a face attempt, or keeps the running one, and reports its failure.
+The password field keeps accepting keys during any face attempt: the first
+typed key abandons it, and the password goes to a fresh attempt that never
+reaches Howdy. The existing 15-second watchdog recovers a stalled camera when
+nothing is typed. Abandoning an attempt kills only Quickshell's PAM helper.
+Howdy's separate capture process (`compare.py`) can keep running until it
+matches or reaches Howdy's `timeout` (default 4 seconds), or longer if the
+camera driver stalls. A face attempt started meanwhile can fail while that
+process still holds the camera; a correct password never reaches Howdy and is
+unaffected. This is from the Quickshell and Howdy sources, not measured on the
+laptop. The `dankshell` stack omits `nullok`,
+and a face attempt that succeeds before its empty answer was sent stays
+locked, so a blank Unix password never unlocks without a face match; an
+account without a password unlocks the lock screen with the face only. Stage it through
+`python scripts/configure-dms-smooth-sliders.py --apply` and use the staged UI
+on the next shell start. Unknown DMS versions use the packaged UI and require
+reviewing the patch again; manual Submit still starts PAM.
 
 **Typed login password** unlocks `kdewallet` only if the wallet password equals
 the login password. **Face-only login** cannot unlock the wallet (no AUTHTOK) —
@@ -220,6 +276,13 @@ Re-apply PAM after greeter/package changes:
 ```bash
 ~/Documents/config/scripts/install-pam-keyring-howdy.sh
 ```
+
+The installer replaces `greetd`, `sddm`, `dankshell`, `sudo` and `polkit-1`
+whatever they contain (each with a `.backup-<stamp>` copy), so it also applies
+over a hand-edited password-only `greetd` or `dankshell`. It never edits
+`system-auth`. Face unlock on the lock screen also needs the staged
+`howdy-lock-2.1.patch`; with a password-only `dankshell` that patch stays
+inactive.
 
 Howdy needs a working `python-dlib`. Rebuild it against current libraries if
 its import fails after an upgrade. The PAM installer checks the import before

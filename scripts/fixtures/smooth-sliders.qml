@@ -62,6 +62,68 @@ ShellRoot {
         }
     }
 
+    // Retargets while moving: every rendered frame stays between the previous
+    // displayed position and the current target, so the handle never jumps
+    // backwards or leaves its track.
+    property int motionStep: 0
+    property int motionFrames: 0
+    property real motionPrevious: 0
+    property real motionTarget: 0
+    property real motionStart: 0
+
+    function retargetMotion(value) {
+        root.motionTarget = value / 100;
+        root.motionFrames = 0;
+        root.motionStart = slider.displayedRatio;
+        root.motionStep++;
+        slider.value = value;
+    }
+
+    FrameAnimation {
+        id: motion
+        onTriggered: {
+            const current = slider.displayedRatio;
+            const rising = root.motionTarget >= root.motionPrevious;
+            const low = rising ? root.motionPrevious : root.motionTarget;
+            const high = rising ? root.motionTarget : root.motionPrevious;
+            if (!root.check(current >= low - 0.0001 && current <= high + 0.0001, "retarget stays between displayed position and target (step " + root.motionStep + ")")) return;
+            root.motionPrevious = current;
+            root.motionFrames++;
+            const settled = current === slider.ratio;
+            switch (root.motionStep) {
+            case 0:
+                if (root.motionFrames < 2) return;
+                // Same-direction repeat: keep moving at the current velocity
+                // instead of restarting an easing curve.
+                const velocity = slider.displayedVelocity;
+                root.retargetMotion(90);
+                root.check(current < 0.6 && velocity > 0 && slider.displayedVelocity === velocity, "same-direction repeat keeps velocity");
+                return;
+            case 1:
+                if (root.motionFrames === 1 && !root.check(current > root.motionStart, "motion continues after repeat")) return;
+                if (root.motionFrames < 2) return;
+                // Close retarget while moving fast: one point above the
+                // rounded-up display, where an overshooting tracker reverses.
+                root.retargetMotion(Math.min(100, Math.ceil(current * 100) + 1));
+                return;
+            case 2:
+                if (!settled) return;
+                root.retargetMotion(90);
+                return;
+            case 3:
+                if (root.motionFrames < 2) return;
+                // Reversal: start from rest towards the new target.
+                root.retargetMotion(Math.max(0, Math.floor(current * 100) - 10));
+                return;
+            case 4:
+                if (!settled) return;
+                motion.stop();
+                console.warn("SMOOTH_SLIDER_PASS", JSON.stringify(root.samples));
+                Qt.quit();
+            }
+        }
+    }
+
     Timer {
         id: steps
         interval: 180
@@ -112,8 +174,14 @@ ShellRoot {
                 break;
             case 6:
                 if (!root.check(root.repeats === 12 && root.movingFrames > root.repeats && Math.abs(slider.displayedRatio - 0.8) < 0.001, "held sequence renders between repeats and settles after release")) return;
-                console.warn("SMOOTH_SLIDER_PASS", JSON.stringify(root.samples));
-                Qt.quit();
+                preferences.reduceMotion = true;
+                slider.value = 0;
+                preferences.reduceMotion = false;
+                root.motionTarget = 0.6;
+                root.motionPrevious = 0;
+                slider.value = 60;
+                motion.start();
+                stop();
             }
         }
     }
