@@ -168,8 +168,9 @@ the next Zen restart.
 
 When OnlyOffice is installed, this integration also sets its saved
 `General/titlebar=system` preference. Its custom frame includes invisible shadow
-padding that leaves a large gap inside a Hyprland tile. Save any documents and
-fully close and reopen OnlyOffice to apply the change. Revert with
+padding that leaves a large gap inside a Hyprland tile. OnlyOffice writes its
+settings back when it exits, so setup skips this step while it is running: save
+any documents, close OnlyOffice, and rerun the integration script. Revert with
 `onlyoffice-desktopeditors --custom-title-bar` after closing it; the next setup
 application restores the system frame. See the
 [OnlyOffice window-frame flags](https://api.onlyoffice.com/docs/desktop-editors/usage-api/command-line-flags/).
