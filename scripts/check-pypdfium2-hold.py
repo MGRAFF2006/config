@@ -106,7 +106,7 @@ def main():
         check("not-included", base, 1, "does not report")
         check("stale-drop-in", options, 1, "differs", drop_in="IgnorePkg = other\n")
         # An unrelated hold must not make a missing or misplaced include pass.
-        check("independent-hold-only", base.replace("[options]\n", independent), 1, "stays held")
+        check("independent-hold-only", base.replace("[options]\n", independent), 1, "still lists python-pypdfium2")
         check("misplaced", base.replace("[options]\n", independent) + include, 1, "warns about")
         # Pacman strips the CR, so this include sits in [core], not [options].
         check("crlf-section", independent + "[core]\r\n" + include, 1, "warns about")
