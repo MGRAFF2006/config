@@ -110,13 +110,14 @@ For the existing desktop, first run a bounded read-only probe:
 
 ```bash
 tailscale status
-ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s; command -v tmux; command -v claude codex'
+ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s; command -v tmux; for t in claude codex; do command -v "$t" || echo "no $t"; done'
 ```
 
-If that fails, report the host as unavailable and continue appropriate local
-work. When it works, run long jobs in a named tmux session **on the target host**.
-For example, an explicitly requested project build can be started after checking
-the project's instructions and working tree:
+The harness lines are informational. If SSH or `tmux` fails, report the host
+as unavailable and continue appropriate local work. When it works, run long
+jobs in a named tmux session **on the target host**. For example, an explicitly
+requested project build can be started after checking the project's
+instructions and working tree:
 
 ```bash
 ssh desktop

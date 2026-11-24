@@ -75,7 +75,7 @@ not a permanent property. Do not assume the laptop is weaker in RAM.
 
 | Tool | Global instructions | Personal skills |
 | --- | --- | --- |
-| Claude Code, the default T3 harness (Claude subscription) | `~/.claude/CLAUDE.md` → `agent/AGENTS.md` | `~/.claude/skills/<name>` → shared skill |
+| Claude Code, Mathis's preferred harness (Claude subscription) | `~/.claude/CLAUDE.md` → `agent/AGENTS.md` | `~/.claude/skills/<name>` → shared skill |
 | Codex, in T3 or standalone (ChatGPT subscription) | `~/.codex/AGENTS.md` → `agent/AGENTS.md` | `~/.agents/skills` → entire shared directory |
 | OpenCode, including T3's Laptop NPU provider | `~/.config/opencode/AGENTS.md` → `agent/AGENTS.md` | Same shared skills |
 

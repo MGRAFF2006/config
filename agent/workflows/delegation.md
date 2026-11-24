@@ -76,7 +76,7 @@ parent's provider and model unless the assignment gives a reason to change:
 | --- | --- |
 | Interactive work, implementation, coordination | The parent's model; at the top, Mathis's default (Claude flagship) |
 | Narrow searches, summaries, mechanical edits | A smaller model or lower effort from the same provider |
-| Independent or second-opinion review | A fresh agent; for substantial or risky changes, the other cloud model family (Claude or GPT) |
+| Independent or second-opinion review | A fresh agent; for substantial or risky changes, a cloud model family (Claude or GPT) other than the one that wrote the change |
 | Small private or offline tasks with a short context | Laptop NPU |
 
 Mathis's explicit choice overrides this table. Size effort to the task: higher

@@ -98,7 +98,7 @@ destinations that would mutate the source checkout through an alias are refused.
 Instructions and existing skill edits appear after sync; restart sessions as
 needed. New skills appear through the shared directory for Codex and
 OpenCode (including the Laptop NPU provider) without reinstalling. Claude Code,
-the default T3 harness, needs the installer rerun for each new skill's link:
+Mathis's preferred harness, needs the installer rerun for each new skill's link:
 its skill root stays local because Claude also writes account-downloaded
 skills there. [Claude documents that separate state](https://code.claude.com/docs/en/skills).
 
