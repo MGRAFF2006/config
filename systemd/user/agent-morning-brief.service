@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect and prepare Mathis's morning brief
+After=agent-mail.service
+Wants=agent-mail.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/Documents/config/scripts/agent-morning-brief.sh
+TimeoutStartSec=15min
+UMask=0077

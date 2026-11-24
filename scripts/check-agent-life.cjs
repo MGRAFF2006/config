@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+const assert = require('node:assert/strict');
+const { triage, scrub } = require('./agent-life.cjs');
+const folders = [{ accountId: 'account1', name: 'Newsletters', path: 'imap://example/Newsletters' }];
+const base = { accountId: 'account1', subject: 'Dein Uber Gutschein', author: '"Uber" <uber@uber.com>', read: false, flagged: false, tags: [] };
+assert.deepEqual(triage(base, folders), { moveTo: 'imap://example/Newsletters' });
+assert.deepEqual(triage({ ...base, subject: 'Deine Uber Rechnung und Gutschein' }, folders), { addTags: ['$label1'] });
+assert.equal(triage({ ...base, flagged: true }, folders), null);
+assert.equal(triage({ ...base, tags: ['$label3'] }, folders), null);
+assert.equal(triage({ ...base, author: 'uber@uber.com.evil.test' }, folders), null);
+assert.equal(triage({ ...base, subject: 'Deine Wohnungssuche', author: 'noreply@immobilienscout24.de' }, folders), null);
+assert.equal(triage(base, []), null);
+assert.equal(triage({ ...base, accountId: 'account4' }, folders), null);
+assert.equal(triage({ ...base, subject: '[repo] Verify the pilot workflow (PR #175)', author: 'notifications@github.com' }, folders), null);
+assert.equal(scrub('Login code 123456 https://mail.test/login/signed-secret?token=secret'), 'Login code [code redacted] https://mail.test');
+assert.equal(scrub('https://github.com/owner/repo/pull/3?token=secret'), 'https://github.com/owner/repo/pull/3');
+assert.equal(scrub('https://github.com/notifications/unsubscribe-auth/secret'), 'https://github.com');
+assert.equal(scrub({ subject: "Verifying it's you", body: 'Secret verification content' }).body, '[authentication content withheld]');
+assert.equal(scrub({ subject: 'Your single-use code', body: 'Your single-use code is 123456' }).body, '[authentication content withheld]');
+assert.equal(scrub('Morning brief 2026-10-20\nSecurity: verification notice'), 'Morning brief 2026-10-20\nSecurity: verification notice');
+assert.equal(scrub('https://moodle.tu-dortmund.de/mod/forum/discuss.php?d=123&sesskey=secret'), 'https://moodle.tu-dortmund.de/mod/forum/discuss.php?d=123');
+console.log('PASS: inbox protections and authentication/link redaction');
