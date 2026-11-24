@@ -47,9 +47,13 @@ a private Xwayland inside a headless KWin, both in bubblewrap with a read-only
 root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
 `bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
 desktop, its settings or the clipboard. Without `--source-dir` it stages from
-the running shell's `dms.path`, like the configure helper. `--evidence
-/absolute/path.png` saves the rendered fixture. Backend clipboard copy/paste
-and physical keyboard use are outside these checks.
+the running shell's `dms.path` (under `XDG_RUNTIME_DIR`), like the configure
+helper. It first copies that input into private storage, replacing symlinks
+with their contents, so its tamper probes never write to the input or anything
+it links to. `--self-test`, part of `check-config.py`, checks that isolation
+without a desktop or DMS. `--evidence /absolute/path.png` saves the rendered
+fixture. Backend clipboard copy/paste and physical keyboard use are outside
+these checks.
 
 DMS 2.1.2 uses a separate reviewed patch for launcher rows, grid labels and image
 tile captions. Generated search emphasis uses native styled text so Qt honors
