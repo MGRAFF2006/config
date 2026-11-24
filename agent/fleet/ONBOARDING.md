@@ -110,7 +110,7 @@ For the existing desktop, first run a bounded read-only probe:
 
 ```bash
 tailscale status
-ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s; command -v tmux; for t in claude codex; do command -v "$t" || echo "no $t"; done'
+ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s && command -v tmux || exit 1; for t in claude codex; do command -v "$t" || echo "no $t"; done'
 ```
 
 The harness lines are informational. If SSH or `tmux` fails, report the host
