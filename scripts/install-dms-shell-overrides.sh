@@ -43,8 +43,9 @@ for rel in "${files[@]}"; do
 done
 
 # Only top-level patches are for DMS 1.5.x. shell-patches/guarded/ holds
-# exact-version DMS 2.x patches applied by configure-dms-smooth-sliders.py
-# after its source fingerprint checks; never apply those here.
+# exact-version DMS 2.x shell and greeter patches, applied only after source
+# fingerprint checks by configure-dms-smooth-sliders.py and
+# configure-dms-greeter-ui.py; never apply those here.
 if [[ -d "$patches" ]]; then
   mapfile -t patch_files < <(find "$patches" -maxdepth 1 -type f -name '*.patch' -printf '%f\n' | sort)
   for patch_name in "${patch_files[@]}"; do

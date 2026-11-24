@@ -14,6 +14,12 @@ def main():
     spec = importlib.util.spec_from_file_location("greeter_ui", script)
     ui = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ui)
+    # install-dms-shell-overrides.sh applies every top-level shell-patches/*.patch
+    # to the desktop shell without fingerprint checks; the greeter patch must stay
+    # out of its reach and reach the greeter only through the checks below.
+    legacy = {path.resolve() for path in (ui.ROOT / "home/.config/DankMaterialShell/shell-patches").glob("*.patch")}
+    assert ui.PATCH.is_file(), f"greeter appearance patch missing: {ui.PATCH}"
+    assert ui.PATCH.resolve() not in legacy, "greeter appearance patch visible to install-dms-shell-overrides.sh"
     with tempfile.TemporaryDirectory(prefix="greeter-ui-check-") as directory:
         root = Path(directory)
         ui.BINARY = root / "dms-greeter"
@@ -57,7 +63,7 @@ def main():
         else:
             raise AssertionError("Unreviewed source was accepted")
         assert not absent.exists()
-    print("PASS: greeter override preserves launch flags and falls back after binary/UI/manifest changes; unreviewed staging refused")
+    print("PASS: greeter patch hidden from the legacy shell installer; greeter override preserves launch flags and falls back after binary/UI/manifest changes; unreviewed staging refused")
 
 
 if __name__ == "__main__":
