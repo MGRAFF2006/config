@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Persist the single-package workaround without replacing pacman's configuration.
+# Install the single-package hold as a pacman drop-in. Adding its Include to
+# pacman.conf stays a one-line manual edit; this script never edits pacman.conf.
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source_file="$repo_root/system/pacman/pypdfium2-hold.conf"
@@ -13,63 +14,64 @@ case "$mode" in install|--dry-run|--check) ;; *) echo "Usage: $0 [--dry-run|--ch
 [[ $# -le 1 ]] || { echo 'Expected at most one argument' >&2; exit 2; }
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# No grep -q: exiting early could SIGPIPE tr and fail the pipeline.
+holds() { tr ' ' '\n' | grep -Fx python-pypdfium2 >/dev/null; }
 
-# Print the section of every line that includes the managed file, using
-# pacman's rules: '#' starts a comment and surrounding whitespace is ignored.
-include_sections() {
+if [[ "$mode" == --check ]]; then
+  # Read-only: pacman itself decides what the configuration means.
+  cmp -s -- "$source_file" "$destination" || fail "$destination is missing or differs from $source_file."
+  command -v pacman-conf >/dev/null || fail 'pacman-conf is not installed.'
+  errors="$(mktemp)"; without="$(mktemp)"
+  trap 'rm -f -- "$errors" "$without"' EXIT
+  ignored="$(pacman-conf --config "$pacman_conf" IgnorePkg 2>"$errors")" \
+    || fail "pacman-conf cannot parse $pacman_conf: $(cat -- "$errors")"
+  # Pacman warns about IgnorePkg read outside [options], e.g. a misplaced
+  # Include or a repository glob that matches the drop-in.
+  ! grep -Fq -- "$destination" "$errors" || fail "pacman warns about $destination: $(cat -- "$errors")"
+  holds <<<"$ignored" || fail "pacman-conf does not report python-pypdfium2 in IgnorePkg; add '$include' under [options]."
+  # The hold must come from this drop-in, not from an unrelated IgnorePkg:
+  # without the Include line(s) for it, pacman must no longer report it.
   awk -v target="$destination" '
-    { line = $0; sub(/#.*/, "", line); gsub(/^[ \t]+|[ \t]+$/, "", line) }
-    line ~ /^\[.*\]$/ { section = substr(line, 2, length(line) - 2); next }
-    line ~ /^Include[ \t]*=/ {
-      value = line; sub(/^Include[ \t]*=[ \t]*/, "", value)
-      if (value == target) print (section == "" ? "(none)" : section)
-    }
-  ' "$pacman_conf"
-}
-
-# The hold only applies when its Include sits in [options]; elsewhere pacman
-# ignores IgnorePkg with a warning, so a misplaced line must not pass or block.
-check_include_placement() {
-  local misplaced
-  misplaced="$(include_sections | grep -vx options | sort -u | paste -sd ' ' || true)"
-  [[ -z "$misplaced" ]] || fail "$pacman_conf includes $destination outside [options] (in: $misplaced). Move it under [options] with sudoedit."
-}
-included_in_options() { grep -Fxq options <<<"$(include_sections)"; }
-
-if [[ "$mode" == --dry-run ]]; then
-  echo "Install $destination and add its Include under [options] in $pacman_conf."
-  echo 'Hold only python-pypdfium2; preserve all other settings and install no packages.'
+    { line = $0; gsub(/^[ \t\r]+|[ \t\r]+$/, "", line) }
+    line ~ /^Include[ \t]*=/ { value = line; sub(/^Include[ \t]*=[ \t]*/, "", value); if (value == target) next }
+    { print }
+  ' "$pacman_conf" >"$without"
+  ignored="$(pacman-conf --config "$without" IgnorePkg 2>/dev/null)" \
+    || fail "pacman-conf cannot parse $pacman_conf without '$include'."
+  if holds <<<"$ignored"; then
+    fail "python-pypdfium2 stays held without '$include'; another IgnorePkg or a glob Include provides it."
+  fi
+  echo 'PASS: pacman and yay persistently hold python-pypdfium2 through the drop-in.'
   exit
 fi
-if [[ "$mode" == --check ]]; then
-  cmp -s -- "$source_file" "$destination" || fail "$destination is missing or differs from $source_file."
-  check_include_placement
-  included_in_options || fail "$pacman_conf does not include $destination under [options]."
-  pacman-conf --config "$pacman_conf" IgnorePkg | tr ' ' '\n' | grep -Fxq python-pypdfium2 \
-    || fail 'pacman-conf does not report python-pypdfium2 in IgnorePkg.'
-  echo 'PASS: pacman and yay persistently hold python-pypdfium2.'
+
+# Refuse anything but a regular file before writing. A directory would
+# receive a nested copy; a symlink would redirect the write elsewhere.
+if [[ -L "$destination" || ( -e "$destination" && ! -f "$destination" ) ]]; then
+  fail "$destination exists but is not a regular file; remove or move it by hand."
+fi
+if [[ "$mode" == --dry-run ]]; then
+  echo "Install $source_file as $destination, backing up a differing existing file."
+  echo "Leave $pacman_conf unchanged and print the Include line to add under [options] by hand."
   exit
 fi
 [[ -n "$root" || $EUID -eq 0 ]] || exec sudo bash "$0" "$@"
 
-# Refuse unexpected layouts before writing anything. Editing in place would
-# replace a symlink with a regular file and disconnect its managed target.
-[[ ! -L "$pacman_conf" ]] || fail "$pacman_conf is a symlink; add '$include' under [options] in its target manually."
-[[ ! -L "$destination" ]] || fail "$destination is a symlink; refusing to replace it."
-[[ -f "$pacman_conf" ]] || fail "$pacman_conf is not a regular file."
-# Exactly one [options] header, so the Include cannot land inside a repository.
-[[ "$(grep -Fxc '[options]' "$pacman_conf")" == 1 ]] || fail "$pacman_conf needs exactly one exact '[options]' line."
-check_include_placement
-
-mkdir -p "$root/var/backups/config-pypdfium2-hold"
-backup="$(mktemp -d "$root/var/backups/config-pypdfium2-hold/$(date +%Y-%m-%d)-XXXXXXXX")"
-cp -a -- "$pacman_conf" "$backup/pacman.conf"
-if [[ -e "$destination" ]]; then
+if [[ -f "$destination" ]] && ! cmp -s -- "$source_file" "$destination"; then
+  mkdir -p "$root/var/backups/config-pypdfium2-hold"
+  backup="$(mktemp -d "$root/var/backups/config-pypdfium2-hold/$(date +%Y-%m-%d)-XXXXXXXX")"
   cp -a -- "$destination" "$backup/pypdfium2-hold.conf"
+  echo "Previous drop-in: $backup/pypdfium2-hold.conf"
 fi
 install -D -m 644 -- "$source_file" "$destination"
-if ! included_in_options; then
-  sed -i "\\|^\\[options\\]\$|a $include" "$pacman_conf"
+echo "Installed $destination."
+
+if bash "$0" --check >/dev/null 2>&1; then
+  echo 'PASS: pacman already includes the drop-in under [options].'
+else
+  editable="$(readlink -f -- "$pacman_conf")"
+  echo "To activate the hold, add this line directly below [options] in $editable:"
+  echo "  $include"
+  echo "Use: sudoedit $editable"
+  echo "Then verify: bash $0 --check"
 fi
-echo "Previous configuration: $backup"
-bash "$0" --check
