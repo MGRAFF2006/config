@@ -51,6 +51,9 @@ def main():
         layout = (args.restore / "layout-user.lua").read_text()
     else:
         settings = json.loads(settings_path.read_text())
+        cursor = settings.setdefault("cursorSettings", {})
+        if cursor.get("theme", "System Default") == "System Default":
+            cursor["theme"] = "breeze_cursors"
         if not (CONFIG / "hypr/dms/expressive.lua").is_file():
             raise SystemExit("Deploy the Hyprland config with scripts/link-home.sh first.")
         settings.update({
