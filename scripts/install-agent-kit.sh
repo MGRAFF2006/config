@@ -25,17 +25,19 @@ guard_destination() {
 }
 
 backup_name_is_contained() {
-  local path="$backup_root" part
-  local -a parts
-  IFS=/ read -r -a parts <<< "$1"
-  for part in "${parts[@]}"; do
+  local rest="$1" path="$backup_root" part
+  # Newlines would be cut by command substitutions such as dirname.
+  [[ "$rest" != *$'\n'* ]] || return 1
+  while [[ -n "$rest" ]]; do
+    part="${rest%%/*}"
+    [[ "$rest" == */* ]] && rest="${rest#*/}" || rest=""
     case "$part" in ""|.|..) return 1 ;; esac
-  done
-  for part in "${parts[@]:0:${#parts[@]}-1}"; do
     path="$path/$part"
-    if [[ -L "$path" ]] || { [[ -e "$path" ]] && [[ ! -d "$path" ]]; }; then return 1; fi
+    if [[ -n "$rest" ]]; then
+      if [[ -L "$path" ]] || { [[ -e "$path" ]] && [[ ! -d "$path" ]]; }; then return 1; fi
+    fi
   done
-  [[ ! -e "$backup_root/$1" && ! -L "$backup_root/$1" ]]
+  [[ ! -e "$path" && ! -L "$path" ]]
 }
 
 backup_path() {
@@ -57,9 +59,10 @@ backup_path() {
     while [[ -e "$backup_root/other-$extra" || -L "$backup_root/other-$extra" ]]; do
       extra=$((extra + 1))
     done
-    relative="other-$extra/$(basename -- "$dst")"
+    relative="other-$extra/${dst##*/}"
+    [[ "$relative" != "other-$extra/" && "$relative" != "other-$extra/." && "$relative" != "other-$extra/.." ]] || relative="other-$extra/entry"
   fi
-  mkdir -p -- "$(dirname -- "$backup_root/$relative")"
+  [[ "$relative" != */* ]] || mkdir -p -- "$backup_root/${relative%/*}"
   mv -- "$dst" "$backup_root/$relative"
   echo "BACKUP $dst -> $backup_root/$relative"
 }

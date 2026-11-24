@@ -274,6 +274,19 @@ def main():
         assert sorted(path.name for path in (agent / "skills").iterdir()) == source_entries
         assert "Old skill-path codex file\n" in saved_texts(skill_home)
         env["AGENT_KIT_HOME"] = str(home)
+        # A newline in a configured root must not shorten the checked name.
+        newline_home = root / "newline home"
+        (newline_home / "x\n").mkdir(parents=True)
+        (root / "escape target").mkdir()
+        (root / "escape target/AGENTS.md").write_text("Old newline-path file\n")
+        env["AGENT_KIT_HOME"] = str(newline_home)
+        env["CODEX_HOME"] = str(newline_home / "x\n") + "/../../escape target"
+        run()
+        runs = newline_home / ".local/share/agent-kit-backups"
+        copies = [path for path in runs.rglob("AGENTS.md")
+                  if path.is_file() and not path.is_symlink() and path.read_text() == "Old newline-path file\n"]
+        assert len(copies) == 1 and copies[0].resolve().relative_to(runs.resolve()).parts[0].count("-") == 2
+        env["AGENT_KIT_HOME"] = str(home)
         env.pop("CODEX_HOME")
     print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates, linked backup and relative-root safety, and readiness checks")
 
