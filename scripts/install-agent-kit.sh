@@ -24,6 +24,20 @@ guard_destination() {
   fi
 }
 
+backup_name_is_contained() {
+  local path="$backup_root" part
+  local -a parts
+  IFS=/ read -r -a parts <<< "$1"
+  for part in "${parts[@]}"; do
+    case "$part" in ""|.|..) return 1 ;; esac
+  done
+  for part in "${parts[@]:0:${#parts[@]}-1}"; do
+    path="$path/$part"
+    if [[ -L "$path" ]] || { [[ -e "$path" ]] && [[ ! -d "$path" ]]; }; then return 1; fi
+  done
+  [[ ! -e "$backup_root/$1" && ! -L "$backup_root/$1" ]]
+}
+
 backup_path() {
   local dst="$1" relative
   guard_destination "$dst"
@@ -33,14 +47,18 @@ backup_path() {
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
-  # Name the backup from a lexically normalized absolute path so `..` or a
-  # relative root cannot place it outside the backup directory. Only the name
-  # is normalized; the configured path is still what gets moved.
-  local name home_name
-  name="$(realpath -m -s -- "$dst")"
-  home_name="$(realpath -m -s -- "$agent_home")"
-  relative="${name#"$home_name"/}"
-  [[ "$relative" != "$name" ]] || relative="external$name"
+  relative="${dst#"$agent_home"/}"
+  [[ "$relative" != "$dst" ]] || relative="external$dst"
+  # Configured roots may be relative or contain `..` and symlinks, and earlier
+  # backups in this run may be symlinks. Keep the readable path only when it
+  # stays a fresh entry below real directories of this run's backup directory.
+  if ! backup_name_is_contained "$relative"; then
+    local extra=1
+    while [[ -e "$backup_root/other-$extra" || -L "$backup_root/other-$extra" ]]; do
+      extra=$((extra + 1))
+    done
+    relative="other-$extra/$(basename -- "$dst")"
+  fi
   mkdir -p -- "$(dirname -- "$backup_root/$relative")"
   mv -- "$dst" "$backup_root/$relative"
   echo "BACKUP $dst -> $backup_root/$relative"

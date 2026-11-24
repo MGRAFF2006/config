@@ -227,12 +227,15 @@ def main():
         run(cwd=deep)
         assert (external / "AGENTS.md").resolve() == agent / "AGENTS.md"
         saved = home / ".local/share/agent-kit-backups"
-        kept = [path for path in saved.glob("*/external/**/AGENTS.md")
+        kept = [path for path in saved.glob("*/**/AGENTS.md")
                 if not path.is_symlink() and path.read_text() == "Keep external instructions\n"]
         assert len(kept) == 1 and kept[0].resolve().is_relative_to(saved.resolve())
         assert not any(path.name == "external.." for path in root.rglob("external.."))
         # A root through a symlink and `..` follows the filesystem, not lexical
         # normalization: aliases/current/.. is intended/, not aliases/.
+        def saved_texts(base):
+            return sorted(path.read_text() for path in base.glob(".local/share/agent-kit-backups/*/**/AGENTS.md")
+                          if path.is_file() and not path.is_symlink())
         (root / "intended/profile").mkdir(parents=True)
         (root / "intended/config").mkdir()
         (root / "aliases").mkdir()
@@ -244,10 +247,33 @@ def main():
         run()
         assert (root / "intended/config/AGENTS.md").resolve() == agent / "AGENTS.md"
         assert (root / "aliases/config/AGENTS.md").read_text() == "Unrelated file\n"
-        assert any(path.read_text() == "Old intended file\n"
-                   for path in saved.glob("*/external/**/AGENTS.md") if not path.is_symlink())
-        assert all(path.resolve().is_relative_to(saved.resolve())
-                   for path in saved.glob("*/external/**/AGENTS.md"))
+        assert "Old intended file\n" in saved_texts(home)
+        # Two live files whose backup names coincide must both be kept. Here the
+        # home itself is aliases/config, the lexical spelling of the Codex root.
+        (root / "intended/config/AGENTS.md").unlink()
+        (root / "intended/config/AGENTS.md").write_text("Old codex file\n")
+        (root / "aliases/config/AGENTS.md").write_text("Old home file\n")
+        env["AGENT_KIT_HOME"] = str(root / "aliases/config")
+        run()
+        assert (root / "aliases/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert (root / "intended/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert saved_texts(root / "aliases/config") == ["Old codex file\n", "Old home file\n"]
+        # A legacy skill-root link archived earlier in the run must not become
+        # the parent of a later backup and redirect it into the checkout.
+        skill_home = root / "skill alias home"
+        (skill_home / ".claude").mkdir(parents=True)
+        (skill_home / ".claude/skills").symlink_to(agent / "skills", target_is_directory=True)
+        (skill_home / "current").symlink_to(root / "intended/profile", target_is_directory=True)
+        (root / "intended/.claude/skills").mkdir(parents=True)
+        (root / "intended/.claude/skills/AGENTS.md").write_text("Old skill-path codex file\n")
+        (root / "out").mkdir()
+        env["AGENT_KIT_HOME"] = str(skill_home)
+        env["CODEX_HOME"] = str(root / "out/../skill alias home/current/../.claude/skills")
+        source_entries = sorted(path.name for path in (agent / "skills").iterdir())
+        run()
+        assert sorted(path.name for path in (agent / "skills").iterdir()) == source_entries
+        assert "Old skill-path codex file\n" in saved_texts(skill_home)
+        env["AGENT_KIT_HOME"] = str(home)
         env.pop("CODEX_HOME")
     print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates, linked backup and relative-root safety, and readiness checks")
 
