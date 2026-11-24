@@ -11,6 +11,13 @@ canonical_path() {
   REPLY="${path%$'\n.'}"
 }
 canonical_path "$(dirname -- "${BASH_SOURCE[0]}")/.."; repo_root="$REPLY"
+# Delegated helpers cannot represent these in the checkout path: command
+# substitutions drop trailing newlines, and OpenSSH Include expands or globs
+# the others, so a link could point at one checkout and SSH at another.
+if [[ "$repo_root" == *[[:cntrl:]]* || "$repo_root" == *['\[]%$*?']* ]]; then
+  printf 'Unsupported character in config checkout path: %q\n' "$repo_root" >&2
+  exit 1
+fi
 canonical_path "$repo_root/home"; home_root="$REPLY"
 canonical_path "${CONFIG_LINK_HOME:-$HOME}"; target_home="$REPLY"
 mode=install
@@ -97,7 +104,7 @@ for rel in "${links[@]}"; do
   [[ -e "$home_root/$rel" ]] || { echo "Missing source: home/$rel" >&2; exit 1; }
 done
 
-for source in "$repo_root/systemd/user/t3code.service.d/path.conf" "$repo_root/scripts/configure-ssh.py" "$repo_root/ssh/workstations.conf" "$repo_root/ssh/homelab.conf"; do
+for source in "$repo_root/systemd/user/t3code.service.d/path.conf" "$repo_root/scripts/configure-ssh.py" "$repo_root/scripts/link-plan-preflight.py" "$repo_root/ssh/workstations.conf" "$repo_root/ssh/homelab.conf"; do
   [[ -f "$source" ]] || { echo "Missing source: $source" >&2; exit 1; }
 done
 [[ -f "$repo_root/scripts/install-agent-kit.sh" && -f "$repo_root/agent/GLOBAL.md" && -d "$repo_root/agent/skills" ]] || {
@@ -120,19 +127,50 @@ ensure_local_destination() {
   fi
 }
 
-# Reject shared parents, backup aliases and checkout ancestors before changing
-# any existing links. Installers run the preview before package changes.
+kit_codex_root="${CODEX_HOME:-$target_home/.codex}"
+kit_config_root="${XDG_CONFIG_HOME:-$target_home/.config}"
+# An isolated destination must not inherit paths pointing at the real home.
+if [[ -n "${CONFIG_LINK_HOME:-}" ]]; then
+  kit_codex_root="$target_home/.codex"
+  kit_config_root="$target_home/.config"
+fi
+
+# Every path the apply phase changes, in order, including the SSH and agent-kit
+# helpers (keep in sync with configure-ssh.py and install-agent-kit.sh).
+config_backups="$target_home/.local/share/config-link-backups/new-backup"
+plan=(dir "$config_backups" "")
+for rel in "${links[@]}"; do plan+=(link "$target_home/$rel" "$home_root/$rel"); done
+if [[ "$machine" == homelab-dev ]]; then
+  plan+=(link "$target_home/.zshenv" "$repo_root/headless/zshenv")
+  plan+=(link "$target_home/.config/mise/config.toml" "$repo_root/headless/mise.toml")
+else
+  plan+=(link "$target_home/.config/alacritty/machine.toml" "$home_root/.config/alacritty/$machine.toml")
+fi
+plan+=(link "$target_home/.config/systemd/user/t3code.service.d/path.conf" "$repo_root/systemd/user/t3code.service.d/path.conf")
+plan+=(file "$target_home/.ssh/config" "" dir "$config_backups" "")
+plan+=(dir "$target_home/.local/share/agent-kit-backups/new-backup" "")
+plan+=(localize "$kit_codex_root/skills" "$repo_root/agent/skills")
+plan+=(localize "$target_home/.claude/skills" "$repo_root/agent/skills")
+for target in "$target_home/AGENTS.md" "$kit_codex_root/AGENTS.md" \
+  "$kit_config_root/opencode/AGENTS.md" "$target_home/.claude/CLAUDE.md" \
+  "$target_home/.claude/AGENTS.md"; do
+  plan+=(link "$target" "$repo_root/agent/AGENTS.md")
+done
+plan+=(link "$target_home/.agents/skills" "$repo_root/agent/skills")
+for skill in "$repo_root"/agent/skills/*; do
+  [[ -f "$skill/SKILL.md" ]] || continue
+  name="${skill##*/}"
+  plan+=(link "$target_home/.claude/skills/$name" "$skill")
+  plan+=(retire "$target_home/.cursor/skills/$name" "$skill" retire "$kit_codex_root/skills/$name" "$skill")
+done
+for rule in agent-kit letter personal-machines; do
+  plan+=(retire "$target_home/.cursor/rules/$rule.mdc" "$repo_root/agent/AGENTS.md")
+done
+
+# Refuse shared parents, checkout ancestors and paths redirected by an earlier
+# step before changing anything. Installers run the preview before packages.
 if [[ "$mode" != --check ]]; then
-  for rel in "${links[@]}"; do ensure_local_destination "$target_home/$rel"; done
-  if [[ "$machine" == homelab-dev ]]; then
-    ensure_local_destination "$target_home/.zshenv"
-    ensure_local_destination "$target_home/.config/mise/config.toml"
-  else
-    ensure_local_destination "$target_home/.config/alacritty/machine.toml"
-  fi
-  ensure_local_destination "$target_home/.config/systemd/user/t3code.service.d/path.conf"
-  ensure_local_destination "$target_home/.ssh/config"
-  ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
+  python3 "$repo_root/scripts/link-plan-preflight.py" "$repo_root" "$home_root" "${plan[@]}" || exit 1
 fi
 
 link_file() {
@@ -176,13 +214,6 @@ if ! CONFIG_LINK_HOME="$target_home" python3 "$repo_root/scripts/configure-ssh.p
   failures=$((failures + 1))
 fi
 
-kit_codex_root="${CODEX_HOME:-$target_home/.codex}"
-kit_config_root="${XDG_CONFIG_HOME:-$target_home/.config}"
-# An isolated destination must not inherit paths pointing at the real home.
-if [[ -n "${CONFIG_LINK_HOME:-}" ]]; then
-  kit_codex_root="$target_home/.codex"
-  kit_config_root="$target_home/.config"
-fi
 if ! AGENT_KIT_HOME="$target_home" CODEX_HOME="$kit_codex_root" XDG_CONFIG_HOME="$kit_config_root" bash "$repo_root/scripts/install-agent-kit.sh" "${kit_args[@]}"; then
   failures=$((failures + 1))
 fi
