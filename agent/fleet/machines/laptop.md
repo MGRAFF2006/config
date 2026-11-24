@@ -1,5 +1,26 @@
 # Laptop
 
+## Power and sleep — verified 2026-11-13
+
+DMS now dims the built-in panel to 20% after 2 minutes idle, turns displays off
+at 3 minutes, locks at 5 minutes, and suspends at 15 minutes on battery or
+30 minutes on AC. Manual lock turns displays off after 20 seconds; lock before
+suspend is enabled. Profiles select Power Saver on battery and Balanced on AC.
+
+Control Center's coffee-cup **Keep Awake** tile is the explicit exception for
+background jobs, including with the lid closed. Normal lid close now suspends;
+the existing Hyprland bindings still turn only `eDP-1` off/on with the lid.
+The old permanent lid service is inactive and guarded against older setup
+reruns; Bluetooth audio claiming remains active without its laptop lid blocker.
+Other computers retain the helper's original default.
+
+All 15 power settings match disk and live DMS, the plugin loads, and the native
+Keep Awake inhibitor acquires/releases correctly. Production-QML checks cover
+manual adjustments, inhibitors, reconnect and restart restoration. A private
+Wayland idle/wake check passed with a fake backlight. Physical lid-close and
+suspend/resume were not tested. See [setup and recovery](../../../docs/laptop-power.md).
+
+
 ## Ladybird upgrade repair — verified 2026-11-09
 
 `ladybird 20261101-2.1` is installed from the local
@@ -97,8 +118,8 @@ for connections. The local hostname alone does not identify this device.
 
 Ryzen AI 7 350, Radeon 860M integrated GPU, about 30 GiB usable RAM. Prefer it for
 interactive coding, research, review, and light checks. Battery, heat, travel,
-and suspension matter more than its memory capacity. There is no locally
-configured model runtime in this kit; cloud coding agents use their provider.
+and suspension matter more than its memory capacity. Its XDNA2 NPU runs local
+models through FastFlowLM; see [the setup and operation guide](../../../docs/laptop-npu.md).
 
 Verified on 2026-10-02: current session is Hyprland on Wayland. KDE Plasma is
 also part of the documented setup; do not assume which session is running.
