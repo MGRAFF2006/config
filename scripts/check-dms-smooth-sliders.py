@@ -50,6 +50,11 @@ def main():
     class Launched(Exception):
         pass
 
+    # The legacy 1.5.x installer applies every top-level shell-patches/*.patch
+    # without fingerprint checks; guarded patches must stay out of its reach.
+    legacy = {path.resolve() for path in (module.ROOT / "home/.config/DankMaterialShell/shell-patches").glob("*.patch")}
+    assert legacy.isdisjoint(path.resolve() for path in module.PATCHES), "guarded DMS patch visible to install-dms-shell-overrides.sh"
+
     with tempfile.TemporaryDirectory(prefix="smooth-slider-check-") as directory:
         root = Path(directory)
         output, target = root / "output", root / "staged"

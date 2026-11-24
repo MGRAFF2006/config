@@ -10,10 +10,11 @@ their existing behavior.
 
 DMS 2.0's shared slider normally places its handle directly at each integer
 volume or brightness value. Panel-opening motion does not interpolate that
-progress. The `smooth-slider-level.patch` uses Qt’s velocity-preserving
-`SmoothedAnimation` on a separate visual ratio, with a 120 ms tracking duration.
-Held-key repeats retarget the running movement without restarting the easing on
-every step. The real value, adjustment signal and hardware update remain immediate. Pointer dragging, reduced motion and disabled animations
+progress. The `shell-patches/guarded/smooth-slider-level.patch` uses Qt’s
+velocity-preserving `SmoothedAnimation` on a separate visual ratio, with a
+120 ms tracking duration. Held-key repeats retarget the running movement without
+restarting the easing on every step. The real value, adjustment signal and
+hardware update remain immediate. Pointer dragging, reduced motion and disabled animations
 bypass the transition.
 
 Stage the reviewed change without changing any running shell:
@@ -31,7 +32,9 @@ patches. The manifest records the whole source tree's hash, combined patch hash,
 all three patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
-extracted built-in files are changed.
+extracted built-in files are changed. The patches live in
+`shell-patches/guarded/` so the legacy DMS 1.5.x installer never applies them
+without these checks.
 
 The helper prints a supported `dms -c STAGED_UI run -d` command. For a durable
 session launcher, use:
