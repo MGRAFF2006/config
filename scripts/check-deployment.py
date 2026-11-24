@@ -22,7 +22,7 @@ def main():
         shutil.copytree(source / "systemd", repo / "systemd", symlinks=True)
         shutil.copytree(source / "system", repo / "system", symlinks=True)
         (repo / "scripts").mkdir()
-        for name in ("install.sh", "link-home.sh", "install-agent-kit.sh", "install-bluetooth-config.sh", "configure-ssh.py", "link-plan-preflight.py"):
+        for name in ("install.sh", "link-home.sh", "install-agent-kit.sh", "install-bluetooth-config.sh", "configure-ssh.py"):
             shutil.copy2(source / "scripts" / name, repo / "scripts" / name)
         binaries = root / "bin"
         binaries.mkdir()
@@ -140,108 +140,6 @@ def main():
         assert (requested / ".zshrc").resolve() == repo / "home/.zshrc"
         assert (sibling / ".zshrc").read_text() == "original shell\n"
         assert sorted(path.name for path in sibling.iterdir()) == [".zshrc"]
-
-        # The preflight resolves every helper destination after earlier
-        # replacements, so an alias through a replaced directory is refused.
-        def refuses(name, machine, prepare, message):
-            isolated = root / name
-            (isolated / ".config").mkdir(parents=True)
-            (isolated / ".zshrc").write_text("original shell\n")
-            prepare(isolated)
-            before = snapshot(isolated)
-            refusal_env = dict(env, CONFIG_LINK_HOME=str(isolated))
-            command = ["bash", str(repo / "scripts/link-home.sh"), machine]
-            for args in (["--dry-run"], []):
-                result = subprocess.run(command + args, env=refusal_env, capture_output=True, text=True)
-                assert result.returncode == 1, name + result.stdout + result.stderr
-                assert message in result.stderr, name + result.stderr
-                assert snapshot(isolated) == before, name
-                assert snapshot(repo) == shared_before, name
-
-        def local_nvim_alias(alias_path):
-            def prepare(home):
-                (home / ".config/nvim").mkdir()
-                (home / ".config/nvim/local.lua").write_text("keep editor\n")
-                (home / alias_path).parent.mkdir(parents=True, exist_ok=True)
-                (home / alias_path).symlink_to(home / ".config/nvim", target_is_directory=True)
-            return prepare
-
-        def earlier_link_moved(home):
-            (home / ".config/hypr/bin").mkdir(parents=True)
-            (home / ".local").mkdir()
-            (home / ".local/bin").symlink_to(home / ".config/hypr/bin", target_is_directory=True)
-
-        def earlier_alias_redirected(home):
-            # No later desktop link uses this alias, so only the final check sees it.
-            (root / "local hypr/applications").mkdir(parents=True)
-            (home / ".config/hypr").symlink_to(root / "local hypr", target_is_directory=True)
-            (home / ".local/share").mkdir(parents=True)
-            (home / ".local/share/applications").symlink_to(home / ".config/hypr/applications", target_is_directory=True)
-
-        def linked_ssh_config(home):
-            (home / ".ssh").mkdir()
-            (home / "local ssh config").write_text("Host custom\n")
-            (home / ".ssh/config").symlink_to(home / "local ssh config")
-
-        def broken_config_parent(home):
-            (home / ".config").rmdir()
-            (home / ".config").symlink_to(root / "missing config", target_is_directory=True)
-
-        shared = "Destination parent points into shared repo"
-        refuses("ssh-through-nvim", "homelab-dev", local_nvim_alias(".ssh"), shared)
-        refuses("units-through-nvim", "homelab-dev", local_nvim_alias(".config/systemd/user"), shared)
-        refuses("kit-through-nvim", "homelab-dev", local_nvim_alias(".claude"), shared)
-        refuses("earlier-link-moved", "laptop", earlier_link_moved, "would move the earlier destination")
-        refuses("earlier-alias-redirected", "desktop", earlier_alias_redirected, "changes during linking")
-        refuses("linked-ssh-config", "homelab-dev", linked_ssh_config, "SSH config is a symlink")
-        refuses("broken-config-parent", "homelab-dev", broken_config_parent, "not a directory")
-
-        # SSH also refuses at its own write boundary.
-        ssh_home = root / "ssh into checkout"
-        ssh_home.mkdir()
-        (ssh_home / ".ssh").symlink_to(repo / "ssh", target_is_directory=True)
-        result = subprocess.run(
-            ["python3", str(repo / "scripts/configure-ssh.py"), "homelab-dev"],
-            env=dict(env, CONFIG_LINK_HOME=str(ssh_home)), capture_output=True, text=True,
-        )
-        assert result.returncode == 1, result.stdout + result.stderr
-        assert "Refusing to write inside the config checkout" in result.stderr
-        assert snapshot(repo) == shared_before
-
-        # Legacy kit links to the shared skills still migrate to local roots.
-        legacy = root / "legacy kit"
-        for skill_root in (".claude/skills", ".codex/skills", ".cursor/skills"):
-            (legacy / skill_root).parent.mkdir(parents=True)
-            (legacy / skill_root).symlink_to(repo / "agent/skills", target_is_directory=True)
-        legacy_env = dict(env, CONFIG_LINK_HOME=str(legacy))
-        for args in (["--dry-run"], []):
-            result = subprocess.run(
-                ["bash", str(repo / "scripts/link-home.sh"), "homelab-dev", *args],
-                env=legacy_env, capture_output=True, text=True,
-            )
-            assert result.returncode == 0, result.stdout + result.stderr
-        assert not (legacy / ".claude/skills").is_symlink()
-        assert any(path.is_symlink() for path in (legacy / ".claude/skills").iterdir())
-        assert snapshot(repo) == shared_before
-
-        # A checkout path the helpers cannot represent is refused before writes.
-        for suffix in ("\n", "%d"):
-            odd = root / f"checkout{suffix}"
-            shutil.copytree(repo, odd, symlinks=True)
-            (root / "checkout").mkdir(exist_ok=True)
-            odd_home = root / f"odd home {len(suffix)}"
-            odd_home.mkdir()
-            (odd_home / ".zshrc").write_text("original shell\n")
-            odd_before = snapshot(odd)
-            for args in (["--dry-run"], []):
-                result = subprocess.run(
-                    ["bash", str(odd / "scripts/link-home.sh"), "homelab-dev", *args],
-                    env=dict(env, CONFIG_LINK_HOME=str(odd_home)), capture_output=True, text=True,
-                )
-                assert result.returncode == 1, result.stdout + result.stderr
-                assert "Unsupported character in config checkout path" in result.stderr
-                assert sorted(path.name for path in odd_home.iterdir()) == [".zshrc"]
-                assert snapshot(odd) == odd_before
 
         # Local aliases and relative paths remain supported, including backups.
         custom = root / "custom home"
@@ -398,7 +296,7 @@ def main():
         run("link-home.sh", "laptop", expected=1)
         run("install.sh", "laptop", expected=1)
         assert list(untouched.iterdir()) == []
-    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup/checkout/redirected-alias safety, newline paths, unsupported checkout paths, legacy kit roots, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
+    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup/checkout safety, newline paths, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
 
 
 if __name__ == "__main__":

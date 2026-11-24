@@ -10,13 +10,6 @@ import subprocess
 import tempfile
 
 
-def refuse_checkout(path, repo):
-    """Refuse writes whose real directory is inside the config checkout."""
-    resolved = path.resolve()
-    if resolved == repo or repo in resolved.parents:
-        raise SystemExit(f"Refusing to write inside the config checkout: {path}")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=("laptop", "desktop", "homelab-dev"))
@@ -52,7 +45,6 @@ def main():
     if args.mode == "--dry-run":
         print(f"ADD managed SSH includes to {config} (retain existing settings; back up)")
         return
-    refuse_checkout(config.parent, repo)
     config.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, name = tempfile.mkstemp(prefix="config-", dir=config.parent)
     temporary = Path(name)
@@ -64,7 +56,6 @@ def main():
             subprocess.run(["ssh", "-T", "-F", str(temporary), "-G", host], check=True, stdout=subprocess.DEVNULL)
         if config.exists():
             backup_dir = home / ".local/share/config-link-backups"
-            refuse_checkout(backup_dir, repo)
             backup_dir.mkdir(parents=True, exist_ok=True)
             backup = Path(tempfile.mkdtemp(prefix=datetime.now().strftime("%Y%m%d-%H%M%S-"), dir=backup_dir)) / ".ssh/config"
             backup.parent.mkdir()
