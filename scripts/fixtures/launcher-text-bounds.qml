@@ -1,0 +1,200 @@
+import QtQuick
+import Quickshell
+import qs.Common
+import qs.Modals.DLauncherV2
+import qs.Modals.DLauncherV2.Components
+
+ShellRoot {
+    id: root
+    property int phase: 0
+    // The DMS 2.0.0 override patches result rows only; 2.1.2 also patches tiles.
+    readonly property bool checkTiles: Quickshell.env("DMS_LAUNCHER_CHECK_TILES") !== "0"
+    Component.onCompleted: Theme.fontScale = 1.15
+    readonly property string fullTitle: "[Recreate Slides Figures as SVGs](t3-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row"
+    readonly property string multilineTitle: "A multiline clipboard entry\nsecond line\r\nthird line https://example.org/a/very/long/url/without/spaces"
+
+    FloatingWindow {
+        id: window
+        visible: true
+        implicitWidth: 760
+        implicitHeight: 600
+
+        Item {
+            id: evidenceCanvas
+            anchors.fill: parent
+            Column {
+                id: rows
+                width: root.phase === 0 ? 620 : 320
+                LauncherRow {
+                    id: highlighted
+                    item: ({ type: "clipboard", name: root.fullTitle, subtitle: "Text - Shift+Enter to paste a very long subtitle that must also fit the row",
+                        _hName: "[Recreate Slides Figures as SVGs](<b>t3</b>-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row",
+                        _hSub: "Text - Shift+Enter to <b>paste</b> a very long subtitle that must also fit the row", _hRich: true,
+                        iconType: "material", icon: "content_paste", data: { content: root.fullTitle } })
+                }
+                LauncherRow {
+                    id: multiline
+                    item: ({ type: "clipboard", name: root.multilineTitle, subtitle: "Text - Shift+Enter to paste", _hRich: false,
+                        iconType: "material", icon: "content_paste", data: { content: root.multilineTitle } })
+                }
+                LauncherRow {
+                    id: shortRow
+                    item: ({ type: "app", name: "T3 Code Nightly", subtitle: "T3 Code nightly desktop build", iconType: "material", icon: "apps" })
+                }
+                LauncherRow {
+                    id: searchedDmenuRow
+                    // Plain dmenu rows get generated search emphasis (_hRich) too;
+                    // only the controller's --markup-rows flag means explicit HTML.
+                    controller: QtObject { property bool dmenuMarkupRows: false }
+                    item: ({ type: "dmenu", name: root.fullTitle, subtitle: "", _hRich: true,
+                        _hName: "[Recreate Slides Figures as SVGs](<b>t3</b>-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row",
+                        iconType: "material", icon: "chevron_right", data: { text: root.fullTitle } })
+                }
+                LauncherRow {
+                    id: markupRow
+                    controller: QtObject { property bool dmenuMarkupRows: true }
+                    item: ({ type: "dmenu", name: "Large", subtitle: "", _hRich: true,
+                        _hName: '<span style="font-size:30px; color:red">Large</span>', iconType: "material", icon: "apps" })
+                }
+
+                Row {
+                    spacing: 8
+                    TileItem {
+                        id: imageTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: highlighted.item
+                    }
+                    LauncherTile {
+                        id: highlightedTile
+                        width: root.phase === 0 ? 180 : 120
+                        height: LauncherMetrics.tileMinHeight
+                        item: highlighted.item
+                    }
+                    LauncherTile {
+                        id: plainTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: multiline.item
+                    }
+                    LauncherTile {
+                        id: shortTile
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: ({ type: "app", name: "Notes", iconType: "material", icon: "apps" })
+                    }
+                    LauncherTile {
+                        id: markupTile
+                        controller: markupRow.controller
+                        width: highlightedTile.width
+                        height: highlightedTile.height
+                        item: markupRow.item
+                    }
+                }
+            }
+        }
+    }
+
+    function check(condition, message) {
+        if (!condition) {
+            console.error("LAUNCHER_TEXT_FAIL", message);
+            Qt.exit(1);
+        }
+        return condition;
+    }
+
+    function textItems(row) {
+        // Inspect the actual row's two labels, without exporting test-only API.
+        for (let child of row.children) {
+            if (child.children && child.children.length >= 2 && child.children[0].text !== undefined
+                    && child.children[0].font !== undefined) {
+                const labels = [];
+                for (let label of child.children) {
+                    if (label.text !== undefined && label.font !== undefined && label.mapToItem !== undefined)
+                        labels.push(label);
+                }
+                if (labels.length === 2)
+                    return labels;
+            }
+        }
+        return [];
+    }
+
+    function verifyRow(row, shouldTruncate) {
+        const labels = textItems(row);
+        if (!check(labels.length === 2, "actual row title and subtitle found")) return false;
+        for (let label of labels) {
+            const top = label.mapToItem(row, 0, 0).y;
+            if (!check(label.lineCount === 1 && top >= 0 && top + label.height <= row.height,
+                    "each label stays within its single row at width " + row.width)) return false;
+        }
+        return check(labels[0].truncated === shouldTruncate, "long titles elide and short titles remain intact");
+    }
+
+    function tileLabel(item, expected) {
+        if (expected === undefined) {
+            const title = item.item?._hName ?? item.item?.name ?? "";
+            expected = item.item?.type === "dmenu" ? title : String(title).replace(/[\r\n\u2028\u2029]/g, " ");
+        }
+        for (let child of item.children) {
+            if (child.text === expected && child.font !== undefined && child.mapToItem !== undefined)
+                return child;
+            const nested = tileLabel(child, expected);
+            if (nested) return nested;
+        }
+        return null;
+    }
+
+    function verifyTile(tile, shouldTruncate) {
+        const label = tileLabel(tile);
+        if (!check(label !== null, "actual tile label found")) return false;
+        const top = label.mapToItem(tile, 0, 0).y;
+        return check(label.lineCount <= 2 && label.contentHeight <= label.height + 1
+                && top >= 0 && top + label.height <= tile.height
+                && label.truncated === shouldTruncate,
+                "tile title stays in two lines and elides at width " + tile.width
+                + ": lines=" + label.lineCount + ", contentHeight=" + label.contentHeight + ", height=" + label.height);
+    }
+
+    Timer {
+        interval: 1500
+        running: true
+        repeat: true
+        onTriggered: {
+            const imageLabel = root.tileLabel(imageTile);
+            if (root.checkTiles && !root.check(imageLabel && imageLabel.lineCount === 1 && imageLabel.truncated
+                    && imageLabel.contentHeight <= imageLabel.height + 1,
+                    "image tile caption stays within one line and elides")) return;
+            if (root.checkTiles && (!root.verifyTile(highlightedTile, true) || !root.verifyTile(plainTile, true)
+                    || !root.verifyTile(shortTile, false))) return;
+            if (!root.verifyRow(highlighted, true) || !root.verifyRow(multiline, true)
+                    || !root.verifyRow(shortRow, false)) return;
+            const searchedTitle = root.textItems(searchedDmenuRow)[0];
+            const searchedTop = searchedTitle.mapToItem(searchedDmenuRow, 0, 0).y;
+            if (!root.check(searchedTitle.textFormat === Text.StyledText && searchedTitle.lineCount === 1 && searchedTitle.truncated
+                    && searchedTop >= 0 && searchedTop + searchedTitle.height <= searchedDmenuRow.height,
+                    "searched plain dmenu row keeps emphasis and elides within its row at width " + searchedDmenuRow.width)) return;
+            if (!root.check(highlighted.item.data.content === root.fullTitle && multiline.item.name === root.multilineTitle
+                    && multiline.item.data.content === root.multilineTitle, "full clipboard payload and names stay unchanged")) return;
+            if (root.phase++ === 0) {
+                interval = 250;
+                return;
+            }
+            if (!root.check(root.textItems(highlighted)[1].truncated, "highlighted subtitle also elides on a narrow launcher")) return;
+            const markupTitle = root.textItems(markupRow)[0];
+            if (!root.check(markupTitle.textFormat === Text.RichText && markupTitle.contentHeight >= 30,
+                    "explicit dmenu rich markup preserves its CSS font size")) return;
+            if (root.checkTiles && !root.check(root.tileLabel(markupTile).textFormat === Text.RichText
+                    && root.tileLabel(markupTile).contentHeight >= 30,
+                    "explicit tile dmenu rich markup preserves CSS font size")) return;
+            console.warn("LAUNCHER_TEXT_PASS: " + (root.checkTiles ? "tiles at 180px/120px and rows" : "rows") + "; highlighted and plain long titles, searched plain dmenu rows, explicit dmenu markup, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
+            const evidence = Quickshell.env("DMS_LAUNCHER_EVIDENCE");
+            running = false;
+            if (evidence) {
+                evidenceCanvas.grabToImage(result => { result.saveToFile(evidence); Qt.quit(); });
+            } else {
+                Qt.quit();
+            }
+        }
+    }
+}

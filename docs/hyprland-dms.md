@@ -147,6 +147,9 @@ dms restart
 ```
 
 These patches are version-specific and are not part of normal installation.
+The installer applies only top-level `shell-patches/*.patch` files. Exact-version
+DMS 2.x patches live in `shell-patches/guarded/` and are applied only by the
+fingerprint-checked stager in [dms-smooth-sliders.md](dms-smooth-sliders.md).
 Recent DMS packages embed QML and may leave only old patched files under
 `/usr/share/quickshell/dms`; the presence of that directory alone is not proof
 that patching it will affect the running shell.
@@ -165,6 +168,15 @@ scripts/configure-dms-app-integration.py
 Restart Zen after first applying the integration or after changing managed
 preferences. DMS color changes are picked up from the generated stylesheet on
 the next Zen restart.
+
+OnlyOffice's default custom window frame includes invisible shadow padding
+that leaves a large gap inside a Hyprland tile. Switch it to the system frame
+once: save your documents, close OnlyOffice, then run
+`onlyoffice-desktopeditors --system-title-bar`. OnlyOffice saves this choice
+in its own settings, so later launches keep the system frame. Revert the same
+way with `--custom-title-bar`. The integration script prints this reminder when
+OnlyOffice is installed but never edits OnlyOffice's settings file. See the
+[OnlyOffice window-frame flags](https://api.onlyoffice.com/docs/desktop-editors/usage-api/command-line-flags/).
 
 WiFi: prefer **system** NetworkManager secrets (not KWallet). Helper:
 `nm-wifi-system-secret "SSID"` for networks that still prompt.
