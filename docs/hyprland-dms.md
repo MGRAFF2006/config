@@ -147,6 +147,9 @@ dms restart
 ```
 
 These patches are version-specific and are not part of normal installation.
+The installer applies only top-level `shell-patches/*.patch` files. Exact-version
+DMS 2.x patches live in `shell-patches/guarded/` and are applied only by the
+fingerprint-checked stager in [dms-smooth-sliders.md](dms-smooth-sliders.md).
 Recent DMS packages embed QML and may leave only old patched files under
 `/usr/share/quickshell/dms`; the presence of that directory alone is not proof
 that patching it will affect the running shell.

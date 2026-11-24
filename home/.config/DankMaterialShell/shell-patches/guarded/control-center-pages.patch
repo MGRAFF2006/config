@@ -163,7 +163,7 @@
                  width: parent.width
                  height: Math.max(root.gridHeight, root.heldGridHeight)
 -                opacity: CcMetrics.hideCoveredContent ? 1 - root.coveredAmount : 1
-+                opacity: 1 - root.coveredAmount
++                opacity: 1 - Math.max(detailPage.opacity, CcMetrics.hideCoveredContent ? (widgetSheetLoader.item?.progress ?? 0) : 0)
  
                  CcTileGrid {
                      id: widgetGrid

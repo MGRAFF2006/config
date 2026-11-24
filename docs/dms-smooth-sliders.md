@@ -10,25 +10,54 @@ their existing behavior.
 
 DMS 2.0's shared slider normally places its handle directly at each integer
 volume or brightness value. Panel-opening motion does not interpolate that
-progress. The `smooth-slider-level.patch` uses Qt’s velocity-preserving
-`SmoothedAnimation` on a separate visual ratio, with a 120 ms tracking duration.
-Held-key repeats retarget the running movement without restarting the easing on
-every step. The real value, adjustment signal and hardware update remain immediate. Pointer dragging, reduced motion and disabled animations
-bypass the transition.
+progress. The `shell-patches/guarded/smooth-slider-level.patch` moves a
+separate visual ratio with a critically damped tracker that covers 99% of a
+step within about 110 ms. Held-key repeats keep the running velocity instead of
+restarting an easing curve on every step. The handle never passes the target or
+moves away from it; a reversal starts from rest. Qt's `SmoothedAnimation` was
+not used because a close retarget while moving made it briefly run backwards
+below the track. The real value, adjustment signal and hardware update remain
+immediate. Pointer dragging, reduced motion and disabled animations bypass the
+transition.
 
 Launcher results use single-line native styled-text elision for both the title
 and subtitle, preserving search emphasis. Display-only newline normalization
 keeps multiline clipboard entries within their rows; the full name, clipboard
-payload and accessible label remain unchanged. The guarded patch set also
-fingerprints `LauncherRow.qml` before applying this correction.
+payload and accessible label remain unchanged. Plain `dms dmenu` rows keep
+their generated search emphasis and elide the same way; only rows from
+`dms dmenu --markup-rows` keep explicit rich HTML with wrapping, so their CSS
+font sizes survive. The guarded patch set also fingerprints `LauncherRow.qml`
+before applying this correction.
+
+Check the launcher rows against pristine DMS UI input:
+
+```bash
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI --unpatched  # reproduces the overflow
+```
+
+It stages the override into a temporary directory, checks that the launch
+guard falls back when any patched renderer or the version changes, and runs
+the actual launcher components with synthetic clipboard, app and dmenu entries:
+rows at 620/320 px, and on 2.1.2 also grid tiles at 180/120 px and image
+captions; highlighted and multiline entries, long subtitles, short app labels,
+searched plain dmenu rows, explicit dmenu HTML, 115% text scale and unchanged
+payloads. DMS's components need a real window backend, so the fixture runs on
+a private Xwayland inside a headless KWin, both in bubblewrap with a read-only
+root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
+`bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
+desktop, its settings or the clipboard. Without `--source-dir` it stages from
+the running shell's `dms.path`, like the configure helper. `--evidence
+/absolute/path.png` saves the rendered fixture. Backend clipboard copy/paste
+and physical keyboard use are outside these checks.
 
 DMS 2.1.2 uses a separate reviewed patch for launcher rows, grid labels and image
 tile captions. Generated search emphasis uses native styled text so Qt honors
-line limits and ellipses; explicit dmenu HTML retains its rich formatting. The
-older 2.0.0 slider and control-center patches are not applied to changed 2.1
-internals. The version, binary and each patched renderer must match before the
-override launches. An upgrade to another version falls back to built-in DMS
-until its source is reviewed again.
+line limits and ellipses; explicit `--markup-rows` dmenu HTML retains its rich
+formatting. The older 2.0.0 slider and control-center patches are not applied
+to changed 2.1 internals. The version, binary and each patched renderer must
+match before the override launches. An upgrade to another version falls back
+to built-in DMS until its source is reviewed again.
 
 The 2.1.2 clipboard-history patch also covers the bar popout and centered history
 modal, which share `ClipboardEntry.qml`. Image captions stay on one line, and
@@ -55,29 +84,30 @@ human-written PR descriptions, issues and comments. The local config PR records
 the fix and verification; an upstream submission still needs Mathis to review
 the code and write its description.
 
-Check actual launcher components with synthetic clipboard data in the separate
-agent desktop (no physical desktop input or clipboard access):
-
-```bash
-agent-desktop start
-agent-desktop run python3 "$PWD/scripts/check-dms-launcher-text.py" --source-dir /path/to/pristine/dms-ui
-```
-
-The helper logs to the agent desktop's `apps.log`. `--unpatched` reproduces the
-original failure; `--evidence /absolute/path.png` saves the patched fixture.
-Coverage includes grid widths 180/120 px, row widths 620/320 px, multiline and
-highlighted entries, long subtitles, image captions, ordinary short app labels,
-115% text scale, unchanged payloads, explicit dmenu HTML, repeat staging and
-renderer-tamper/version fallback. The fixture exercises the actual rendering
-components; backend clipboard copy/paste and physical keyboard use are separate
-from these checks.
-
-Stage the reviewed change without changing any running shell:
+Stage the reviewed change for the installed version (2.0.0 or 2.1.2) without
+changing any running shell, then check the launch guard and launcher text:
 
 ```bash
 python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
+python3 scripts/check-dms-launcher-text.py
+```
+
+On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
+with a pointer to the launcher check, since they have no slider patch:
+
+```bash
 python3 scripts/check-dms-smooth-sliders.py --ui
+```
+
+`--ui` recovers pristine input by reversing the current patches on the stage
+that `dms.path` points to. When the running shell still uses a stage made with
+an earlier patch set (for example right after updating this repository), the
+check stops and asks for pristine input instead. Pass an unmodified DMS 2.0.0
+UI, such as the extracted `dms-qml.tar.gz` release asset:
+
+```bash
+python3 scripts/check-dms-smooth-sliders.py --ui --source-dir PRISTINE_DMS_2.0.0_UI
 ```
 
 The helper reads the running shell's `dms.path` and copies its current extracted
@@ -87,7 +117,9 @@ patches. The manifest records the whole source tree's hash, combined patch hash,
 all version-specific patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
-extracted built-in files are changed.
+extracted built-in files are changed. The patches live in
+`shell-patches/guarded/` so the legacy DMS 1.5.x installer never applies them
+without these checks.
 
 The helper prints a supported `dms -c STAGED_UI run -d` command. For a durable
 session launcher, use:
@@ -106,8 +138,10 @@ not stop an already running shell; activation requires a separate shell reload.
 On DMS 2.0.0, the `--ui` check uses the real patched slider with a software-rendered offscreen
 Qt window, isolated runtime and no display, desktop input or hardware service.
 It checks an intermediate level, final settling, bounded rapid retargeting,
-a held-key sequence with rendered progress between repeats, immediate model values, no spurious user commits, and immediate drag
-and reduced-motion updates. It also checks repeat staging. No audio or real
+a held-key sequence with rendered progress between repeats, velocity kept
+across a same-direction repeat, close retargets and reversals that stay between
+the displayed position and the target on every frame, immediate model values,
+no spurious user commits, and immediate drag and reduced-motion updates. It also checks repeat staging. No audio or real
 brightness/volume change is involved.
 
 For quick native feedback elsewhere, the preset can use 180 ms shell motion,
