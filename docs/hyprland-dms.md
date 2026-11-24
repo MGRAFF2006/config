@@ -224,13 +224,22 @@ The installer (via `scripts/configure-dms-lock-pam.py`) edits
 `~/.config/DankMaterialShell/settings.json`. It sets an empty `lockPamPath`,
 keeps any custom one, and warns if DMS has not created its settings yet.
 It refuses, before changing any PAM or Howdy file, when DMS requires a security
-key as a second factor (Security key mode: Second factor (AND)), in
-`settings.json` or a `dms/config.d` overlay. An externally managed lock makes
-DMS skip that step and `dankshell` has no `pam_u2f`, so the key would silently
-stop being required. Switch the key to Alternative (OR) or turn it off first if
-the managed password/face lock should replace it. DMS's own fingerprint and
-security-key (OR) unlock are not offered with the managed stack either; the
-installer warns when they are on.
+key as a second factor (Security key mode: Second factor (AND)). It reads that
+the way DMS 2.1.2 does: `settings.json`, then the visible `dms/config.d/*.json`
+files in DMS's order, then the `lock_settings` of `/usr/share/dms/cli-policy.json`
+and `/etc/dms/cli-policy.json`. A `DMS_POLICY_LOCK_SETTINGS` value in the
+caller's environment counts too (checked before `sudo`, which drops it). An
+unreadable overlay or policy stops the installer instead of being guessed at.
+An externally managed lock makes DMS skip the key step and `dankshell` has no
+`pam_u2f`, so the key would silently stop being required. Switch the key to
+Alternative (OR) or turn it off where it is set first if the managed
+password/face lock should replace it. DMS's own fingerprint and security-key
+(OR) unlock are not offered with the managed stack either; the installer warns
+when they are on.
+The settings file is replaced atomically, keeping its mode and owner, and is
+written before any PAM or Howdy file. If that write fails, the installer stops
+with an error and changes nothing else. PAM files written after it are not
+rolled back on a later failure; their `.backup-*` copies stay.
 
 The guarded `howdy-lock-2.1.patch` starts one face attempt after the display
 turns back on, after a resume from sleep, or after a key press or click on the

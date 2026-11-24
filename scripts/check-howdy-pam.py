@@ -11,8 +11,10 @@ fixture homes.
 import argparse
 import ctypes
 import json
+import os
 from pathlib import Path
 import re
+import resource
 import shutil
 import subprocess
 import sys
@@ -24,6 +26,26 @@ MANAGED_LOCK = "/etc/pam.d/dankshell"
 
 
 SECOND_FACTOR = {"enableU2f": True, "u2fMode": "and"}
+# Runs the real editor with its policy files moved into the fixture, so the
+# host's /usr/share/dms and /etc/dms policy never decide a case.
+EDITOR = """
+import importlib.util, json, sys
+from pathlib import Path
+script, policies, *args = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("configure_dms_lock_pam", script)
+editor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(editor)
+editor.POLICY_PATHS = tuple(Path(path) for path in json.loads(policies))
+sys.argv = [script, *args]
+sys.exit(editor.main())
+"""
+PAD = {"padding": "x" * 65536}  # larger than FSIZE_LIMIT
+FSIZE_LIMIT = 16384
+
+
+def limit_file_size():
+    """A write past the limit fails with EFBIG (Python ignores SIGXFSZ)."""
+    resource.setrlimit(resource.RLIMIT_FSIZE, (FSIZE_LIMIT, FSIZE_LIMIT))
 
 
 def check_settings_editor():
@@ -35,9 +57,12 @@ def check_settings_editor():
     flags = {"greeterPamExternallyManaged": True, "lockPamExternallyManaged": True}
     legacy_text = json.dumps({"lockPamPath": "/etc/pam.d/legacy-untouched"}) + "\n"
 
-    def run(config, before, legacy="absent", overlays=(), check=False):
+    def run(config, before, legacy="absent", overlays=(), check=False, policy=(None, None), env=None, limit=False):
         """legacy: "absent", "separate" (its own file) or "symlink" (laptop layout).
-        overlays: (name, values) written to dms/config.d, which DMS merges on top."""
+        overlays: (name, values) written to dms/config.d, which DMS merges on top;
+        values None makes a directory. policy: (packaged, administrator) cli-policy.json
+        contents, a str written verbatim. env: DMS_POLICY_LOCK_SETTINGS."""
+        shutil.rmtree(config.parent / "policy", ignore_errors=True)
         shutil.rmtree(config, ignore_errors=True)
         canonical = config / "dms/settings.json"
         if before is not None:
@@ -45,15 +70,28 @@ def check_settings_editor():
             canonical.write_text(json.dumps({"other": 1, **before}, indent=2) + "\n")
         for name, values in overlays:
             (config / "dms/config.d").mkdir(parents=True, exist_ok=True)
-            (config / "dms/config.d" / name).write_text(json.dumps(values))
+            if values is None:
+                (config / "dms/config.d" / name).mkdir()
+            else:
+                (config / "dms/config.d" / name).write_text(json.dumps(values))
         if legacy == "separate":
             (config / "DankMaterialShell").mkdir(parents=True)
             (config / "DankMaterialShell/settings.json").write_text(legacy_text)
         elif legacy == "symlink":
             (config / "DankMaterialShell").symlink_to("dms")
+        policy_paths = [config.parent / "policy" / name for name in ("packaged.json", "admin.json")]
+        for path, contents in zip(policy_paths, policy):
+            if contents is not None:
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(contents if isinstance(contents, str) else json.dumps(contents))
         original = canonical.read_text() if before is not None else None
-        command = ["python3", "-I", str(script), *(["--check"] if check else []), str(config)]
-        result = subprocess.run(command, capture_output=True, text=True)
+        command = [sys.executable, "-I", "-c", EDITOR, str(script), json.dumps([str(path) for path in policy_paths]),
+                   *(["--check"] if check else []), str(config)]
+        environment = {key: value for key, value in os.environ.items() if key != "DMS_POLICY_LOCK_SETTINGS"}
+        if env is not None:
+            environment["DMS_POLICY_LOCK_SETTINGS"] = env
+        result = subprocess.run(command, capture_output=True, text=True, env=environment,
+                                preexec_fn=limit_file_size if limit else None)
         if legacy == "separate":
             assert (config / "DankMaterialShell/settings.json").read_text() == legacy_text, "edited the legacy file"
         return result, canonical, original
@@ -97,6 +135,14 @@ def check_settings_editor():
             ({**SECOND_FACTOR, "lockPamPath": "/etc/pam.d/custom-lock"}, ()),
             ({"enableU2f": True}, (("50-key.json", {"u2fMode": "and"}),)),
             ({}, (("10-key.json", {"enableU2f": True}), ("20-mode.json", {"u2fMode": "and"}))),
+            # Overlays DMS's folder model never lists: hidden, a directory, or a
+            # name the case-sensitive "*.json" filter rejects. They cannot turn it off.
+            (SECOND_FACTOR, ((".90-or.json", {"u2fMode": "or"}),)),
+            (SECOND_FACTOR, (("50-dir.json", None),)),
+            (SECOND_FACTOR, (("90-or.JSON", {"u2fMode": "or"}),)),
+            # DMS applies overlays in JavaScript string order (UTF-16 code units),
+            # so U+1F600 (D83D DE00) comes before U+FF10 and "and" is applied last.
+            ({"enableU2f": True}, (("\U0001F600.json", {"u2fMode": "or"}), ("\uff10.json", {"u2fMode": "and"}))),
         )
         for legacy in ("absent", "symlink"):
             for before, overlays in refused:
@@ -109,13 +155,65 @@ def check_settings_editor():
         result, canonical, _ = run(config, SECOND_FACTOR, overlays=(("90-or.json", {"u2fMode": "or"}),))
         assert result.returncode == 0 and json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, result
 
+        # DMS applies the packaged and administrator lock_settings (the latter
+        # wins per key, null skipped, wrong JSON types dropped) over all files.
+        # DMS_POLICY_LOCK_SETTINGS also counts for a shell not started by `dms run`.
+        admin_and = {"lock_settings": SECOND_FACTOR}
+        for before, policy, env in (
+            ({}, (None, admin_and), None),
+            ({"enableU2f": True}, ({"lock_settings": {"u2fMode": "and"}}, None), None),
+            ({}, (admin_and, {"lock_settings": {"u2fMode": None}}), None),
+            (None, (None, admin_and), None),  # no settings.json yet: still refused, not "not found"
+            ({}, (None, None), json.dumps(SECOND_FACTOR)),
+            ({"enableU2f": True, "u2fMode": "or"}, (None, {"lock_settings": {"enableU2f": False}}), json.dumps(SECOND_FACTOR)),
+        ):
+            for check in (False, True):
+                result, canonical, original = run(config, before, policy=policy, env=env, check=check)
+                assert result.returncode == 2, ("dropped a policy security key", before, policy, env, check, result)
+                assert ("policy" if env is None else "DMS_POLICY_LOCK_SETTINGS") in result.stderr, result.stderr
+                assert (canonical.read_text() if canonical.exists() else None) == original, ("wrote settings", before, policy)
+        for before, policy, env in (
+            ({**SECOND_FACTOR, "other": 1}, (None, {"lock_settings": {"u2fMode": "or"}}), None),
+            ({}, (admin_and, {"lock_settings": {"enableU2f": False}}), None),
+            ({}, (None, {"lock_settings": {"enableU2f": "yes", "u2fMode": "and"}}), None),
+            ({}, (None, {"lock_settings": {"nonLockKey": True}, "immutable_system": True}), "{}"),
+        ):
+            result, canonical, _ = run(config, before, policy=policy, env=env)
+            assert result.returncode == 0, ("refused although policy allows it", before, policy, result)
+            assert json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, result
+        # A policy DMS cannot read is not guessed at: stop without writing.
+        for policy, env in (((None, "{not json"), None), (({"lock_settings": []}, None), None),
+                            ((None, None), "{not json"), ((None, None), "[]")):
+            result, canonical, original = run(config, {}, policy=policy, env=env)
+            assert result.returncode == 1 and "Nothing was changed" in result.stderr, (policy, env, result)
+            assert canonical.read_text() == original, (policy, env)
+
+        # The write replaces the file atomically: a failed write (here, a file size
+        # limit) leaves the original intact and fails; mode and a symlink are kept.
+        result, canonical, original = run(config, PAD, limit=True)
+        assert result.returncode == 1 and "unchanged" in result.stderr, ("failed write not reported", result)
+        assert canonical.read_text() == original, "a failed write changed the settings file"
+        assert sorted(path.name for path in canonical.parent.iterdir()) == ["settings.json"], "left a temporary file"
+        result, canonical, original = run(config, {})
+        canonical.chmod(0o640)
+        moved = config / "dotfiles/dms-settings.json"
+        moved.parent.mkdir()
+        canonical.rename(moved)
+        canonical.symlink_to(moved)
+        moved.write_text(original)
+        result = subprocess.run([sys.executable, "-I", str(script), str(config)], capture_output=True, text=True)
+        assert result.returncode == 0, result
+        assert canonical.is_symlink() and json.loads(moved.read_text())["lockPamPath"] == MANAGED_LOCK
+        assert moved.stat().st_mode & 0o7777 == 0o640, oct(moved.stat().st_mode)
+
         # DMS has not created its settings yet: warn and fail without writing anywhere.
         for legacy in ("absent", "separate"):
             result, canonical, _ = run(config, None, legacy)
             assert result.returncode == 3 and "not found" in result.stderr, (legacy, result)
             assert not canonical.exists(), legacy
     print("PASS: installer settings: DMS 2.1 settings file selected (legacy path ignored), custom lockPamPath preserved, "
-          "a DMS second-factor security key (settings.json or config.d) refused without changes")
+          "a DMS second-factor security key (settings.json, config.d as DMS lists it, lock_settings policy or "
+          "DMS_POLICY_LOCK_SETTINGS) refused without changes, atomic write keeps the file on failure")
 
 
 # The laptop's PAM on 2026-11-24 after the approved interim fix: greetd and
@@ -148,7 +246,7 @@ def check_installer(pam_root):
         (fakes / "python").mkdir()
         (fakes / "python/dlib.py").write_text("")
 
-        def run(settings):
+        def run(settings, limit=False):
             for name in ("pam.d", "howdy", "config"):
                 shutil.rmtree(root / name, ignore_errors=True)
                 (root / name).mkdir()
@@ -165,7 +263,8 @@ def check_installer(pam_root):
                        "--bind", str(root / "config"), str(root / "config"),
                        "--setenv", "PYTHONPATH", str(fakes / "python"),
                        "bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh"), str(root / "config")]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=60,
+                                    preexec_fn=limit_file_size if limit else None)
             return result, before
 
         settings = {"lockPamPath": MANAGED_LOCK, "lockPamExternallyManaged": True, "greeterPamExternallyManaged": True}
@@ -176,6 +275,16 @@ def check_installer(pam_root):
         assert after == before, ("PAM changed although the installer refused", sorted(after))
         assert not any((root / "howdy").iterdir()), "Howdy config written although the installer refused"
         assert json.loads((root / "config/dms/settings.json").read_text()) == {**settings, **SECOND_FACTOR}
+
+        # The settings write fails (file size limit): the installer stops with an
+        # error before any PAM or Howdy change, and the settings file is intact.
+        result, before = run(PAD, limit=True)
+        assert result.returncode != 0, ("installer reported success after a failed settings write", result.stdout, result.stderr)
+        assert "DMS settings were not updated" in result.stderr and "Done" not in result.stdout, result
+        after = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
+        assert after == before, ("PAM changed although the settings write failed", sorted(after))
+        assert not any((root / "howdy").iterdir()), "Howdy config written although the settings write failed"
+        assert json.loads((root / "config/dms/settings.json").read_text()) == PAD, "failed write damaged settings.json"
 
         # From the live interim state (password-only greetd/dankshell, stock
         # system-auth, Howdy-first sudo) the installer restores the managed files.
@@ -192,8 +301,37 @@ def check_installer(pam_root):
             assert "system-auth still has an active pam_howdy" not in result.stdout + result.stderr
             assert (root / "howdy/config.ini").read_bytes() == (ROOT / "system/howdy/config.ini").read_bytes()
             assert json.loads((root / "config/dms/settings.json").read_text()) == settings, initial
-    print("PASS: installer: refuses a DMS second factor before writing any file; applies from the interim "
-          "password-only state (system-auth untouched, backups kept, sudo reinstalled unchanged)")
+    check_installer_caller_environment()
+    print("PASS: installer: refuses a DMS second factor before writing any file (including one only in the "
+          "caller's DMS_POLICY_LOCK_SETTINGS, before sudo); stops before PAM when the settings write fails; "
+          "applies from the interim password-only state (system-auth untouched, backups kept, sudo reinstalled unchanged)")
+
+
+def check_installer_caller_environment():
+    """sudo drops DMS_POLICY_LOCK_SETTINGS, so the unprivileged installer checks
+    with the caller's environment before it re-runs itself through sudo."""
+    assert os.geteuid() != 0, "run as an unprivileged user: this case needs the sudo re-exec path"
+    with tempfile.TemporaryDirectory(prefix="howdy-installer-env-check-") as directory:
+        root = Path(directory)
+        (root / "bin").mkdir()
+        (root / "bin/sudo").write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > {root / "sudo-called"}\n')
+        (root / "bin/sudo").chmod(0o755)
+        (root / "config/dms").mkdir(parents=True)
+        (root / "config/dms/settings.json").write_text("{}\n")
+        for env, escalates in ((json.dumps(SECOND_FACTOR), False), (None, True)):
+            (root / "sudo-called").unlink(missing_ok=True)
+            environment = {key: value for key, value in os.environ.items() if key != "DMS_POLICY_LOCK_SETTINGS"}
+            environment.update(PATH=f"{root / 'bin'}:{environment['PATH']}", XDG_CONFIG_HOME=str(root / "config"))
+            if env is not None:
+                environment["DMS_POLICY_LOCK_SETTINGS"] = env
+            result = subprocess.run(["bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh")],
+                                    capture_output=True, text=True, env=environment, timeout=60)
+            assert (root / "sudo-called").exists() == escalates, (env, result.stdout, result.stderr)
+            if escalates:
+                assert result.returncode == 0, result
+                assert (root / "sudo-called").read_text().split("\n")[-2] == str(root / "config"), "config home not passed"
+            else:
+                assert result.returncode != 0 and "DMS_POLICY_LOCK_SETTINGS" in result.stderr, result
 
 
 pam = ctypes.CDLL("libpam.so.0")

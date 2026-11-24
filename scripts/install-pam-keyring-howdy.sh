@@ -25,25 +25,30 @@ for required in greetd sddm dankshell sudo polkit-1; do
   fi
 done
 
+# Refuse before changing anything when the DMS settings cannot be switched to
+# the managed lock stack safely (e.g. DMS requires a security key as a second
+# factor, which an externally managed lock would skip). 3 = no settings yet.
+check_dms_settings() {
+  local status=0
+  python3 "$repo_root/scripts/configure-dms-lock-pam.py" --check "$1" || status=$?
+  if [[ "$status" -ne 0 && "$status" -ne 3 ]]; then
+    printf 'DMS settings check failed (see above); no PAM or Howdy file was changed\n' >&2
+    exit 1
+  fi
+}
+
 if [[ "${EUID}" -ne 0 ]]; then
-  # sudo drops XDG_CONFIG_HOME; DMS reads its settings from the caller's one.
+  # sudo drops XDG_CONFIG_HOME, and DMS_POLICY_LOCK_SETTINGS, which a shell not
+  # started by `dms run` inherits: check with the caller's environment first.
+  check_dms_settings "${XDG_CONFIG_HOME:-$HOME/.config}"
   exec sudo bash "$0" "${XDG_CONFIG_HOME:-$HOME/.config}"
 fi
 dms_config_home="${1:-}"
 if [[ -z "$dms_config_home" && -n "${SUDO_USER:-}" ]]; then
   dms_config_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config"
 fi
-
-# Refuse before changing anything when the DMS settings cannot be switched to
-# the managed lock stack safely (e.g. DMS requires a security key as a second
-# factor, which an externally managed lock would skip). 3 = no settings yet.
 if [[ -n "$dms_config_home" ]]; then
-  dms_status=0
-  python3 "$repo_root/scripts/configure-dms-lock-pam.py" --check "$dms_config_home" || dms_status=$?
-  if [[ "$dms_status" -ne 0 && "$dms_status" -ne 3 ]]; then
-    printf 'DMS settings check failed (see above); no PAM or Howdy file was changed\n' >&2
-    exit 1
-  fi
+  check_dms_settings "$dms_config_home"
 fi
 
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -67,17 +72,36 @@ if ! python3 -c 'import dlib'; then
   exit 1
 fi
 
+if [[ ! -e /usr/lib/security/pam_kwallet5.so ]]; then
+  printf 'pam_kwallet5.so not found — install kwallet-pam\n' >&2
+  exit 1
+fi
+
+# Stop DMS from rewriting the greeter PAM (would drop Howdy) and select the
+# managed lock stack in the settings file DMS 2.1 reads. This runs before any
+# PAM or Howdy file changes, so a failed settings write leaves them all as they
+# were (the editor replaces the settings file atomically). A later failure
+# leaves the settings pointing at /etc/pam.d/dankshell with whatever content it
+# had; PAM files are not rolled back, and the .backup-* copies stay.
+if [[ -z "$dms_config_home" ]]; then
+  warn "Unknown invoking user; run configure-dms-lock-pam.py ~/.config as that user"
+else
+  dms_status=0
+  python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home" || dms_status=$?
+  if [[ "$dms_status" -eq 3 ]]; then
+    warn "DMS greeter/lock PAM settings not updated"
+  elif [[ "$dms_status" -ne 0 ]]; then
+    printf 'DMS settings were not updated (see above); no PAM or Howdy file was changed\n' >&2
+    exit 1
+  fi
+fi
+
 # howdy test.py: sum(hist)[0] breaks on numpy 2.x (scalar). Match compare.py.
 howdy_test="/usr/lib/howdy/cli/test.py"
 if [[ -f "$howdy_test" ]] && grep -q 'hist_total = int(sum(hist)\[0\])' "$howdy_test"; then
   cp -a "$howdy_test" "${howdy_test}.backup-${stamp}"
   sed -i 's/hist_total = int(sum(hist)\[0\])/hist_total = int(np.sum(hist))/' "$howdy_test"
   ok "Patched howdy test.py numpy hist sum"
-fi
-
-if [[ ! -e /usr/lib/security/pam_kwallet5.so ]]; then
-  printf 'pam_kwallet5.so not found — install kwallet-pam\n' >&2
-  exit 1
 fi
 
 install_pam greetd
@@ -100,14 +124,6 @@ if [[ -f "$howdy_cfg" ]]; then
   fi
   install -m 644 "$howdy_cfg" /etc/howdy/config.ini
   ok "Installed /etc/howdy/config.ini"
-fi
-
-# Stop DMS from rewriting the greeter PAM (would drop Howdy) and select the
-# managed lock stack in the settings file DMS 2.1 reads.
-if [[ -z "$dms_config_home" ]]; then
-  warn "Unknown invoking user; run configure-dms-lock-pam.py ~/.config as that user"
-elif ! python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home"; then
-  warn "DMS greeter/lock PAM settings not updated"
 fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"
