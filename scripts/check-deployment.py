@@ -89,10 +89,13 @@ def main():
             before = snapshot(isolated)
             safety_env = dict(env, CONFIG_LINK_HOME=str(isolated))
             command = ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"]
-            for mode in ("--dry-run", "--check"):
-                subprocess.run(command + [mode], env=safety_env, capture_output=True, text=True)
-                assert snapshot(isolated) == before, name
-                assert snapshot(repo) == shared_before, name
+            # Installers use the preview before package changes, so it must refuse too.
+            result = subprocess.run(command + ["--dry-run"], env=safety_env, capture_output=True, text=True)
+            assert result.returncode == 1, name + result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr, name
+            subprocess.run(command + ["--check"], env=safety_env, capture_output=True, text=True)
+            assert snapshot(isolated) == before, name
+            assert snapshot(repo) == shared_before, name
             result = subprocess.run(command, env=safety_env, capture_output=True, text=True)
             assert result.returncode == 1, name + result.stdout + result.stderr
             assert "Destination parent points into shared repo" in result.stderr, name
@@ -106,6 +109,37 @@ def main():
         )
         assert result.returncode == 1, result.stdout + result.stderr
         assert snapshot(repo) == shared_before
+
+        # A managed directory that is or contains the checkout must not be moved.
+        for name, location in (("checkout-is-managed", ".config/nvim"), ("checkout-in-managed", ".config/nvim/checkout")):
+            nested = root / name
+            checkout = nested / location
+            shutil.copytree(repo, checkout, symlinks=True)
+            (nested / ".zshrc").write_text("original shell\n")
+            before = snapshot(nested)
+            nested_env = dict(env, CONFIG_LINK_HOME=str(nested))
+            command = ["bash", str(checkout / "scripts/link-home.sh"), "homelab-dev"]
+            for args in (["--dry-run"], []):
+                result = subprocess.run(command + args, env=nested_env, capture_output=True, text=True)
+                assert result.returncode == 1, name + result.stdout + result.stderr
+                assert "Destination contains the config checkout" in result.stderr, name
+                assert snapshot(nested) == before, name
+
+        # Canonical paths keep trailing newlines instead of resolving to a sibling home.
+        sibling = root / "newline home"
+        requested = root / "newline home\n"
+        for home in (sibling, requested):
+            home.mkdir()
+            (home / ".zshrc").write_text("original shell\n")
+        newline_env = dict(env, CONFIG_LINK_HOME=str(requested))
+        result = subprocess.run(
+            ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"],
+            env=newline_env, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert (requested / ".zshrc").resolve() == repo / "home/.zshrc"
+        assert (sibling / ".zshrc").read_text() == "original shell\n"
+        assert sorted(path.name for path in sibling.iterdir()) == [".zshrc"]
 
         # Local aliases and relative paths remain supported, including backups.
         custom = root / "custom home"
@@ -262,7 +296,7 @@ def main():
         run("link-home.sh", "laptop", expected=1)
         run("install.sh", "laptop", expected=1)
         assert list(untouched.iterdir()) == []
-    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup safety, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
+    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup/checkout safety, newline paths, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
 
 
 if __name__ == "__main__":

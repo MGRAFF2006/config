@@ -3,9 +3,16 @@
 # Usage: bash scripts/link-home.sh [laptop|desktop|homelab-dev] [--dry-run|--check]
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-home_root="$(realpath -m -- "$repo_root/home")"
-target_home="$(realpath -m -- "${CONFIG_LINK_HOME:-$HOME}")"
+# Store a canonical path in REPLY. Command substitution alone strips trailing
+# newlines, which could redirect writes to a sibling directory.
+canonical_path() {
+  local path
+  path="$(realpath -m -- "$1" && printf .)"
+  REPLY="${path%$'\n.'}"
+}
+canonical_path "$(dirname -- "${BASH_SOURCE[0]}")/.."; repo_root="$REPLY"
+canonical_path "$repo_root/home"; home_root="$REPLY"
+canonical_path "${CONFIG_LINK_HOME:-$HOME}"; target_home="$REPLY"
 mode=install
 machine=""
 for arg in "$@"; do
@@ -100,15 +107,22 @@ done
 backup_root=""
 failures=0
 ensure_local_destination() {
-  local parent
-  parent="$(realpath -m -- "$(dirname -- "$1")")"
-  case "$parent/" in
+  canonical_path "${1%/*}/"
+  case "$REPLY/" in
     "$repo_root/"*|"$home_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
   esac
+  # Backing up a real directory moves everything inside it, including the checkout.
+  if [[ -e "$1" && ! -L "$1" ]]; then
+    canonical_path "$1"
+    case "$repo_root/" in
+      "$REPLY/"*) echo "Destination contains the config checkout: $1" >&2; exit 1 ;;
+    esac
+  fi
 }
 
-# Reject shared parents and backup aliases before changing any existing links.
-if [[ "$mode" == install ]]; then
+# Reject shared parents, backup aliases and checkout ancestors before changing
+# any existing links. Installers run the preview before package changes.
+if [[ "$mode" != --check ]]; then
   for rel in "${links[@]}"; do ensure_local_destination "$target_home/$rel"; done
   if [[ "$machine" == homelab-dev ]]; then
     ensure_local_destination "$target_home/.zshenv"
@@ -132,7 +146,7 @@ link_file() {
     --dry-run) echo "LINK $dst -> $src (back up existing destination)"; return ;;
   esac
   ensure_local_destination "$dst"
-  mkdir -p -- "$(dirname -- "$dst")"
+  mkdir -p -- "${dst%/*}/"
   if [[ -e "$dst" || -L "$dst" ]]; then
     if [[ -z "$backup_root" ]]; then
       ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
