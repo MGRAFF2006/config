@@ -51,7 +51,7 @@ sudo mv /etc/howdy-tpm/humunkulud.cred /etc/howdy-tpm/humunkulud.cred.disabled
 ```
 
 The lock and sudo stacks do not receive this password. Separate app vaults such
-as Bitwarden retain their own unlock policy. Face-first polkit is configured
+as Bitwarden retain their own unlock policy. Face for polkit is configured
 separately through `scripts/install-howdy-polkit.py`, with no TPM secret there.
 
 Verification uses a dummy secret and temporary PAM stacks:

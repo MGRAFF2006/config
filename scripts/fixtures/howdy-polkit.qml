@@ -39,13 +39,29 @@ Item {
             closed.clear();
         }
 
-        function test_face_success_needs_no_password() {
-            flow.supplementaryMessage = "Attempting facial authentication";
+        // polkit-1 asks for the password before Howdy, so an untouched
+        // request only waits. The PAM order itself is proven in check_pam.
+        function test_untouched_request_answers_nothing() {
+            flow.inputPrompt = "Password:";
+            flow.isResponseRequired = true;
+            wait(50);
             compare(flow.submissions.length, 0);
+            compare(ui.isLoading, false);
+            compare(success.count, 0);
+            compare(closed.count, 0);
+        }
+
+        function test_empty_enter_asks_for_face() {
+            flow.inputPrompt = "Password:";
+            flow.isResponseRequired = true;
+            ui.submitAuth();
+            compare(flow.submissions.length, 1);
+            compare(flow.submissions[0], "");
+            compare(ui.isLoading, true);
+            flow.supplementaryMessage = "Attempting facial authentication";
             flow.authenticationSucceeded();
             compare(success.count, 1);
             compare(closed.count, 1);
-            compare(flow.submissions.length, 0);
         }
 
         function test_timeout_leaves_password_available() {

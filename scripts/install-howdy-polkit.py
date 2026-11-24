@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install face-first polkit PAM and a camera-only helper sandbox exception."""
+"""Install password-first polkit PAM with an explicit face option and its helper sandbox exception."""
 
 import argparse
 import configparser
@@ -18,10 +18,19 @@ PAM_TARGET = Path("/etc/pam.d/polkit-1")
 DROPIN_TARGET = Path("/etc/systemd/system/polkit-agent-helper@.service.d/howdy-camera.conf")
 VENDOR_UNIT = Path("/usr/lib/systemd/system/polkit-agent-helper@.service")
 SYSTEM_AUTH = Path("/etc/pam.d/system-auth")
-# A face match is "sufficient" and skips system-auth's whole auth section. These
-# are the only auth modules that may be skipped: password methods, lockout
-# bookkeeping (preauth runs first in the managed stack) and environment setup.
+FAILLOCK_CONF = Path("/etc/security/faillock.conf")
+DEFAULT_TALLY_DIR = "/run/faillock"
+# Programs and modules the managed stack runs inside the helper sandbox.
+REQUIRED_FILES = ("/usr/bin/grep", "/usr/lib/security/pam_exec.so", "/usr/lib/security/pam_faillock.so",
+                  "/usr/lib/security/pam_howdy.so")
+# The face path never runs system-auth's auth section. These are the only auth
+# modules it may skip: password methods, lockout bookkeeping (the face path runs
+# its own preauth first) and environment setup.
 SKIPPABLE_AUTH = {"pam_faillock.so", "pam_systemd_home.so", "pam_unix.so", "pam_permit.so", "pam_env.so"}
+# The face path's guard is plain "pam_faillock.so preauth", which reads
+# FAILLOCK_CONF. system-auth must use that same policy: only the action and
+# logging words may appear, never conf=, dir=, deny= or other policy options.
+FAILLOCK_PLAIN_ARGS = {"preauth", "authfail", "authsucc", "silent", "audit", "no_log_info"}
 
 
 def camera_path(config=HOWDY_CONFIG):
@@ -36,8 +45,18 @@ def camera_path(config=HOWDY_CONFIG):
     return path
 
 
+def check_workaround(config=HOWDY_CONFIG):
+    """The password gate leaves the (possibly empty) answer in PAM_AUTHTOK.
+    Howdy's input/native workarounds read it and would skip the face attempt."""
+    parser = configparser.ConfigParser()
+    with config.open() as stream:
+        parser.read_file(stream)
+    if parser.get("core", "workaround", fallback="input").strip() != "off":
+        raise ValueError(f"{config}: set [core] workaround = off for the polkit face option")
+
+
 def check_system_auth(path=SYSTEM_AUTH):
-    """Refuse when face success would skip an auth guard this stack does not know."""
+    """Refuse when the face path would skip an auth guard or use another lockout policy."""
     unknown = []
     for line in path.read_text().splitlines():
         fields = line.split()
@@ -50,28 +69,49 @@ def check_system_auth(path=SYSTEM_AUTH):
             continue
         rest = line.split(None, 1)[1].strip() if len(fields) > 1 else ""
         if rest.startswith("[") and "]" in rest:
-            control, module = "[...]", rest.split("]", 1)[1].split()[:1]
+            control, words = "[...]", rest.split("]", 1)[1].split()
         else:
-            control, module = (rest.split() + [""])[0], rest.split()[1:2]
-        name = Path(module[0]).name if module else ""
+            control, words = (rest.split() + [""])[0], rest.split()[1:]
+        name = Path(words[0]).name if words else ""
         if control in ("include", "substack") or name not in SKIPPABLE_AUTH:
             unknown.append(line.strip())
+        elif name == "pam_faillock.so" and not set(words[1:]) <= FAILLOCK_PLAIN_ARGS:
+            unknown.append(line.strip() + " (custom pam_faillock options)")
     if unknown:
-        raise ValueError(f"{path} has auth steps a face match would skip: " + "; ".join(unknown))
+        raise ValueError(f"{path} has auth steps the face path would skip or not match: " + "; ".join(unknown))
 
 
-def render_dropin(camera):
+def tally_dir(conf=FAILLOCK_CONF):
+    """Return the faillock tally directory that FAILLOCK_CONF selects."""
+    directory = DEFAULT_TALLY_DIR
+    for line in conf.read_text().splitlines():
+        if line.strip().startswith("#"):
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() == "dir":
+            directory = value.strip()
+    # Literal path for ReadWritePaths=; never the root or a top-level directory.
+    if (not re.fullmatch(r"/[A-Za-z0-9_./+-]+", directory) or ".." in Path(directory).parts
+            or len(Path(directory).parts) < 3):
+        raise ValueError(f"{conf}: unsupported faillock dir {directory!r}")
+    return str(Path(directory))
+
+
+def render_dropin(camera, tally):
     # BindPaths parses colon-separated tuples. DeviceAllow does not.
     escaped = camera.replace(":", r"\x3a")
     template = (ROOT / "system/polkit/howdy-camera.conf").read_text()
-    return template.replace("@BIND_CAMERA@", escaped).replace("@CAMERA@", camera).encode()
+    return (template.replace("@BIND_CAMERA@", escaped).replace("@CAMERA@", camera)
+            .replace("@TALLY_DIR@", tally).encode())
 
 
-def plan(config=HOWDY_CONFIG):
+def plan(config=HOWDY_CONFIG, faillock_conf=FAILLOCK_CONF, system_auth=SYSTEM_AUTH):
     camera = camera_path(config)
+    check_workaround(config)
+    check_system_auth(system_auth)
     return camera, {
         PAM_TARGET: (ROOT / "system/pam.d/polkit-1").read_bytes(),
-        DROPIN_TARGET: render_dropin(camera),
+        DROPIN_TARGET: render_dropin(camera, tally_dir(faillock_conf)),
     }
 
 
@@ -148,19 +188,18 @@ def main():
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    camera, files = plan()
-    verify_unit(files[DROPIN_TARGET])
     try:
-        check_system_auth()
-    except ValueError as error:
+        camera, files = plan()
+    except (OSError, ValueError, configparser.Error) as error:
         parser.error(str(error))
+    verify_unit(files[DROPIN_TARGET])
     if args.check:
         failures = [str(path) for path, content in files.items()
                     if path.is_symlink() or not path.is_file() or path.read_bytes() != content
                     or stat.S_IMODE(path.stat().st_mode) != 0o644 or path.stat().st_uid != 0]
         if failures:
             raise SystemExit("Drift: " + ", ".join(failures))
-        print("PASS: face-first polkit PAM and camera-only helper exception match")
+        print("PASS: password-first polkit PAM and the helper camera/tally exception match")
         return
     if not args.apply:
         print("Camera: " + camera)
@@ -176,8 +215,9 @@ def main():
     subsystem = Path(f"/sys/dev/char/{os.major(camera_stat.st_rdev)}:{os.minor(camera_stat.st_rdev)}/subsystem")
     if subsystem.resolve().name != "video4linux":
         parser.error("Howdy's configured device is not a Video4Linux capture device")
-    if not Path("/usr/lib/security/pam_howdy.so").is_file():
-        parser.error("pam_howdy.so is missing")
+    missing = [path for path in REQUIRED_FILES if not Path(path).is_file()]
+    if missing:
+        parser.error("missing: " + ", ".join(missing))
     backup = Path("/var/backups/config-howdy-polkit") / datetime.now().astimezone().strftime("%Y-%m-%d-%H%M%S-%f")
     changed = install_files(files, backup, lambda: subprocess.run(["systemctl", "daemon-reload"], check=True))
     print("Installed; backup: " + str(backup) if changed else "Already installed; no changes")

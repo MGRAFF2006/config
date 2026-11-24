@@ -1,14 +1,21 @@
 #%PAM-1.0
 # Managed by Documents/config/scripts/install-howdy-polkit.py (explicit opt-in;
 # install-pam-keyring-howdy.sh does not install this stack).
-# DMS 2.1 supports face authentication followed by the normal password prompt.
-# The polkit helper also needs the managed camera-only sandbox drop-in.
-# A successful face check skips system-auth's auth section, so its mandatory
-# lockout guard runs first and denies a locked account for both methods. The
-# installer refuses when system-auth has any other auth module face would skip.
+# The polkit helper also needs the managed camera and lockout-state drop-in.
+#
+# Password first, like greetd and the lock screen. Quickshell starts PAM as
+# soon as a request arrives, so nothing here may approve it before the user
+# answers this request's prompt. The first line asks for the password (kept
+# as PAM_AUTHTOK) and succeeds only when the answer is not empty:
+# - a typed password jumps to system-auth, which alone decides the result;
+# - an empty answer (Enter or Authenticate on the empty field) asks for the
+#   face. The lockout guard runs first, so a locked account stays denied.
+# A cancelled dialog ends the conversation with an error and stops here.
 
-auth       required                     pam_faillock.so      preauth
+auth       [success=3 system_err=ignore default=die]  pam_exec.so quiet quiet_log expose_authtok /usr/bin/grep -q ^
+auth       requisite                    pam_faillock.so      preauth
 auth       sufficient                   pam_howdy.so
+auth       requisite                    pam_deny.so
 auth       include                      system-auth
 account    include                      system-auth
 password   include                      system-auth

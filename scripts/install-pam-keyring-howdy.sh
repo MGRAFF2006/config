@@ -3,7 +3,7 @@
 #
 # Password/PIN first, Howdy fallback for greetd, SDDM and the DMS lock; Howdy
 # first for sudo. The DMS lock patch starts the fallback on wake.
-# Polkit is not touched here: face-first polkit is a separate explicit install
+# Polkit is not touched here: face for polkit is a separate explicit install
 # (scripts/install-howdy-polkit.py) because it also changes the helper sandbox.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
 #
@@ -98,7 +98,7 @@ elif ! python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home"
 fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"
-info "Graphical polkit unchanged; optional face-first polkit: scripts/install-howdy-polkit.py --apply"
+info "Graphical polkit unchanged; optional face for polkit: scripts/install-howdy-polkit.py --apply"
 warn "Wallet unlock on typed password requires kdewallet password == login password."
 warn "Face-only KWallet unlock requires separate TPM enrollment via install-howdy-kwallet-tpm.py."
 ok "Done. Fully log out and back in for greetd/session PAM to apply."

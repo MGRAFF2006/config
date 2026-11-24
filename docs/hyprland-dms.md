@@ -198,21 +198,31 @@ PAM (managed under `system/pam.d/`, install with
 | `sddm` | Password first, Howdy fallback for Plasma |
 | `dankshell` | Password/PIN first, Howdy fallback; face starts on wake (DMS lock) |
 | `sudo` | Howdy first, password fallback (terminal) |
-| `polkit-1` | Optional, separate install: Howdy first, normal system password fallback; camera-only helper sandbox access |
+| `polkit-1` | Optional, separate install: password first via `system-auth`; empty field asks for the face; helper gets the camera and faillock tally |
 
-Greeter and lock ask for the password before Howdy, so a typed password never
-waits for the camera, even when it hangs. Terminal `sudo` tries the camera
-first. Greeter: submit the empty password field to use your face.
+Greeter, lock and the optional polkit stack ask for the password before
+Howdy, so a typed password never waits for the camera, even when it hangs.
+Terminal `sudo` tries the camera first. Greeter: submit the empty password
+field to use your face.
 
 The PAM re-apply script below leaves `/etc/pam.d/polkit-1` untouched, so
-graphical prompts stay password-only by default. Face-first polkit is a
+graphical prompts stay password-only by default. Face for polkit is a
 separate, explicit opt-in:
 `sudo python3 scripts/install-howdy-polkit.py --apply` installs the polkit PAM
-stack and the matching camera-only helper drop-in together, and refuses to
-change anything when the camera, the helper unit or `system-auth` does not
-match what it expects. The helper keeps its private `/dev`, closed device
-policy and all other vendor sandbox restrictions. No wallet password or TPM
-access is supplied to polkit.
+stack and the matching helper drop-in together. The dialog opens with the
+usual password prompt and the camera stays off until you answer it: a typed
+password goes to `system-auth` unchanged, and Enter or Authenticate on the
+empty field asks for the face. A face match can therefore never approve a
+request you have not acted on, and an account without a password needs the
+face there. The face path first runs `pam_faillock preauth`, so a locked
+account stays denied for both methods. The installer refuses to change
+anything when the camera, the helper unit, Howdy's `workaround` (must be
+`off`), `system-auth` (other auth modules or custom `pam_faillock` options)
+or the `faillock.conf` tally directory does not match what it expects. The
+helper keeps its private `/dev`, closed device policy and all other vendor
+sandbox restrictions; it gains only the camera and write access to the tally
+directory, because `pam_faillock` opens an existing tally read-write even to
+check it. No wallet password or TPM access is supplied to polkit.
 Set `greeterPamExternallyManaged=true` so DMS does not rewrite `/etc/pam.d/greetd`.
 For DMS 2.1, keep `lockPamExternallyManaged=true` and set
 `lockPamPath=/etc/pam.d/dankshell`; otherwise it selects the distro `login` stack.
