@@ -19,18 +19,22 @@ holds() { tr ' ' '\n' | grep -Fx python-pypdfium2 >/dev/null; }
 
 if [[ "$mode" == --check ]]; then
   # Read-only: pacman itself decides what the configuration means.
-  cmp -s -- "$source_file" "$destination" || fail "$destination is missing or differs from $source_file."
+  # Test the type first: cmp would block on a FIFO.
+  [[ -f "$destination" && ! -L "$destination" ]] || fail "$destination is missing or not a regular file."
+  cmp -s -- "$source_file" "$destination" || fail "$destination differs from $source_file."
   command -v pacman-conf >/dev/null || fail 'pacman-conf is not installed.'
   errors="$(mktemp)"; without="$(mktemp)"
   trap 'rm -f -- "$errors" "$without"' EXIT
   ignored="$(pacman-conf --config "$pacman_conf" IgnorePkg 2>"$errors")" \
     || fail "pacman-conf cannot parse $pacman_conf: $(cat -- "$errors")"
   # Pacman warns about IgnorePkg read outside [options], e.g. a misplaced
-  # Include or a repository glob that matches the drop-in.
-  ! grep -Fq -- "$destination" "$errors" || fail "pacman warns about $destination: $(cat -- "$errors")"
+  # Include or a repository glob that matches the drop-in. Match the file name:
+  # the path in the warning is spelled the way the Include spelled it.
+  ! grep -Fq -- "${destination##*/}" "$errors" || fail "pacman warns about the drop-in: $(cat -- "$errors")"
   holds <<<"$ignored" || fail "pacman-conf does not report python-pypdfium2 in IgnorePkg; add '$include' under [options]."
-  # The hold must come from this drop-in, not from an unrelated IgnorePkg:
-  # without the Include line(s) for it, pacman must no longer report it.
+  # The drop-in's own entry must be in effect: without the Include line(s)
+  # for it, its literal IgnorePkg entry must disappear. (A separate pattern
+  # such as python-pypdfium? may hold the package too; that is still a hold.)
   awk -v target="$destination" '
     { line = $0; gsub(/^[ \t\r]+|[ \t\r]+$/, "", line) }
     line ~ /^Include[ \t]*=/ { value = line; sub(/^Include[ \t]*=[ \t]*/, "", value); if (value == target) next }
@@ -39,9 +43,9 @@ if [[ "$mode" == --check ]]; then
   ignored="$(pacman-conf --config "$without" IgnorePkg 2>/dev/null)" \
     || fail "pacman-conf cannot parse $pacman_conf without '$include'."
   if holds <<<"$ignored"; then
-    fail "python-pypdfium2 stays held without '$include'; another IgnorePkg or a glob Include provides it."
+    fail "IgnorePkg still lists python-pypdfium2 without '$include'; another IgnorePkg line or a glob Include provides it."
   fi
-  echo 'PASS: pacman and yay persistently hold python-pypdfium2 through the drop-in.'
+  echo 'PASS: the drop-in is included under [options] and pacman holds python-pypdfium2.'
   exit
 fi
 
