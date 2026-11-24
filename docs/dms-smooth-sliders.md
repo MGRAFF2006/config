@@ -38,45 +38,40 @@ python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI --unpatc
 
 It stages the override into a temporary directory, checks that the launch
 guard falls back when any patched renderer or the version changes, and runs
-the actual `LauncherRow` with synthetic clipboard, app and dmenu entries
-(searched plain rows and explicit markup) at 620 and 320 px and 115% text
-scale. DMS's components need a real window backend, so the fixture runs on a
-private Xwayland inside a headless KWin, both in bubblewrap with a read-only
+the actual launcher components with synthetic clipboard, app and dmenu entries:
+rows at 620/320 px, and on 2.1.2 also grid tiles at 180/120 px and image
+captions; highlighted and multiline entries, long subtitles, short app labels,
+searched plain dmenu rows, explicit dmenu HTML, 115% text scale and unchanged
+payloads. DMS's components need a real window backend, so the fixture runs on
+a private Xwayland inside a headless KWin, both in bubblewrap with a read-only
 root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
 `bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
-desktop or its settings. Without `--source-dir` it stages from the running
-shell's `dms.path`, like the configure helper.
+desktop, its settings or the clipboard. Without `--source-dir` it stages from
+the running shell's `dms.path`, like the configure helper. `--evidence
+/absolute/path.png` saves the rendered fixture. Backend clipboard copy/paste
+and physical keyboard use are outside these checks.
 
 DMS 2.1.2 uses a separate reviewed patch for launcher rows, grid labels and image
 tile captions. Generated search emphasis uses native styled text so Qt honors
-line limits and ellipses; explicit dmenu HTML retains its rich formatting. The
-older 2.0.0 slider and control-center patches are not applied to changed 2.1
-internals. The version, binary and each patched renderer must match before the
-override launches. An upgrade to another version falls back to built-in DMS
-until its source is reviewed again.
+line limits and ellipses; explicit `--markup-rows` dmenu HTML retains its rich
+formatting. The older 2.0.0 slider and control-center patches are not applied
+to changed 2.1 internals. The version, binary and each patched renderer must
+match before the override launches. An upgrade to another version falls back
+to built-in DMS until its source is reviewed again.
 
-Check actual launcher components with synthetic clipboard data in the separate
-agent desktop (no physical desktop input or clipboard access):
-
-```bash
-agent-desktop start
-agent-desktop run python3 "$PWD/scripts/check-dms-launcher-text.py" --source-dir /path/to/pristine/dms-ui
-```
-
-The helper logs to the agent desktop's `apps.log`. `--unpatched` reproduces the
-original failure; `--evidence /absolute/path.png` saves the patched fixture.
-Coverage includes grid widths 180/120 px, row widths 620/320 px, multiline and
-highlighted entries, long subtitles, image captions, ordinary short app labels,
-115% text scale, unchanged payloads, explicit dmenu HTML, repeat staging and
-renderer-tamper/version fallback. The fixture exercises the actual rendering
-components; backend clipboard copy/paste and physical keyboard use are separate
-from these checks.
-
-Stage the reviewed change without changing any running shell:
+Stage the reviewed change for the installed version (2.0.0 or 2.1.2) without
+changing any running shell, then check the launch guard and launcher text:
 
 ```bash
 python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
+python3 scripts/check-dms-launcher-text.py
+```
+
+On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
+with a pointer to the launcher check, since they have no slider patch:
+
+```bash
 python3 scripts/check-dms-smooth-sliders.py --ui
 ```
 

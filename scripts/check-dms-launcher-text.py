@@ -27,7 +27,7 @@ DISPLAY=:7 QT_QPA_PLATFORM=xcb exec qs -p "$1"
 """
 
 
-def run_isolated(work, fixture, evidence):
+def run_isolated(work, fixture, evidence, check_tiles):
     for tool in ("bwrap", "dbus-run-session", "kwin_wayland", "Xwayland", "qs"):
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required for the isolated launcher check")
@@ -40,6 +40,8 @@ def run_isolated(work, fixture, evidence):
         "LIBGL_ALWAYS_SOFTWARE": "1", "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
         "QT_QUICK_BACKEND": "software", "QT_QPA_PLATFORMTHEME": "", "QT_NO_XDG_DESKTOP_PORTAL": "1",
     }
+    if not check_tiles:
+        env["DMS_LAUNCHER_CHECK_TILES"] = "0"
     if evidence:
         env["DMS_LAUNCHER_EVIDENCE"] = str(work / "evidence.png")
     session = f"sh {work / 'session.sh'} {fixture}"
@@ -114,7 +116,9 @@ def main():
             if entry.is_dir():
                 (fixture / entry.name).symlink_to(entry, target_is_directory=True)
         (fixture / "shell.qml").write_text(Path(__file__).with_name("fixtures").joinpath("launcher-text-bounds.qml").read_text())
-        logs = run_isolated(root, fixture, args.evidence)
+        # The 2.0.0 override patches result rows only; later versions also patch tiles.
+        check_tiles = (staged / "VERSION").read_text().strip() != module.SUPPORTED_VERSION
+        logs = run_isolated(root, fixture, args.evidence, check_tiles)
         assert "LAUNCHER_TEXT_PASS" in logs, logs
         assert module.tree_digest(source) == original_hash, "Check changed the input UI"
         print(next(line for line in logs.splitlines() if "LAUNCHER_TEXT_PASS" in line))
