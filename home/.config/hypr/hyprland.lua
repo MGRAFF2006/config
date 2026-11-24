@@ -123,6 +123,7 @@ require("dms.binds")
 require("dms.binds-user")
 require("dms.workspaces") -- DWM-style per-monitor tags (hyprsplit); after binds
 require("dms.windowrules")
+require("dms.wispr-flow") -- dictation indicator overlay, separate from the Hub
 
 -- Laptop lid: only the internal display sleeps; logind is inhibited by laptop-lid-awake.service.
 hl.bind("switch:on:Lid Switch", hl.dsp.dpms({ action = "off", monitor = "eDP-1" }), { locked = true })
