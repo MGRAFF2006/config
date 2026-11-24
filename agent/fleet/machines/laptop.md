@@ -1,5 +1,42 @@
 # Laptop
 
+## Power and sleep — verified 2026-11-13
+
+DMS now dims the built-in panel to 20% after 2 minutes idle, turns displays off
+at 3 minutes, locks at 5 minutes, and suspends at 15 minutes on battery or
+30 minutes on AC. Manual lock turns displays off after 20 seconds; lock before
+suspend is enabled. Profiles select Power Saver on battery and Balanced on AC.
+
+Control Center's coffee-cup **Keep Awake** tile is the explicit exception for
+background jobs, including with the lid closed. Normal lid close now suspends;
+the existing Hyprland bindings still turn only `eDP-1` off/on with the lid.
+The old permanent lid service is inactive and guarded against older setup
+reruns; Bluetooth audio claiming remains active without its laptop lid blocker.
+Other computers retain the helper's original default.
+
+All 15 power settings match disk and live DMS, the plugin loads, and the native
+Keep Awake inhibitor acquires/releases correctly. Production-QML checks cover
+manual adjustments, inhibitors, reconnect and restart restoration. A private
+Wayland idle/wake check passed with a fake backlight. Physical lid-close and
+suspend/resume were not tested. See [setup and recovery](../../../docs/laptop-power.md).
+
+
+## Login-screen appearance — verified 2026-11-05
+
+The DMS greeter now uses live per-account settings, wallpaper/session data and
+colors. Its existing user service retains Gio file events while native
+profile-only sync repairs read access; twelve rapid mode-0600 atomic session
+replacements were repaired successfully. The greeter account can read the
+root-owned guarded renderer and live theme inputs. The renderer adds support
+for the desktop's fixed corner radius and popup transparency; unknown package
+builds fall back to the packaged UI.
+
+The actual patched greeter rendered in a private nested Hyprland session, and
+theme readback matched the desktop palette, text scale, corners and opacity.
+PAM fingerprints and the running greetd process stayed unchanged. A fresh
+login/logout remains untested. Apply/recover through the
+[greeter theme guide](../../../docs/dms-greeter-theme.md).
+
 ## Quick-access detail pages — verified 2026-11-04
 
 The guarded DMS 2.0 UI override replaces the control-center tile grid with
@@ -78,8 +115,8 @@ for connections. The local hostname alone does not identify this device.
 
 Ryzen AI 7 350, Radeon 860M integrated GPU, about 30 GiB usable RAM. Prefer it for
 interactive coding, research, review, and light checks. Battery, heat, travel,
-and suspension matter more than its memory capacity. There is no locally
-configured model runtime in this kit; cloud coding agents use their provider.
+and suspension matter more than its memory capacity. Its XDNA2 NPU runs local
+models through FastFlowLM; see [the setup and operation guide](../../../docs/laptop-npu.md).
 
 Verified on 2026-10-02: current session is Hyprland on Wayland. KDE Plasma is
 also part of the documented setup; do not assume which session is running.
