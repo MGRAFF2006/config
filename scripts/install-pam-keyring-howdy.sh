@@ -26,7 +26,12 @@ for required in greetd sddm dankshell sudo; do
 done
 
 if [[ "${EUID}" -ne 0 ]]; then
-  exec sudo bash "$0" "$@"
+  # sudo drops XDG_CONFIG_HOME; DMS reads its settings from the caller's one.
+  exec sudo bash "$0" "${XDG_CONFIG_HOME:-$HOME/.config}"
+fi
+dms_config_home="${1:-}"
+if [[ -z "$dms_config_home" && -n "${SUDO_USER:-}" ]]; then
+  dms_config_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config"
 fi
 
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -84,41 +89,12 @@ if [[ -f "$howdy_cfg" ]]; then
   ok "Installed /etc/howdy/config.ini"
 fi
 
-# Stop DMS greeter from rewriting /etc/pam.d/greetd (would drop Howdy).
-dms_settings="${SUDO_USER:+/home/$SUDO_USER}/.config/DankMaterialShell/settings.json"
-if [[ -z "${SUDO_USER:-}" ]]; then
-  dms_settings=""
-fi
-if [[ -n "$dms_settings" && -f "$dms_settings" ]]; then
-  python3 - "$dms_settings" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path, encoding="utf-8") as f:
-    data = json.load(f)
-changed = False
-for key in ("greeterPamExternallyManaged", "lockPamExternallyManaged"):
-    if data.get(key) is not True:
-        data[key] = True
-        changed = True
-# DMS 2.1 otherwise uses the distro login stack. Never replace a custom stack:
-# it may enforce more than this one (e.g. a second factor).
-lock_path = data.get("lockPamPath") or ""
-if not lock_path:
-    data["lockPamPath"] = "/etc/pam.d/dankshell"
-    changed = True
-elif lock_path != "/etc/pam.d/dankshell":
-    print(f"[WARN]  kept custom lockPamPath={lock_path}; the DMS lock does not use "
-          "/etc/pam.d/dankshell or start Howdy automatically. Change it in DMS "
-          "settings only if that stack should be replaced.", file=sys.stderr)
-if changed:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    print("updated", path)
-else:
-    print("already set", path)
-PY
-  ok "DMS greeter/lock PAM marked externally managed"
+# Stop DMS from rewriting the greeter PAM (would drop Howdy) and select the
+# managed lock stack in the settings file DMS 2.1 reads.
+if [[ -z "$dms_config_home" ]]; then
+  warn "Unknown invoking user; run configure-dms-lock-pam.py ~/.config as that user"
+elif ! python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home"; then
+  warn "DMS greeter/lock PAM settings not updated"
 fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"

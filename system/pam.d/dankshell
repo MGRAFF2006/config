@@ -7,10 +7,12 @@
 # lockPamPath=/etc/pam.d/dankshell to select this stack. The staged
 # howdy-lock-2.1.patch starts face authentication on wake by answering the
 # password prompt with an empty response; it only does so for this order.
+# No nullok: an empty answer must only unlock through Howdy, never through a
+# blank Unix password (accounts without a password unlock with the face only).
 
 auth       requisite                    pam_nologin.so
 auth       required                     pam_shells.so
-auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=2 default=ignore]   pam_unix.so          try_first_pass
 auth       [success=1 default=ignore]   pam_howdy.so
 auth       requisite                    pam_deny.so
 auth       required                     pam_env.so
