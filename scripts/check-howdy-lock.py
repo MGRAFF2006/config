@@ -96,6 +96,8 @@ QtObject {
     function abort() { if (active) abortCount++; active = false; responseRequired = false; }
     function respond(value) { responses = responses.concat([value]); responseRequired = false; }
     function askPassword() { responseRequired = true; message = "Password: "; pamMessage(); }
+    // A PAM_TEXT_INFO/PAM_ERROR_MSG notice, e.g. Howdy's "Failure, timeout reached".
+    function notice(text) { responseRequired = false; message = text; pamMessage(); }
 }
 ''',
             'PamResult': 'pragma Singleton\nimport QtQml\nQtObject { enum Results { Success, Error, MaxTries, Failed } }\n',
@@ -122,7 +124,8 @@ QtObject {
             'AdminPolicy': 'pragma Singleton\nimport QtQml\nQtObject { property bool disableCustomLockPam: false }\n',
             'Paths': 'pragma Singleton\nimport QtQml\nQtObject { property string state: "/inert-state"; function strip(path) { return path; } }\n',
             'Log': 'pragma Singleton\nimport QtQml\nQtObject { function scoped(name) { return { warn: function(message) {} }; } }\n',
-        }, ('SettingsData', 'AdminPolicy', 'Paths', 'Log'))
+            'Theme': 'pragma Singleton\nimport QtQml\nQtObject { property real spacingM: 12; property real spacingXXS: 2 }\n',
+        }, ('SettingsData', 'AdminPolicy', 'Paths', 'Log', 'Theme'))
         write_module(imports, 'qs.Services', {
             'SessionService': '''pragma Singleton
 import QtQml
@@ -157,6 +160,10 @@ QtObject {
             raise SystemExit(result.returncode)
         if 'FAIL!' in result.stdout or 'QWARN' in result.stdout:
             raise SystemExit('Unexpected QML failure or warning')
+        # Unresolved bindings in the fixture or production code print here.
+        if '.qml:' in result.stderr:
+            print(result.stderr, end='')
+            raise SystemExit('Unexpected QML runtime warning')
 
 
 if __name__ == '__main__':

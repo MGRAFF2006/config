@@ -212,17 +212,26 @@ The installer (via `scripts/configure-dms-lock-pam.py`) edits
 `~/.config/DankMaterialShell/settings.json`. It sets an empty `lockPamPath`,
 keeps any custom one, and warns if DMS has not created its settings yet.
 
-The guarded `howdy-lock-2.1.patch` starts one face attempt after a wake from
-display-off or sleep, or after a key press or click on the lock screen. Locking
-alone does not start the camera, so a manual lock with the display on stays
-locked while you are still in front of it. The attempt answers the managed
-stack's password prompt with an empty response, which falls through to Howdy;
-it is silent when no face matches. The password field keeps accepting keys
-while it runs: the first typed key or Enter abandons the face attempt, and the
-password goes to a fresh attempt that never reaches Howdy. Pressing Enter on
-the empty field also tries the face. The existing 15-second watchdog recovers
-a stalled camera when nothing is typed. The `dankshell` stack omits `nullok`,
-and an automatic attempt that succeeds before its empty answer was sent stays
+The guarded `howdy-lock-2.1.patch` starts one face attempt after the display
+turns back on, after a resume from sleep, or after a key press or click on the
+lock screen. Locking alone does not start the camera, so a manual lock with the
+display on stays locked while you are still in front of it. A suspend that DMS
+requested but that never happened (refused or inhibited) is not a wake either.
+The attempt answers the managed stack's password prompt with an empty response,
+which falls through to Howdy. When no face matches it ends silently, including
+Howdy's "Failure, timeout reached" notice. Pressing Enter on the empty field
+starts a face attempt, or keeps the running one, and reports its failure.
+The password field keeps accepting keys during any face attempt: the first
+typed key abandons it, and the password goes to a fresh attempt that never
+reaches Howdy. The existing 15-second watchdog recovers a stalled camera when
+nothing is typed. Abandoning an attempt kills only Quickshell's PAM helper.
+Howdy's separate capture process (`compare.py`) can keep running until it
+matches or reaches Howdy's `timeout` (default 4 seconds), or longer if the
+camera driver stalls. A face attempt started meanwhile can fail while that
+process still holds the camera; a correct password never reaches Howdy and is
+unaffected. This is from the Quickshell and Howdy sources, not measured on the
+laptop. The `dankshell` stack omits `nullok`,
+and a face attempt that succeeds before its empty answer was sent stays
 locked, so a blank Unix password never unlocks without a face match; an
 account without a password unlocks the lock screen with the face only. Stage it through
 `python scripts/configure-dms-smooth-sliders.py --apply` and use the staged UI
