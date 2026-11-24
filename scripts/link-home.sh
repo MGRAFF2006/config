@@ -13,6 +13,13 @@ canonical_path() {
 canonical_path "$(dirname -- "${BASH_SOURCE[0]}")/.."; repo_root="$REPLY"
 canonical_path "$repo_root/home"; home_root="$REPLY"
 canonical_path "${CONFIG_LINK_HOME:-$HOME}"; target_home="$REPLY"
+# The SSH and agent-kit helpers cannot keep such paths exact; refuse them.
+for root in "$repo_root" "$target_home"; do
+  if [[ "$root" == *$'\n'* ]]; then
+    echo "Refusing a path that contains a newline: ${root@Q}" >&2
+    exit 1
+  fi
+done
 mode=install
 machine=""
 for arg in "$@"; do

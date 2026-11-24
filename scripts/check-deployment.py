@@ -125,21 +125,23 @@ def main():
                 assert "Destination contains the config checkout" in result.stderr, name
                 assert snapshot(nested) == before, name
 
-        # Canonical paths keep trailing newlines instead of resolving to a sibling home.
+        # Command substitutions drop trailing newlines, so a home ending in one
+        # could be handled as its sibling. Refuse it before any change.
         sibling = root / "newline home"
         requested = root / "newline home\n"
         for home in (sibling, requested):
             home.mkdir()
             (home / ".zshrc").write_text("original shell\n")
+        before = (snapshot(sibling), snapshot(requested))
         newline_env = dict(env, CONFIG_LINK_HOME=str(requested))
-        result = subprocess.run(
-            ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"],
-            env=newline_env, capture_output=True, text=True,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert (requested / ".zshrc").resolve() == repo / "home/.zshrc"
-        assert (sibling / ".zshrc").read_text() == "original shell\n"
-        assert sorted(path.name for path in sibling.iterdir()) == [".zshrc"]
+        for args in (["--dry-run"], []):
+            result = subprocess.run(
+                ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev", *args],
+                env=newline_env, capture_output=True, text=True,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "contains a newline" in result.stderr
+            assert (snapshot(sibling), snapshot(requested)) == before
 
         # Local aliases and relative paths remain supported, including backups.
         custom = root / "custom home"
