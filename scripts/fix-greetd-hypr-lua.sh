@@ -23,6 +23,7 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 install -d -m 755 /etc/greetd
+install -m 644 "$repo_root/home/.config/hypr/dms/expressive.lua" /etc/greetd/dms-appearance.lua
 install -m 644 "$src_dir/dms-hypr.lua" /etc/greetd/dms-hypr.lua
 
 if [[ -f /etc/greetd/config.toml ]]; then
