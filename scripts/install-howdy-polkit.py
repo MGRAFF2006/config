@@ -4,6 +4,7 @@
 import argparse
 import configparser
 from datetime import datetime
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -18,11 +19,18 @@ PAM_TARGET = Path("/etc/pam.d/polkit-1")
 DROPIN_TARGET = Path("/etc/systemd/system/polkit-agent-helper@.service.d/howdy-camera.conf")
 VENDOR_UNIT = Path("/usr/lib/systemd/system/polkit-agent-helper@.service")
 SYSTEM_AUTH = Path("/etc/pam.d/system-auth")
+# sha256sum --check list of the system-auth that check_system_auth() accepted.
+# The face path checks it on every attempt, so a later change to system-auth
+# (a new required factor, a pambase update) turns face off until re-validated.
+PIN_TARGET = Path("/etc/howdy/polkit-system-auth.sha256")
 FAILLOCK_CONF = Path("/etc/security/faillock.conf")
 DEFAULT_TALLY_DIR = "/run/faillock"
 # Programs and modules the managed stack runs inside the helper sandbox.
-REQUIRED_FILES = ("/usr/bin/grep", "/usr/lib/security/pam_exec.so", "/usr/lib/security/pam_faillock.so",
+REQUIRED_FILES = ("/usr/bin/cmp", "/usr/bin/sha256sum", "/usr/lib/security/pam_exec.so", "/usr/lib/security/pam_faillock.so",
                   "/usr/lib/security/pam_howdy.so")
+# Module locations a bare name in system-auth may resolve to; any other path
+# could be a different module that only shares a skippable name.
+MODULE_DIRS = ("/usr/lib/security", "/lib/security", "/usr/lib64/security", "/lib64/security")
 # The face path never runs system-auth's auth section. These are the only auth
 # modules it may skip: password methods, lockout bookkeeping (the face path runs
 # its own preauth first) and environment setup.
@@ -55,40 +63,71 @@ def check_workaround(config=HOWDY_CONFIG):
         raise ValueError(f"{config}: set [core] workaround = off for the polkit face option")
 
 
-def check_system_auth(path=SYSTEM_AUTH):
-    """Refuse when the face path would skip an auth guard or use another lockout policy."""
+def pam_lines(text):
+    """Logical lines as Linux-PAM assembles them (pam_handlers.c): a '#' ends the
+    line, a trailing backslash continues it, and blank or comment-only lines
+    inside a continuation are skipped."""
+    lines, current = [], ""
+    for raw in text.splitlines():
+        stripped = raw.lstrip(" \t")
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "#" in stripped:
+            lines.append(current + stripped.split("#", 1)[0])
+            current = ""
+            continue
+        body = stripped.rstrip(" \t")
+        if body.endswith("\\"):
+            current += body[:-1] + " "
+            continue
+        lines.append(current + body)
+        current = ""
+    if current.strip():
+        lines.append(current)
+    return [line.strip() for line in lines if line.strip()]
+
+
+def check_system_auth(text):
+    """Refuse when the face path would skip an auth guard or use another lockout policy.
+    Linux-PAM matches the module type and control keywords case-insensitively."""
     unknown = []
-    for line in path.read_text().splitlines():
+    for line in pam_lines(text):
         fields = line.split()
-        if not fields or fields[0].startswith("#"):
-            continue
         if fields[0].startswith("@"):  # @include pulls in unchecked lines
-            unknown.append(line.strip())
+            unknown.append(line)
             continue
-        if fields[0].lstrip("-") != "auth":
+        if fields[0].lstrip("-").lower() != "auth":
             continue
         rest = line.split(None, 1)[1].strip() if len(fields) > 1 else ""
         if rest.startswith("[") and "]" in rest:
             control, words = "[...]", rest.split("]", 1)[1].split()
         else:
-            control, words = (rest.split() + [""])[0], rest.split()[1:]
-        name = Path(words[0]).name if words else ""
-        if control in ("include", "substack") or name not in SKIPPABLE_AUTH:
-            unknown.append(line.strip())
+            control, words = (rest.split() + [""])[0].lower(), rest.split()[1:]
+        module = words[0] if words else ""
+        name = Path(module).name
+        known_place = "/" not in module or str(Path(module).parent) in MODULE_DIRS
+        if control in ("include", "substack") or name not in SKIPPABLE_AUTH or not known_place:
+            unknown.append(line)
         elif name == "pam_faillock.so" and not set(words[1:]) <= FAILLOCK_PLAIN_ARGS:
-            unknown.append(line.strip() + " (custom pam_faillock options)")
+            unknown.append(line + " (custom pam_faillock options)")
     if unknown:
-        raise ValueError(f"{path} has auth steps the face path would skip or not match: " + "; ".join(unknown))
+        raise ValueError(f"{SYSTEM_AUTH} has auth steps the face path would skip or not match: " + "; ".join(unknown))
+
+
+def render_pin(system_auth_bytes):
+    return f"{hashlib.sha256(system_auth_bytes).hexdigest()}  {SYSTEM_AUTH}\n".encode()
 
 
 def tally_dir(conf=FAILLOCK_CONF):
     """Return the faillock tally directory that FAILLOCK_CONF selects."""
     directory = DEFAULT_TALLY_DIR
     for line in conf.read_text().splitlines():
-        if line.strip().startswith("#"):
+        line = line.strip()
+        if not line or line.startswith("#"):
             continue
-        name, _, value = line.partition("=")
-        if name.strip() == "dir":
+        # Linux-PAM accepts "dir = /x", "dir=/x" and "dir /x".
+        name, value = re.match(r"([^=\s]+)[\s=]*(.*)", line).groups()
+        if name == "dir":
             directory = value.strip()
     # Literal path for ReadWritePaths=; never the root or a top-level directory.
     if (not re.fullmatch(r"/[A-Za-z0-9_./+-]+", directory) or ".." in Path(directory).parts
@@ -108,10 +147,13 @@ def render_dropin(camera, tally):
 def plan(config=HOWDY_CONFIG, faillock_conf=FAILLOCK_CONF, system_auth=SYSTEM_AUTH):
     camera = camera_path(config)
     check_workaround(config)
-    check_system_auth(system_auth)
+    # Validate and pin the same bytes, so the face path accepts only what was checked.
+    validated = system_auth.read_bytes()
+    check_system_auth(validated.decode())
     return camera, {
         PAM_TARGET: (ROOT / "system/pam.d/polkit-1").read_bytes(),
         DROPIN_TARGET: render_dropin(camera, tally_dir(faillock_conf)),
+        PIN_TARGET: render_pin(validated),
     }
 
 

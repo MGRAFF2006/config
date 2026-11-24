@@ -226,11 +226,19 @@ usual password prompt and the camera stays off until you answer it: a typed
 password goes to `system-auth` unchanged, and Enter or Authenticate on the
 empty field asks for the face. A face match can therefore never approve a
 request you have not acted on, and an account without a password needs the
-face there. The face path first runs `pam_faillock preauth`, so a locked
-account stays denied for both methods. The installer refuses to change
-anything when the camera, the helper unit, Howdy's `workaround` (must be
-`off`), `system-auth` (other auth modules or custom `pam_faillock` options)
-or the `faillock.conf` tally directory does not match what it expects. The
+face there. Only a positive check that the answer was empty (`cmp` against
+`/dev/null`) selects the face; any error in that check sends the answer to
+`system-auth` as a password, never to Howdy. The face path first runs
+`pam_faillock preauth`, so a locked account stays denied for both methods.
+The installer refuses to change anything when the camera, the helper unit,
+Howdy's `workaround` (must be `off`), `system-auth` (other auth modules,
+including ones written in other letter case or continued with `\`, or custom
+`pam_faillock` options) or the `faillock.conf` tally directory does not match
+what it expects. It records a SHA-256 of the validated `system-auth` in
+`/etc/howdy/polkit-system-auth.sha256`, and the face path checks it on every
+attempt: after any later change to `system-auth`, such as a pambase update or a
+new required factor, face for polkit stays off and typed passwords keep working
+until `install-howdy-polkit.py --apply` validates the new file. The
 helper keeps its private `/dev`, closed device policy and all other vendor
 sandbox restrictions; it gains only the camera and write access to the tally
 directory, because `pam_faillock` opens an existing tally read-write even to
@@ -291,10 +299,10 @@ Re-apply PAM after greeter/package changes:
 ~/Documents/config/scripts/install-pam-keyring-howdy.sh
 ```
 
-The installer replaces `greetd`, `sddm`, `dankshell`, `sudo` and `polkit-1`
+The installer replaces `greetd`, `sddm`, `dankshell` and `sudo`
 whatever they contain (each with a `.backup-<stamp>` copy), so it also applies
 over a hand-edited password-only `greetd` or `dankshell`. It never edits
-`system-auth`. Face unlock on the lock screen also needs the staged
+`system-auth` or `polkit-1`. Face unlock on the lock screen also needs the staged
 `howdy-lock-2.1.patch`; with a password-only `dankshell` that patch stays
 inactive.
 

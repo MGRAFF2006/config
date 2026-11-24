@@ -43,6 +43,8 @@ def check_installer(module):
     assert camera.encode() + b" rw" in dropin
     assert ("ReadWritePaths=-" + module.tally_dir()).encode() in dropin, "faillock tally must stay writable"
     assert dropin.count(b"ReadWritePaths=") == 1 and b"@" not in dropin.replace(b"#", b"")
+    # The face path's pin covers exactly the system-auth that passed validation.
+    assert files[module.PIN_TARGET] == module.render_pin(module.SYSTEM_AUTH.read_bytes())
     if ":" in camera:
         assert b"\\x3a" in dropin
     module.verify_unit(dropin)
@@ -70,15 +72,23 @@ def check_installer(module):
                 "auth [success=1 default=bad] pam_unix.so try_first_pass nullok\nauth [default=die] pam_faillock.so authfail\n"
                 "auth optional pam_permit.so\nauth required pam_env.so\nauth required pam_faillock.so authsucc\n"
                 "account required pam_unix.so\naccount required pam_time.so\n#auth required pam_unknown.so\n")
-        for accepted in (arch, "auth sufficient pam_unix.so try_first_pass likeauth nullok\n" + arch):
-            system_auth.write_text(accepted)
-            module.check_system_auth(system_auth)
+        for accepted in (arch, "auth sufficient pam_unix.so try_first_pass likeauth nullok\n" + arch,
+                         arch + "auth required /usr/lib/security/pam_env.so\n",
+                         # A comment ends a line, so its backslash continues nothing.
+                         arch + "# auth required pam_u2f.so \\\nauth required pam_env.so\n"):
+            module.check_system_auth(accepted)
+        # Every spelling Linux-PAM reads as a mandatory auth step must be refused:
+        # type and control keywords are case-insensitive, and a trailing backslash
+        # continues a line, also across blank and comment-only lines.
         for skipped in ("auth required pam_google_authenticator.so", "auth requisite /usr/lib/security/pam_u2f.so",
                         "auth include other-auth", "auth substack other-auth", "@include common-auth",
-                        "-auth [success=ok default=die] pam_oath.so", "auth"):
-            system_auth.write_text(arch + skipped + "\n")
+                        "-auth [success=ok default=die] pam_oath.so", "auth",
+                        "AUTH required pam_u2f.so", "Auth Required pam_u2f.so", "-AUTH requisite pam_u2f.so",
+                        "auth INCLUDE other-auth", "auth Substack other-auth",
+                        "auth required \\\n    pam_u2f.so", "auth \\\n\n# key\n  required pam_u2f.so",
+                        "auth\trequired\tpam_u2f.so", "auth required /opt/custom/pam_unix.so"):
             try:
-                module.check_system_auth(system_auth)
+                module.check_system_auth(arch + skipped + "\n")
             except ValueError:
                 pass
             else:
@@ -87,22 +97,24 @@ def check_installer(module):
         # a policy the face path's plain preauth does not use.
         for custom in ("conf=/etc/security/other.conf", "dir=/var/lib/faillock", "deny=10", "unlock_time=0",
                        "even_deny_root", "local_users_only", "[dir=/run/x]"):
-            system_auth.write_text(arch.replace("pam_faillock.so preauth", "pam_faillock.so preauth " + custom))
             try:
-                module.check_system_auth(system_auth)
+                module.check_system_auth(arch.replace("pam_faillock.so preauth", "pam_faillock.so preauth " + custom))
             except ValueError:
                 pass
             else:
                 raise AssertionError("custom pam_faillock option accepted: " + custom)
-        system_auth.write_text(arch.replace("pam_faillock.so authfail", "pam_faillock.so authfail audit silent"))
-        module.check_system_auth(system_auth)
+        module.check_system_auth(arch.replace("pam_faillock.so authfail", "pam_faillock.so authfail audit silent"))
         faillock_conf = root / "faillock.conf"
         for text, expected in (("# dir = /etc\n", "/run/faillock"), ("deny = 5\nsilent\n", "/run/faillock"),
-                               ("dir = /var/lib/faillock/\n", "/var/lib/faillock")):
+                               ("dir = /var/lib/faillock/\n", "/var/lib/faillock"),
+                               # Linux-PAM also accepts a whitespace-separated value.
+                               ("dir /var/lib/faillock\n", "/var/lib/faillock"), ("  dir\t/run/x/y\n", "/run/x/y"),
+                               ("dir=/run/x/y\n", "/run/x/y")):
             faillock_conf.write_text(text)
             assert module.tally_dir(faillock_conf) == expected, text
-        for unsafe in ("/", "/etc", "/run/faillock x", "/run/../etc", "/run/fail:lock", "/run/faillock # tally", "run/faillock"):
-            faillock_conf.write_text("dir = " + unsafe + "\n")
+        for unsafe in ("= /", "= /etc", "= /run/faillock x", "= /run/../etc", "= /run/fail:lock", "= /run/faillock # tally",
+                       "= run/faillock", " /etc", "\t/"):
+            faillock_conf.write_text("dir" + unsafe + "\n")
             try:
                 module.tally_dir(faillock_conf)
             except ValueError:
@@ -113,6 +125,7 @@ def check_installer(module):
         system_auth.write_text(arch)
         _, planned = module.plan(faillock_conf=faillock_conf, system_auth=system_auth)
         assert b"ReadWritePaths=-/var/lib/faillock\n" in planned[module.DROPIN_TARGET]
+        assert planned[module.PIN_TARGET] == module.render_pin(arch.encode())
         system_auth.write_text(arch.replace("preauth", "preauth deny=9"))
         try:
             module.plan(faillock_conf=faillock_conf, system_auth=system_auth)
@@ -161,7 +174,7 @@ PAM_PROMPT_ECHO_OFF, PAM_PROMPT_ECHO_ON, PAM_CONV_ERR, PAM_FAIL_DELAY = 1, 2, 19
 
 
 def check_pam():
-    """Run the managed stack through real libpam, pam_exec, grep and pam_faillock.
+    """Run the managed stack through real libpam, pam_exec, cmp, sha256sum and pam_faillock.
 
     Only Howdy, the password check and the account step are stubs. Lockout
     state lives in a temporary tally directory seeded by real pam_faillock.
@@ -225,12 +238,12 @@ def check_pam():
         finally:
             pam.pam_end(handle, result)
 
+    module = load_installer()
     source = (ROOT / "system/pam.d/polkit-1").read_text()
-    gate = "pam_exec.so quiet quiet_log expose_authtok /usr/bin/grep -q ^"
     auth = [line for line in source.splitlines() if line.startswith("auth")]
-    assert re.fullmatch(r"auth\s+\[success=3 system_err=ignore default=die\]\s+" + re.escape(gate), auth[0]), \
-        "polkit-1 must ask for the password before anything else"
-    assert re.fullmatch(r"auth\s+include\s+system-auth", auth[4]) and len(auth) == 5, "typed passwords jump to system-auth"
+    gate = re.fullmatch(r"auth\s+\[[^]]*\]\s+pam_exec\.so quiet quiet_log expose_authtok (.+)", auth[0])
+    assert gate, "polkit-1 must ask for the password before anything else"
+    assert re.fullmatch(r"auth\s+include\s+system-auth", auth[-1]), "typed passwords jump to system-auth"
     # The face guard must use faillock.conf exactly like system-auth (no options).
     assert re.findall(r"pam_faillock\.so.*", source) == ["pam_faillock.so      preauth"], "face guard must be plain preauth"
 
@@ -241,37 +254,62 @@ def check_pam():
         stub.write_text('printf "%s\\n" "$2" >> "$1"\nexit "$3"\n')
         password = root / "password.sh"
         password.write_text('read -r typed || true\nprintf "password\\n" >> "$1"\n[ "$typed" = dummy-correct ]\n')
+        killed = root / "killed.sh"
+        killed.write_text("kill -KILL $$\n")
         tally = root / "tally"
         conf = root / "faillock.conf"
         conf.write_text(f"dir = {tally}\ndeny = 3\nunlock_time = 600\n")
         faillock = f"pam_faillock.so conf={conf}"
-        (root / "system-auth").write_text(
+        system_auth = (
             # Arch's system-auth shape, with real faillock and a stubbed pam_unix.
             f"auth required {faillock} preauth\n"
             f"auth [success=1 default=bad] pam_exec.so quiet expose_authtok /bin/sh {password} {trace}\n"
             f"auth [default=die] {faillock} authfail\n"
             f"auth required {faillock} authsucc\n"
             f"account required pam_exec.so quiet /bin/sh {stub} {trace} account 0\n")
+        # A mandatory factor added to system-auth after the face option was installed.
+        added_factor = f"auth required pam_exec.so quiet /bin/sh {stub} {trace} key 1\n"
+        pin = root / "polkit-system-auth.sha256"
+        pin.write_bytes(module.render_pin(system_auth.encode()).replace(str(module.SYSTEM_AUTH).encode(), str(root / "system-auth").encode()))
         (root / "seed").write_text(f"auth required {faillock} authfail\n")
+        # Gate failures, all reported as PAM_SYSTEM_ERR like a typed password:
+        # the program cannot run, is killed, or exits non-zero without reading.
+        broken_gates = {"missing": "/nonexistent/gate", "killed": f"/bin/sh {killed}", "fails": "/bin/false"}
         results = []
-        for tallies, answer, face in itertools.product((0, 1, 3), (None, "", "dummy-correct", "dummy-wrong"), (True, False)):
+        variants = [("installed", tallies) for tallies in (0, 1, 3)]
+        variants += [(name, 0) for name in (*broken_gates, "system-auth-changed")]
+        for (variant, tallies), answer, face in itertools.product(variants, (None, "", "dummy-correct", "dummy-wrong"), (True, False)):
             shutil.rmtree(tally, ignore_errors=True)
             tally.mkdir()
+            (root / "system-auth").write_text(system_auth)
             state.update(prompts=0, answer="", trace=trace)
             for _ in range(tallies):  # real failures; 3 reaches deny=3
                 run(root, b"seed", authenticate=False)
             assert len(list(tally.iterdir())) == (1 if tallies else 0)
+            if variant == "system-auth-changed":
+                (root / "system-auth").write_text(system_auth + added_factor)
             trace.write_text("")
-            stack = source.replace("pam_faillock.so", faillock).replace("pam_howdy.so", f"pam_exec.so quiet /bin/sh {stub} {trace} face {0 if face else 1}")
+            stack = (source.replace("pam_faillock.so", faillock)
+                     .replace("pam_howdy.so", f"pam_exec.so quiet /bin/sh {stub} {trace} face {0 if face else 1}")
+                     .replace(str(module.PIN_TARGET), str(pin)))
+            if variant in broken_gates:
+                stack = stack.replace(auth[0], auth[0].replace(gate.group(1), broken_gates[variant]))
             (root / "polkit-1").write_text(stack)
             state.update(prompts=0, answer=answer)
             result = run(root, b"polkit-1")
             reached = [step for step in trace.read_text().splitlines() if step != "account"]
             locked = tallies >= 3
-            case = dict(tallies=tallies, answer=answer, face=face, result=result, reached=reached)
+            case = dict(variant=variant, tallies=tallies, answer=answer, face=face, result=result, reached=reached)
             assert state["prompts"] == 1, ("exactly one prompt, before any method", case)
             if answer is None:
                 expected, success = [], False
+            elif variant in broken_gates:
+                # Never the face: the answer, even an empty one, is only a password.
+                expected, success = ["answer", "password"], answer == "dummy-correct"
+            elif variant == "system-auth-changed":
+                # Face fails closed; system-auth (with its new factor) decides passwords.
+                expected = {"": ["answer"], "dummy-correct": ["answer", "password", "key"]}.get(answer, ["answer", "password"])
+                success = False
             elif answer == "":
                 expected, success = (["answer"] if locked else ["answer", "face"]), face and not locked
             else:
@@ -280,8 +318,9 @@ def check_pam():
             assert (result == 0) == success, ("lockout bypassed or a method lost", case)
             results.append(case)
         assert any(case["result"] == 0 and case["tallies"] == 1 and case["answer"] == "" for case in results)
-    print("PASS: real libpam/pam_exec/grep/pam_faillock: nothing runs before the answer, empty answer asks for the face,"
-          " typed password goes to system-auth only, existing and locked tallies honoured by both, cancel denies")
+    print("PASS: real libpam/pam_exec/cmp/sha256sum/pam_faillock: nothing runs before the answer, only an empty answer"
+          " asks for the face, typed password goes to system-auth only, a failing gate never reaches the face,"
+          " a changed system-auth turns the face off, existing and locked tallies honoured by both, cancel denies")
 
 
 def write_module(root, name, files, singletons=()):
@@ -356,7 +395,11 @@ dlib.shape_predictor("/usr/share/dlib-data/shape_predictor_5_face_landmarks.dat"
 dlib.face_recognition_model_v1("/usr/share/dlib-data/dlib_face_recognition_resnet_model_v1.dat")
 fd = os.open(camera, os.O_RDWR | os.O_NONBLOCK | os.O_CLOEXEC)
 os.close(fd)
-assert os.access("/usr/bin/grep", os.X_OK), "password gate needs grep"
+assert os.access("/usr/bin/cmp", os.X_OK), "password gate needs cmp"
+assert os.access("/usr/bin/sha256sum", os.X_OK), "face path needs sha256sum for its system-auth pin"
+pin = Path("/etc/howdy/polkit-system-auth.sha256")
+if pin.exists():  # written by install-howdy-polkit.py --apply
+    pin.read_bytes()
 if Path(tally).is_dir():  # tmpfiles creates it at boot; faillock opens tallies read-write
     assert not os.statvfs(tally).f_flag & os.ST_RDONLY, "faillock tally directory is read-only"
 print("HOWDY_POLKIT_SANDBOX_PASS: libraries, models, lid, noncapturing camera open, writable tally", flush=True)

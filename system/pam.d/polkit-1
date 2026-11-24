@@ -6,13 +6,19 @@
 # Password first, like greetd and the lock screen. Quickshell starts PAM as
 # soon as a request arrives, so nothing here may approve it before the user
 # answers this request's prompt. The first line asks for the password (kept
-# as PAM_AUTHTOK) and succeeds only when the answer is not empty:
-# - a typed password jumps to system-auth, which alone decides the result;
-# - an empty answer (Enter or Authenticate on the empty field) asks for the
-#   face. The lockout guard runs first, so a locked account stays denied.
+# as PAM_AUTHTOK) and succeeds only when cmp has read that answer and found it
+# empty (Enter or Authenticate on the empty field). Anything else, a typed
+# password or any pam_exec or cmp error (PAM_SYSTEM_ERR either way), goes to
+# system-auth, which alone decides with the answer as the password. An error
+# can therefore never send a typed password to the face path.
+# The face path fails closed unless system-auth still matches the copy that
+# install-howdy-polkit.py validated (every auth step it skips is a password or
+# lockout step), then runs the lockout guard, so a locked account stays denied.
 # A cancelled dialog ends the conversation with an error and stops here.
 
-auth       [success=3 system_err=ignore default=die]  pam_exec.so quiet quiet_log expose_authtok /usr/bin/grep -q ^
+auth       [success=1 system_err=ignore default=die]  pam_exec.so quiet quiet_log expose_authtok /usr/bin/cmp -s /dev/null -
+auth       [success=4 default=die]      pam_permit.so
+auth       requisite                    pam_exec.so quiet /usr/bin/sha256sum --check --status --strict /etc/howdy/polkit-system-auth.sha256
 auth       requisite                    pam_faillock.so      preauth
 auth       sufficient                   pam_howdy.so
 auth       requisite                    pam_deny.so
