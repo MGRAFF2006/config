@@ -62,10 +62,15 @@ Set `ASAHI_OUTPUT` for a different output directory and `ASAHI_JOBS` for paralle
 jobs. The default is four jobs and `~/.cache/asahi-linux/build`. Use a separate
 output directory for each source worktree: the first run claims an empty or new
 directory for its source tree, and other trees or unmarked nonempty directories
-are refused. `build` rechecks the Asahi options in `.config` and accepts only
-build targets; Make options, `VAR=value` assignments, install and config
-targets are refused. The build command refuses to start with less than 10 GiB
-free. Allow additional space for outputs; this guard is not a quota or a
+are refused. Make runs with a cleared environment (only `PATH`, `HOME` and
+`LANG`), so variables such as `KCONFIG_CONFIG` or `MAKEFLAGS` cannot select a
+different configuration or change the build. Before compiling, `build` lets
+Kbuild resync `.config` with the current toolchain and refuses to continue
+unless the effective configuration still enables Rust, 16 KiB pages and the
+Asahi GPU driver. It accepts only `Image`, `Image.gz`, `modules`, `dtbs` and
+single files below the source tree ending in `.o`, `.ko`, `.s`, `.i` or `.lst`;
+every other target or argument is refused. The build command refuses to start
+with less than 10 GiB free. Allow additional space for outputs; this guard is not a quota or a
 guarantee against exhausting a filesystem during a build.
 
 To compile only the C files changed by the 7.2.15 update:

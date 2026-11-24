@@ -2,56 +2,69 @@
 set -euo pipefail
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-mode=${1:---check}
-if [[ $# -gt 1 || ! $mode =~ ^--(check|install|plan)$ ]]; then
-  echo "Usage: $0 [--check|--plan|--install]" >&2
-  exit 2
-fi
 
-# shellcheck source=/dev/null
-source /etc/os-release
-case "$ID" in
-  arch) package_list="$repo/packages/asahi-build-arch.txt" ;;
-  debian)
-    [[ $VERSION_ID == 13 ]] || { echo "This package list targets Debian 13." >&2; exit 1; }
-    package_list="$repo/packages/asahi-build-debian.txt"
-    ;;
-  *) echo "Supported hosts: Arch Linux and Debian 13." >&2; exit 1 ;;
-esac
-# Read in a plain command substitution so a failed read stops the script;
-# process substitution would hide awk's status and yield an empty list.
-[[ -r $package_list ]] || { echo "Cannot read package list: $package_list" >&2; exit 1; }
-package_names=$(awk '{sub(/#.*/, ""); if (NF) print $1}' "$package_list")
-[[ -n $package_names ]] || { echo "Package list is empty: $package_list" >&2; exit 1; }
-mapfile -t packages <<<"$package_names"
+# Sets ID and package_list for this host's distribution.
+detect_host() {
+  # shellcheck source=/dev/null
+  source /etc/os-release
+  case "$ID" in
+    arch) package_list="$repo/packages/asahi-build-arch.txt" ;;
+    debian)
+      [[ $VERSION_ID == 13 ]] || { echo "This package list targets Debian 13." >&2; exit 1; }
+      package_list="$repo/packages/asahi-build-debian.txt"
+      ;;
+    *) echo "Supported hosts: Arch Linux and Debian 13." >&2; exit 1 ;;
+  esac
+}
 
-case "$mode" in
-  --plan) printf '%s\n' "${packages[@]}" ;;
-  --install)
-    if [[ $ID == arch ]]; then
-      # Do not refresh databases separately: Arch does not support partial upgrades.
-      sudo pacman -S --needed --noconfirm "${packages[@]}"
-    else
-      sudo apt-get update
-      sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
-    fi
-    bash "$0" --check
-    ;;
-  --check)
-    missing=()
-    for package in "${packages[@]}"; do
+main() {
+  mode=${1:---check}
+  if [[ $# -gt 1 || ! $mode =~ ^--(check|install|plan)$ ]]; then
+    echo "Usage: $0 [--check|--plan|--install]" >&2
+    exit 2
+  fi
+  detect_host
+  # Read in a plain command substitution so a failed read stops the script;
+  # process substitution would hide awk's status and yield an empty list.
+  [[ -r $package_list ]] || { echo "Cannot read package list: $package_list" >&2; exit 1; }
+  package_names=$(awk '{sub(/#.*/, ""); if (NF) print $1}' "$package_list")
+  [[ -n $package_names ]] || { echo "Package list is empty: $package_list" >&2; exit 1; }
+  mapfile -t packages <<<"$package_names"
+
+  case "$mode" in
+    --plan) printf '%s\n' "${packages[@]}" ;;
+    --install)
       if [[ $ID == arch ]]; then
-        pacman -Q "$package" >/dev/null 2>&1 || missing+=("$package")
+        # Do not refresh databases separately: Arch does not support partial upgrades.
+        sudo pacman -S --needed --noconfirm "${packages[@]}"
       else
-        status=$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)
-        [[ $status == installed ]] || missing+=("$package")
+        sudo apt-get update
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
       fi
-    done
-    if ((${#missing[@]})); then
-      printf 'Missing packages: %s\n' "${missing[*]}" >&2
-      echo "Install with: bash $0 --install" >&2
-      exit 1
-    fi
-    echo "Asahi build packages are installed. Run scripts/asahi-build.sh doctor SOURCE to check the kernel toolchain."
-    ;;
-esac
+      bash "$0" --check
+      ;;
+    --check)
+      missing=()
+      for package in "${packages[@]}"; do
+        if [[ $ID == arch ]]; then
+          pacman -Q "$package" >/dev/null 2>&1 || missing+=("$package")
+        else
+          status=$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)
+          [[ $status == installed ]] || missing+=("$package")
+        fi
+      done
+      if ((${#missing[@]})); then
+        printf 'Missing packages: %s\n' "${missing[*]}" >&2
+        echo "Install with: bash $0 --install" >&2
+        exit 1
+      fi
+      echo "Asahi build packages are installed. Run scripts/asahi-build.sh doctor SOURCE to check the kernel toolchain."
+      ;;
+  esac
+}
+
+# Run only when executed; the regression check sources this file to stub
+# detect_host on hosts other than Arch Linux and Debian 13.
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
