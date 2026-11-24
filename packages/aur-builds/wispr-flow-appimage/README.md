@@ -25,10 +25,17 @@ Local package release 8 keeps the upstream download and SHA-256 check and repair
   applies only the X11 **input** region; the painted/bounding region stays intact.
   Changing the painted shape caused flickering under Hyprland and was rolled
   back. Empty reports produce an empty input region rather than exposing the
-  whole canvas. If the helper exits before applying a queued region, the shim
-  clears the shape controller's cache so the next report, even an identical
-  one, is sent again (`node test-input-region.cjs` checks this). Python and
-  python-xlib are declared runtime dependencies.
+  whole canvas. The helper may exit before applying a queued region, and the
+  renderer reports only changed geometry. The shim therefore resends the shape
+  controller's current shape from its cached report after a helper exit,
+  without waiting for a new report. It retries three times with increasing
+  delays and then waits for the next report, so a helper that keeps failing
+  cannot loop. Python and python-xlib are declared runtime dependencies.
+
+  After `makepkg`, `node test-input-region.cjs` checks this against the pristine
+  bundle in `src/squashfs-root` (or a given `app.asar` path). It patches a copy
+  with `repair-overlays.py` and drives the patched renderer report module and
+  main-process shape controller with a stand-in helper.
 - Hyprland window selection: in 0.57.0, floating XWayland windows are picked by
   their whole rectangle, even outside their input shape. An X11-only underlay
   test missed this; clicks to native Wayland windows were still blocked. The
@@ -79,13 +86,25 @@ libraries; the running compositor must match the installed headers. The plugin
 is specific to the hit-test API tested here, so a future compositor change may
 also require a source update.
 
-To disable only the compositor workaround in a running session:
+Hyprland 0.57.2 loads configured plugins only when the configured path list
+changes. A config reload therefore does not restore a plugin that was unloaded
+or that it rejected, because the path stays the same. Start a new Hyprland
+session, or load the plugin explicitly:
+
+```sh
+hyprctl plugin load /opt/wispr-flow-appimage/usr/lib/wispr-flow/resources/Release/wispr-hypr-input.so
+```
+
+After a Hyprland upgrade, the compositor that is still running is the old
+version. Start a new session after rebuilding this package.
+
+To disable only the compositor workaround in the running session:
 
 ```sh
 hyprctl plugin unload /opt/wispr-flow-appimage/usr/lib/wispr-flow/resources/Release/wispr-hypr-input.so
 ```
 
-The next config reload loads it again while the Lua fragment is enabled.
+It stays unloaded until the explicit load above or a new session.
 
 The desktop entry is `/usr/share/applications/wispr-flow-appimage.desktop`.
 `--doctor` warns about a missing entry because it checks another filename.
