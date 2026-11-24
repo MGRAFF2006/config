@@ -21,6 +21,25 @@ Wayland idle/wake check passed with a fake backlight. Physical lid-close and
 suspend/resume were not tested. See [setup and recovery](../../../docs/laptop-power.md).
 
 
+## Ladybird upgrade repair — verified 2026-11-09
+
+`ladybird 20261101-2.1` is installed from the local
+[recipe and recovery guide](../../../packages/aur-builds/ladybird/README.md).
+It replaces four deprecated Rust atomic calls with their supported replacements,
+retaining the upstream source pins and warnings-as-errors policy. The complete
+`makepkg --noextract --force` build, including compilation of the Rust test
+workspace, succeeded using the existing prepared AUR tree.
+All 37 UTF-16 string tests passed. The installed browser passed a headless page
+check with a temporary profile, exercising JavaScript, CSSOM mutation, computed
+style, node cloning and Unicode text. Pacman's installed-file and database
+checks passed. A headless screenshot rendered the expected text and styling
+despite a Fontconfig config-access warning. The native GUI and an empty-cache
+build were not exercised.
+
+The AUR has since moved to tagged releases (`1:2026.47.7-1`). The recipe now
+targets `1:2026.47.7-1.1` with the Rust patch carried forward; that build has
+not been run or installed yet (2026-11-24).
+
 ## Login-screen appearance — verified 2026-11-05
 
 The DMS greeter now uses live per-account settings, wallpaper/session data and
