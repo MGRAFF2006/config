@@ -20,6 +20,37 @@ below the track. The real value, adjustment signal and hardware update remain
 immediate. Pointer dragging, reduced motion and disabled animations bypass the
 transition.
 
+Launcher results use single-line native styled-text elision for both the title
+and subtitle, preserving search emphasis. Display-only newline normalization
+keeps multiline clipboard entries within their rows; the full name, clipboard
+payload and accessible label remain unchanged. Plain `dms dmenu` rows keep
+their generated search emphasis and elide the same way; only rows from
+`dms dmenu --markup-rows` keep explicit rich HTML with wrapping, so their CSS
+font sizes survive. The guarded patch set also fingerprints `LauncherRow.qml`
+before applying this correction.
+
+Check the launcher rows against pristine DMS UI input:
+
+```bash
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI --unpatched  # reproduces the overflow
+```
+
+It stages the override into a temporary directory, checks that the launch
+guard falls back when any patched renderer or the version changes, and runs
+the actual `LauncherRow` with synthetic clipboard, app and dmenu entries
+(searched plain rows and explicit markup) at 620 and 320 px and 115% text
+scale. DMS's components need a real window backend, so the fixture runs on a
+private Xwayland inside a headless KWin, both in bubblewrap with a read-only
+root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
+`bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
+desktop or its settings. Without `--source-dir` it stages from the running
+shell's `dms.path` (under `XDG_RUNTIME_DIR`), like the configure helper. It
+first copies that input into private storage, replacing symlinks with their
+contents, so its tamper probes never write to the input or anything it links
+to. `--self-test`, part of `check-config.py`, checks that isolation without a
+desktop or DMS.
+
 Stage the reviewed change without changing any running shell:
 
 ```bash
@@ -40,9 +71,9 @@ python3 scripts/check-dms-smooth-sliders.py --ui --source-dir PRISTINE_DMS_2.0.0
 
 The helper reads the running shell's `dms.path` and copies its current extracted
 UI into `~/.local/share/dms-ui-overrides`. It checks the exact reviewed DMS
-version and the exact slider/control-center source hashes before applying both
+version and the exact slider/control-center source hashes before applying all
 patches. The manifest records the whole source tree's hash, combined patch hash,
-all three patched-file hashes, binary hash and
+all four patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
 extracted built-in files are changed. The patches live in
