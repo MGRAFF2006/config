@@ -66,8 +66,11 @@ out of Git.
 Not built or installed. The patch applies with zero fuzz and no offsets to tag
 `2026.47.7`, and the tree has no other `fetch_update` calls. The AUR's two
 patches also apply without fuzz. All three patch checksums match the recipe.
-See the PR for the focused `cargo check` result. A full `makepkg` build,
-installation and browser runtime are unverified.
+With system Rust 1.100.0 and `RUSTFLAGS=-Dwarnings`,
+`cargo check --workspace --all-targets` of the patched tree passed. Without
+the patch, the same check failed with the `fetch_update` deprecation error in
+AK. This checks the Rust workspace standalone, not the CMake-driven build.
+A full `makepkg` build, installation and browser runtime are unverified.
 
 ### 2026-11-09 — `20261101-2.1` (installed)
 
