@@ -1,0 +1,56 @@
+--- a/Common/SettingsData.qml
++++ b/Common/SettingsData.qml
+@@ -61,6 +61,9 @@
+     property string monoFontFamily: Spec.SPEC.monoFontFamily.def
+     property int fontWeight: Spec.SPEC.fontWeight.def
+     property real fontScale: Spec.SPEC.fontScale.def
++    property string radiusMode: Spec.SPEC.radiusMode.def
++    property real fixedRadius: Spec.SPEC.fixedRadius.def
++    property real popupTransparency: 1.0
+     property real radiusStrength: Spec.SPEC.radiusStrength.def
+     property int animationDuration: Spec.SPEC.animationDuration.def
+     property bool enableRippleEffects: Spec.SPEC.enableRippleEffects.def
+@@ -151,6 +154,7 @@
+ 
+     function parseSettings(content) {
+         const settings = readSettings(content);
++        root.popupTransparency = typeof settings.popupTransparency === "number" && isFinite(settings.popupTransparency) ? Math.max(0, Math.min(1, settings.popupTransparency)) : 1.0;
+         if (settings.radiusStrength === undefined && settings.cornerRadius !== undefined)
+             settings.radiusStrength = Shape.strengthFromRadius(settings.cornerRadius * Shape.corners.m / Shape.corners.l);
+         for (const key in Spec.SPEC) {
+--- a/Common/Theme.qml
++++ b/Common/Theme.qml
+@@ -315,7 +315,7 @@
+     property color buttonHover: primaryHover
+     property color buttonPressed: primaryPressed
+ 
+-    property real popupTransparency: 1.0
++    property real popupTransparency: SettingsData.popupTransparency
+     readonly property color floatingSurface: withAlpha(surfaceContainer, popupTransparency)
+     readonly property color nestedSurface: withAlpha(surfaceContainerHigh, popupTransparency)
+ 
+@@ -455,16 +455,17 @@
+     property int fontWeight: SettingsData.fontWeight
+     property real fontScale: SettingsData.fontScale
+     readonly property real radiusStrength: SettingsData.radiusStrength
+-    readonly property real shapeScale: Shape.scaleForStrength(radiusStrength)
++    readonly property real fixedRadius: SettingsData.radiusMode === "fixed" ? SettingsData.fixedRadius : -1
++    readonly property real shapeScale: fixedRadius >= 0 ? fixedRadius / Shape.corners.m : Shape.scaleForStrength(radiusStrength)
+     readonly property real cornerRadius: cornerRadiusM
+-    readonly property real cornerRadiusXS: Shape.radius("xs", shapeScale)
+-    readonly property real cornerRadiusS: Shape.radius("s", shapeScale)
+-    readonly property real cornerRadiusM: Shape.radius("m", shapeScale)
+-    readonly property real cornerRadiusL: Shape.radius("l", shapeScale)
+-    readonly property real cornerRadiusXL: Shape.radius("xl", shapeScale)
++    readonly property real cornerRadiusXS: Shape.radius("xs", shapeScale, fixedRadius)
++    readonly property real cornerRadiusS: Shape.radius("s", shapeScale, fixedRadius)
++    readonly property real cornerRadiusM: Shape.radius("m", shapeScale, fixedRadius)
++    readonly property real cornerRadiusL: Shape.radius("l", shapeScale, fixedRadius)
++    readonly property real cornerRadiusXL: Shape.radius("xl", shapeScale, fixedRadius)
+ 
+     function fullRadius(width, height) {
+-        return Shape.fullRadius(width, height, shapeScale);
++        return Shape.fullRadius(width, height, shapeScale, fixedRadius);
+     }
+ 
+     function resolvedFontFamily(family) {
