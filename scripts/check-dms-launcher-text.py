@@ -1,31 +1,86 @@
 #!/usr/bin/env python3
-"""Exercise actual launcher rows and tiles with synthetic clipboard data, in the private agent desktop."""
+"""Exercise actual launcher result rows with synthetic data in a private, throwaway desktop.
+
+Stages the guarded UI override from a pristine DMS UI into a temporary
+directory, checks that the launch guard covers every patched file, then runs
+scripts/fixtures/launcher-text-bounds.qml against the staged components. Qt's
+offscreen platform cannot load DMS's PanelWindow types, so the fixture runs on
+a private rootful Xwayland inside a headless KWin. Both run in bubblewrap with
+a read-only root, throwaway HOME and /tmp, no network and a private D-Bus;
+nothing reaches the running desktop, its settings or its services.
+"""
 
 import argparse
 import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from unittest.mock import patch
 
+SESSION = """mkdir -p -m 1777 /tmp/.X11-unix
+Xwayland :7 -geometry 1440x900 -shm -nolisten tcp &
+for _ in $(seq 100); do [ -S /tmp/.X11-unix/X7 ] && break; sleep 0.1; done
+DISPLAY=:7 QT_QPA_PLATFORM=xcb exec qs -p "$1"
+"""
+
+
+def run_isolated(work, fixture, evidence):
+    for tool in ("bwrap", "dbus-run-session", "kwin_wayland", "Xwayland", "qs"):
+        if shutil.which(tool) is None:
+            raise SystemExit(f"{tool} is required for the isolated launcher check")
+    (work / "session.sh").write_text(SESSION)
+    (work / "runtime").mkdir(mode=0o700)
+    env = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(Path.home()), "LANG": "C.UTF-8", "TMPDIR": "/tmp",
+        "XDG_RUNTIME_DIR": str(work / "runtime"), "XDG_CURRENT_DESKTOP": "KDE",
+        # Software rendering: no GPU device is exposed inside the sandbox.
+        "LIBGL_ALWAYS_SOFTWARE": "1", "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
+        "QT_QUICK_BACKEND": "software", "QT_QPA_PLATFORMTHEME": "", "QT_NO_XDG_DESKTOP_PORTAL": "1",
+    }
+    if evidence:
+        env["DMS_LAUNCHER_EVIDENCE"] = str(work / "evidence.png")
+    session = f"sh {work / 'session.sh'} {fixture}"
+    command = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+               "--tmpfs", "/tmp", "--tmpfs", "/run/user", "--tmpfs", str(Path.home()),
+               "--bind", str(work), str(work), "--chdir", str(work),
+               "--unshare-pid", "--unshare-net", "--die-with-parent", "--clearenv"]
+    for key, value in env.items():
+        command += ["--setenv", key, value]
+    command += ["dbus-run-session", "--", "kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts",
+                "--no-kactivities", "--socket", "check-wayland", "--width", "1440", "--height", "900",
+                "--exit-with-session", session]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired as error:
+        raise AssertionError((error.stdout or b"").decode() + (error.stderr or b"").decode()) from error
+    if evidence and (work / "evidence.png").exists():
+        shutil.copyfile(work / "evidence.png", evidence)
+    return result.stdout + result.stderr
+
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", type=Path, help="Pristine DMS UI; defaults to the running UI")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--source-dir", type=Path, help="Pristine DMS UI; defaults to the running shell's dms.path")
     parser.add_argument("--unpatched", action="store_true", help="Reproduce the failure against pristine components")
     parser.add_argument("--evidence", type=Path, help="Save the rendered fixture as a PNG")
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location("ui_override", Path(__file__).with_name("configure-dms-smooth-sliders.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
     source = args.source_dir or Path((Path(f"/run/user/{os.getuid()}") / "dms.path").read_text().strip())
+    source = source.resolve(strict=True)
     original_hash = module.tree_digest(source)
     with tempfile.TemporaryDirectory(prefix="launcher-text-check-") as directory:
         root = Path(directory)
-        staged = source if args.unpatched else module.stage(source, root / "staged")
+        if args.unpatched:
+            # The sandbox hides /run/user and HOME; give it a private copy.
+            staged = root / "pristine"
+            shutil.copytree(source, staged, symlinks=True)
+        else:
+            staged = module.stage(source, root / "staged")
         if not args.unpatched:
             assert module.stage(staged, root / "staged") == staged
             # Each patched renderer must be covered by the launch guard.
@@ -36,8 +91,9 @@ def main():
             class Launched(Exception):
                 pass
 
-            def launch_arguments():
-                with patch.object(module.os, "execvp", side_effect=Launched) as execute:
+            def launch_arguments(version=manifest["version"]):
+                with patch.object(module.os, "execvp", side_effect=Launched) as execute, \
+                        patch.object(module.subprocess, "check_output", return_value=f"dms {version}\n"):
                     try:
                         module.launch(output)
                     except Launched:
@@ -51,32 +107,19 @@ def main():
                 target.write_bytes(original + b"\n// altered\n")
                 assert launch_arguments() == ["dms", "run", "-d"]
                 target.write_bytes(original)
-            manifest["version"] = "v9.0.0"
-            (staged / "smooth-sliders.json").write_text(json.dumps(manifest))
-            assert launch_arguments() == ["dms", "run", "-d"]
+            assert launch_arguments("v9.0.0") == ["dms", "run", "-d"]
         fixture = root / "fixture"
         fixture.mkdir()
         for entry in staged.iterdir():
             if entry.is_dir():
                 (fixture / entry.name).symlink_to(entry, target_is_directory=True)
         (fixture / "shell.qml").write_text(Path(__file__).with_name("fixtures").joinpath("launcher-text-bounds.qml").read_text())
-        # PanelWindow imports need a real backend; use only the isolated desktop.
-        if runtime != Path(f"/run/user/{os.getuid()}/agent-desktop"):
-            raise RuntimeError("Run with agent-desktop run; the human desktop is not an allowed target")
-        env = dict(os.environ, QT_QPA_PLATFORM="xcb", QT_QPA_PLATFORMTHEME="", QT_QUICK_BACKEND="software",
-                   XDG_CONFIG_HOME=str(root / "config"), XDG_STATE_HOME=str(root / "state"),
-                   XDG_DATA_HOME=str(root / "data"), XDG_CACHE_HOME=str(root / "cache"))
-        if args.evidence:
-            env["DMS_LAUNCHER_EVIDENCE"] = str(args.evidence.resolve())
-        try:
-            result = subprocess.run(["qs", "-p", str(fixture)], env=env, capture_output=True, text=True, timeout=25)
-        except subprocess.TimeoutExpired as error:
-            raise AssertionError((error.stdout or b"").decode() + (error.stderr or b"").decode()) from error
-        logs = result.stdout + result.stderr
-        assert result.returncode == 0 and "LAUNCHER_TEXT_PASS" in logs, logs
+        logs = run_isolated(root, fixture, args.evidence)
+        assert "LAUNCHER_TEXT_PASS" in logs, logs
         assert module.tree_digest(source) == original_hash, "Check changed the input UI"
         print(next(line for line in logs.splitlines() if "LAUNCHER_TEXT_PASS" in line))
-        print("PASS: renderer tamper/version fallback, repeat staging, unchanged input source")
+        if not args.unpatched:
+            print("PASS: renderer tamper/version fallback, repeat staging, unchanged input source")
 
 
 if __name__ == "__main__":
