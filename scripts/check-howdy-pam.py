@@ -3,13 +3,51 @@
 
 No camera, passwords, root privileges or live PAM changes are needed. pam_exec
 records which modules libpam reaches, substituting only the module operation.
+Also runs the installer's DMS settings editor against JSON fixtures.
 """
 
 import argparse
 import ctypes
+import json
 from pathlib import Path
 import re
+import subprocess
 import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+MANAGED_LOCK = "/etc/pam.d/dankshell"
+
+
+def check_settings_editor():
+    """The installer selects the managed lock stack but never replaces a custom one."""
+    installer = (ROOT / "scripts/install-pam-keyring-howdy.sh").read_text()
+    editor = re.search(r"python3 - \"\$dms_settings\" <<'PY'\n(.*?)\nPY\n", installer, re.S)
+    assert editor, "settings editor heredoc not found in install-pam-keyring-howdy.sh"
+    flags = {"greeterPamExternallyManaged": True, "lockPamExternallyManaged": True}
+    cases = (
+        ({}, MANAGED_LOCK),
+        ({"lockPamPath": ""}, MANAGED_LOCK),
+        ({**flags, "lockPamPath": MANAGED_LOCK}, MANAGED_LOCK),
+        ({"lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
+        ({**flags, "lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
+    )
+    with tempfile.TemporaryDirectory(prefix="howdy-settings-check-") as directory:
+        settings = Path(directory) / "settings.json"
+        for before, expected in cases:
+            settings.write_text(json.dumps({"other": 1, **before}, indent=2) + "\n")
+            original = settings.read_text()
+            result = subprocess.run(["python3", "-I", "-c", editor[1], str(settings)],
+                                    capture_output=True, text=True, check=True)
+            after = json.loads(settings.read_text())
+            assert after["lockPamPath"] == expected, (before, after)
+            assert all(after[key] is True for key in flags), (before, after)
+            assert after["other"] == 1, (before, after)
+            custom = expected != MANAGED_LOCK
+            assert custom == ("kept custom lockPamPath" in result.stderr), (before, result.stderr)
+            if custom and before.keys() >= flags.keys():
+                assert settings.read_text() == original, ("rewrote unchanged settings", before)
+    print("PASS: installer settings: managed lock stack selected, custom lockPamPath preserved")
 
 
 def main():
@@ -34,7 +72,8 @@ def main():
         root = Path(directory)
         trace = root / "trace"
         module = root / "module.sh"
-        module.write_text('#!/bin/sh\nprintf "%s\\n" "$2" >> "$1"\nexit "$3"\n')
+        # "stall" stands in for a camera that never returns.
+        module.write_text('#!/bin/sh\nprintf "%s\\n" "$2" >> "$1"\n[ "$3" = stall ] && { sleep 20; exit 1; }\nexit "$3"\n')
         module.chmod(0o755)
         for service in ("greetd", "dankshell"):
             lines = []
@@ -51,7 +90,8 @@ def main():
                         stack.append(f"{kind} {control} {name}")
                         continue
                     result = face if name == "pam_howdy.so" else password if name == "pam_unix.so" else name != failed_guard
-                    stack.append(f"{kind} {control} pam_exec.so quiet /bin/sh {module} {trace} {name} {0 if result else 1}")
+                    code = "stall" if result == "stall" else 0 if result else 1
+                    stack.append(f"{kind} {control} pam_exec.so quiet /bin/sh {module} {trace} {name} {code}")
                 (root / "check").write_text("\n".join(stack) + "\n")
                 handle = ctypes.c_void_p()
                 result = pam.pam_start_confdir(b"check", b"howdy-test", ctypes.byref(conv), str(root).encode(), ctypes.byref(handle))
@@ -62,11 +102,15 @@ def main():
                     pam.pam_end(handle, result)
                 return result == 0, trace.read_text().splitlines()
 
-            for face, password, expected in ((True, False, True), (False, True, True), (False, False, False)):
+            # Password first: a correct password never reaches Howdy, so a stalled
+            # camera cannot delay it; an empty or wrong one falls through to Howdy.
+            for face, password, expected in ((True, False, True), (False, True, True), ("stall", True, True), (False, False, False)):
+                started = time.monotonic()
                 success, reached = authenticate(face, password)
                 assert success == expected, (service, face, password, success, reached)
                 methods = [name for name in reached if name in ("pam_howdy.so", "pam_unix.so")]
-                assert methods == (["pam_howdy.so"] if face else ["pam_howdy.so", "pam_unix.so"]), (service, methods)
+                assert methods == (["pam_unix.so"] if password else ["pam_unix.so", "pam_howdy.so"]), (service, "order", methods)
+                assert time.monotonic() - started < 10, (service, "password waited for a stalled camera")
                 if expected:
                     continuation = "pam_kwallet5.so" if service == "greetd" else "pam_env.so"
                     assert continuation in reached, (service, "skipped continuation", reached)
@@ -75,7 +119,8 @@ def main():
             for guard in guards:
                 success, reached = authenticate(True, False, guard)
                 assert not success, (service, "bypassed guard", guard, reached)
-            print(f"PASS: {service}: face first, password fallback, deny both failures, continuation and prerequisite guards")
+            print(f"PASS: {service}: password first (independent of a stalled camera), Howdy fallback, deny both failures, continuation and prerequisite guards")
+    check_settings_editor()
 
 
 if __name__ == "__main__":

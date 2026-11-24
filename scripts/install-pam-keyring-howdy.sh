@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # install-pam-keyring-howdy.sh — greetd/SDDM/DMS-lock PAM for Howdy + KWallet unlock
 #
-# Howdy first for greetd, DMS lock and sudo; SDDM retains password first.
+# Password/PIN first, Howdy fallback for greetd, SDDM and the DMS lock; Howdy
+# first for sudo. The DMS lock patch starts the fallback on wake.
 # Polkit stays password-only because graphical agents do not reliably handle
 # Howdy's separate PAM conversation before their password prompt.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
@@ -100,9 +101,16 @@ for key in ("greeterPamExternallyManaged", "lockPamExternallyManaged"):
     if data.get(key) is not True:
         data[key] = True
         changed = True
-if data.get("lockPamPath") != "/etc/pam.d/dankshell":
+# DMS 2.1 otherwise uses the distro login stack. Never replace a custom stack:
+# it may enforce more than this one (e.g. a second factor).
+lock_path = data.get("lockPamPath") or ""
+if not lock_path:
     data["lockPamPath"] = "/etc/pam.d/dankshell"
     changed = True
+elif lock_path != "/etc/pam.d/dankshell":
+    print(f"[WARN]  kept custom lockPamPath={lock_path}; the DMS lock does not use "
+          "/etc/pam.d/dankshell or start Howdy automatically. Change it in DMS "
+          "settings only if that stack should be replaced.", file=sys.stderr)
 if changed:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

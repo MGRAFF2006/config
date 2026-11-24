@@ -194,22 +194,33 @@ PAM (managed under `system/pam.d/`, install with
 
 | Stack | Role |
 |-------|------|
-| `greetd` | Howdy first, password/PIN fallback; `pam_kwallet5` + `ksecretd` |
+| `greetd` | Password/PIN first, Howdy fallback; `pam_kwallet5` + `ksecretd` |
 | `sddm` | Password first, Howdy fallback for Plasma |
-| `dankshell` | Howdy first, password/PIN fallback on DMS lock |
+| `dankshell` | Password/PIN first, Howdy fallback; face starts on wake (DMS lock) |
 | `sudo` | Howdy first, password fallback (terminal) |
 | `polkit-1` | Password-only for the graphical DMS elevation prompt |
 
-Greeter/lock and terminal `sudo`: camera first. Graphical polkit prompts remain password-only.
+Greeter and lock ask for the password before Howdy, so a typed password never
+waits for the camera, even when it hangs. Terminal `sudo` tries the camera
+first. Graphical polkit prompts remain password-only.
+Greeter: submit the empty password field to use your face.
 Set `greeterPamExternallyManaged=true` so DMS does not rewrite `/etc/pam.d/greetd`.
-For DMS 2.1, keep `lockPamExternallyManaged=true` and explicitly set
+For DMS 2.1, keep `lockPamExternallyManaged=true` and set
 `lockPamPath=/etc/pam.d/dankshell`; otherwise it selects the distro `login` stack.
-The guarded `howdy-lock-2.1.patch` starts the managed Howdy stack once when the
-secured lock screen becomes active, and retries after a display-off/sleep cycle
-when no password was typed. After a timeout, the password prompt stays usable.
-Stage it through `python scripts/configure-dms-smooth-sliders.py --apply` and
-use the staged UI on the next shell start. Unknown DMS versions use the packaged
-UI and require reviewing the patch again; manual Submit still starts PAM.
+The installer sets an empty `lockPamPath` and keeps any custom one.
+
+The guarded `howdy-lock-2.1.patch` starts one face attempt after a wake from
+display-off or sleep, or after a key press or click on the lock screen. Locking
+alone does not start the camera, so a manual lock with the display on stays
+locked while you are still in front of it. The attempt answers the managed
+stack's password prompt with an empty response, which falls through to Howdy;
+it is silent when no face matches and skipped once you start typing. Pressing
+Enter on the empty field also tries the face. The existing 15-second watchdog
+recovers a stalled camera, and the next typed password goes to a fresh attempt
+that never reaches Howdy. Stage it through
+`python scripts/configure-dms-smooth-sliders.py --apply` and use the staged UI
+on the next shell start. Unknown DMS versions use the packaged UI and require
+reviewing the patch again; manual Submit still starts PAM.
 
 **Typed login password** unlocks `kdewallet` only if the wallet password equals
 the login password. **Face-only login** cannot unlock the wallet (no AUTHTOK) —

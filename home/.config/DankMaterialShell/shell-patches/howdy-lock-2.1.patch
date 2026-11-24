@@ -1,43 +1,92 @@
 --- a/Modules/Lock/Pam.qml
 +++ b/Modules/Lock/Pam.qml
-@@ -16,0 +17,35 @@
-+
-+    // One attempt when the secured screen wakes. Leave the password prompt
-+    // waiting after a timeout; only retry after another sleep/display-off cycle.
+@@ -17,0 +18,68 @@
++    // Howdy on the lock screen. The managed stack asks for the password before
++    // Howdy, so a typed password never waits for the camera. One automatic
++    // attempt per wake answers that first prompt with an empty response, which
++    // falls through to Howdy. It needs a wake (display-off/sleep ended) or
++    // lock-screen input after locking: an explicit lock with the display on
++    // must not unlock the person still sitting in front of it.
++    property bool howdyArmed: false
 +    property bool howdyAutoStarted: false
++    property bool howdyAutoAttempt: false
 +    readonly property bool howdyScreenInactive: SessionService.preparingForSleep
 +        || SessionService.sleepRequested || IdleService.monitorsOff
-+    readonly property bool howdyAutoReady: root.lockSecured
++    readonly property bool howdyAutoReady: root.lockSecured && root.howdyArmed
 +        && !AdminPolicy.disableCustomLockPam
 +        && SettingsData.lockPamExternallyManaged
 +        && SettingsData.lockPamPath === "/etc/pam.d/dankshell"
 +        && root.customPamActive
-+        && /(?:^|\n)\s*auth\s+[^\n]*\bpam_howdy\.so\b/.test(customPamWatcher.text())
++        && /^[ \t]*auth[ \t][^\n]*\bpam_unix\.so\b[\s\S]*^[ \t]*auth[ \t][^\n]*\bpam_howdy\.so\b/m.test(customPamWatcher.text())
++        && !root.buffer && !root.responseSubmitted
 +        && !root.unlockInProgress && !root.u2fPending
 +        && !root.howdyScreenInactive
 +
++    function armHowdy(): void {
++        if (root.lockSecured)
++            root.howdyArmed = true;
++    }
++
 +    onHowdyScreenInactiveChanged: {
-+        // Preserve any submitted/typed password and a pending second factor.
-+        if (howdyScreenInactive && howdyAutoStarted && !root.buffer
-+                && !root.responseSubmitted && !root.unlockInProgress && !root.u2fPending) {
-+            passwd.abort();
-+            root.howdyAutoStarted = false;
++        if (!howdyScreenInactive) {
++            root.armHowdy();
++            return;
 +        }
++        // Retry after the next wake. A typed or submitted password and a
++        // pending second factor belong to manual attempts and are kept.
++        if (root.howdyAutoAttempt && passwd.active && !root.unlockInProgress && !root.u2fPending) {
++            passwd.abort();
++            root.responseSubmitted = false;
++        }
++        root.howdyAutoStarted = false;
 +    }
 +
 +    onHowdyAutoReadyChanged: {
 +        if (howdyAutoReady && !howdyAutoStarted && !passwd.active) {
-+            // The lock transition also resets PAM; start after it completes.
++            // Runs after the lock transition's PAM reset and after a key press
++            // has reached the password field; typed text cancels the attempt.
 +            Qt.callLater(() => {
 +                if (!root.howdyAutoReady || root.howdyAutoStarted || passwd.active)
 +                    return;
 +                root.howdyAutoStarted = true;
-+                passwd.start();
++                root.howdyAutoAttempt = true;
++                root.responseSubmitted = true;
++                if (!passwd.start()) {
++                    root.howdyAutoAttempt = false;
++                    root.responseSubmitted = false;
++                }
 +            });
 +        }
 +    }
-@@ -304 +339 @@
--                if (root.responseSubmitted)
-+                if (root.responseSubmitted || root.howdyAutoStarted)
-@@ -653,0 +689 @@
-+            root.howdyAutoStarted = false;
++
++    Connections {
++        target: passwd
++
++        function onActiveChanged() {
++            // A manual attempt also reaches Howdy as the fallback; one per wake.
++            if (passwd.active)
++                root.howdyAutoStarted = true;
++        }
++    }
++
+@@ -64,0 +133 @@
++        root.howdyAutoAttempt = false;
+@@ -247 +316 @@
+-                respond(root.buffer);
++                respond(root.howdyAutoAttempt ? "" : root.buffer);
+@@ -254,0 +324,2 @@
++            const automatic = root.howdyAutoAttempt;
++            root.howdyAutoAttempt = false;
+@@ -281,0 +353,6 @@
++            if (automatic) {
++                // No face match: no password was entered, so report no failure.
++                root.responseSubmitted = false;
++                return;
++            }
++
+@@ -581,0 +659 @@
++        root.armHowdy();
+@@ -652,0 +731,3 @@
++        root.howdyArmed = false;
++        root.howdyAutoStarted = false;
++        root.howdyAutoAttempt = false;

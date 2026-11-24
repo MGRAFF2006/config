@@ -97,7 +97,7 @@ QtObject {
     property string u2fMode: "or"
     property int maxFprintTries: 3
     property bool pamFilePresent: true
-    property string pamText: "auth [success=2 default=ignore] pam_howdy.so\\nauth required pam_unix.so\\n"
+    property string pamText: ""
 }
 ''',
             'AdminPolicy': 'pragma Singleton\nimport QtQml\nQtObject { property bool disableCustomLockPam: false }\n',

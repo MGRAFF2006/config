@@ -2,13 +2,16 @@
 # Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
 # DMS lock screen. Requires DankMaterialShell lockPamExternallyManaged=true
 # so the greeter sync does not overwrite this file.
-# Howdy first, with password/PIN fallback after a timeout or camera failure.
-# DMS 2.1 also needs lockPamPath=/etc/pam.d/dankshell to select this stack.
+# Password/PIN first, so a typed secret never waits for the camera; an empty or
+# wrong one falls through to Howdy. DMS 2.1 also needs
+# lockPamPath=/etc/pam.d/dankshell to select this stack. The staged
+# howdy-lock-2.1.patch starts face authentication on wake by answering the
+# password prompt with an empty response; it only does so for this order.
 
 auth       requisite                    pam_nologin.so
 auth       required                     pam_shells.so
-auth       [success=2 default=ignore]   pam_howdy.so
-auth       [success=1 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
+auth       [success=1 default=ignore]   pam_howdy.so
 auth       requisite                    pam_deny.so
 auth       required                     pam_env.so
 
