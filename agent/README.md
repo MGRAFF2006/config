@@ -45,8 +45,9 @@ and the adapted effective-html skill. Recorded revisions identify imports;
 local changes are intentional. Frontend's fetched revision and Ponytail's
 external origin are unrecorded and remain explicit gaps.
 
-Provider/system and plugin skills are separate. Codex's `.system` skills,
-Cursor's `skills-cursor`, and skills in a plugin cache are provider-managed;
+Provider/system and plugin skills are separate. Claude's account-downloaded
+and plugin skills, Codex's `.system` skills, Cursor's `skills-cursor`, and
+skills in a plugin cache are provider-managed;
 do not copy them into this tree. A cached file does not establish that a plugin
 is enabled or that a runtime advertised its skill. Names and descriptions are
 available for selection; skill bodies and references are loaded when needed.
@@ -78,10 +79,10 @@ source files, install packages, or change services.
 | Destination | Shared source |
 | --- | --- |
 | `~/AGENTS.md` | `agent/AGENTS.md` |
-| `~/.codex/AGENTS.md` | `agent/AGENTS.md` |
-| `~/.config/opencode/AGENTS.md` | `agent/AGENTS.md` |
 | `~/.claude/CLAUDE.md` | `agent/AGENTS.md` |
 | `~/.claude/AGENTS.md` | `agent/AGENTS.md` |
+| `~/.codex/AGENTS.md` | `agent/AGENTS.md` |
+| `~/.config/opencode/AGENTS.md` | `agent/AGENTS.md` |
 | `~/.agents/skills` | Entire `agent/skills` directory |
 | `~/.claude/skills/<name>` | Each corresponding shared skill directory |
 
@@ -96,8 +97,9 @@ destinations that would mutate the source checkout through an alias are refused.
 
 Instructions and existing skill edits appear after sync; restart sessions as
 needed. New skills appear through the shared directory for Codex and
-OpenCode without reinstalling. Rerun the installer for Claude's new per-skill
-links: its skill root stays local because Claude also writes account-downloaded
+OpenCode (including the Laptop NPU provider) without reinstalling. Claude Code,
+Mathis's preferred harness, needs the installer rerun for each new skill's link:
+its skill root stays local because Claude also writes account-downloaded
 skills there. [Claude documents that separate state](https://code.claude.com/docs/en/skills).
 
 Authentication, chats, provider settings, and app databases stay local. This
