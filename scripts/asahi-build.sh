@@ -7,7 +7,9 @@ Usage: asahi-build.sh doctor|configure|build SOURCE [make targets...]
 
 doctor     Check the native Rust/LLVM tools against this kernel.
 configure  Generate ARM64 defconfig plus the Asahi configuration fragment.
-build      Build Image, modules and device trees, or the specified targets.
+build      Build Image, modules and device trees, or the specified build
+           targets. Make options, VAR=value, install and config targets are
+           refused.
 
 ASAHI_OUTPUT sets the output directory (default: ~/.cache/asahi-linux/build).
 ASAHI_JOBS sets parallel jobs (default: 4). Outputs stay outside the source tree.
@@ -58,13 +60,43 @@ output=$(realpath -e -- "$output")
 case "$output/" in
   "$source_dir/"*) echo "Use an output directory outside the source tree." >&2; exit 1 ;;
 esac
-if [[ -f "$output/.asahi-source" && $(cat "$output/.asahi-source") != "$source_dir" ]]; then
+# Claim the output directory for one source tree. Existing output without an
+# owner marker may belong to another tree, so only an empty directory is claimed.
+# The marker appears atomically with its content: a hard link fails if another
+# run claimed the directory first, and that run's owner is then compared below.
+marker="$output/.asahi-source"
+if [[ ! -e $marker ]]; then
+  if [[ -n $(find "$output" -mindepth 1 -maxdepth 1 -print -quit) ]]; then
+    echo "Output directory is not empty and has no owner marker: $output" >&2
+    echo "Choose an empty or new ASAHI_OUTPUT." >&2
+    exit 1
+  fi
+  claim=$(mktemp "$output/.asahi-claim.XXXXXX")
+  printf '%s\n' "$source_dir" > "$claim"
+  ln -- "$claim" "$marker" 2>/dev/null || true
+  rm -f -- "$claim"
+fi
+if [[ $(cat -- "$marker" 2>/dev/null) != "$source_dir" ]]; then
   echo "Output belongs to another source tree; choose a different ASAHI_OUTPUT." >&2
   exit 1
 fi
-printf '%s\n' "$source_dir" > "$output/.asahi-source"
-kernel_make=(make -C "$source_dir" "O=$output" ARCH=arm64 "LLVM=$llvm"
+# Make variables from the environment must not override the checked values below.
+kernel_make=(env -u MAKEFLAGS -u GNUMAKEFLAGS -u MFLAGS -u MAKEOVERRIDES
+  make -C "$source_dir" "O=$output" ARCH=arm64 "LLVM=$llvm"
   "RUSTC=$rustc" "BINDGEN=$bindgen" "RUST_LIB_SRC=$rust_source")
+
+# A missing toolchain must never silently drop the Asahi GPU driver.
+check_config() {
+  local symbol
+  for symbol in RUST ARM64_16K_PAGES; do
+    grep -qx "CONFIG_$symbol=y" "$output/.config" || {
+      echo "Required option CONFIG_$symbol is disabled; rerun configure." >&2; exit 1;
+    }
+  done
+  grep -Eq '^CONFIG_DRM_ASAHI=[ym]$' "$output/.config" || {
+    echo "The Asahi GPU driver is disabled; rerun configure." >&2; exit 1;
+  }
+}
 
 case "$action" in
   doctor)
@@ -75,18 +107,21 @@ case "$action" in
   configure)
     "${kernel_make[@]}" rustavailable
     "${kernel_make[@]}" defconfig asahi.config
-    # A missing toolchain must never silently drop the Asahi GPU driver.
-    for symbol in RUST ARM64_16K_PAGES; do
-      grep -qx "CONFIG_$symbol=y" "$output/.config" || {
-        echo "Required option CONFIG_$symbol is disabled." >&2; exit 1;
-      }
-    done
-    grep -Eq '^CONFIG_DRM_ASAHI=[ym]$' "$output/.config" || {
-      echo "The Asahi GPU driver is disabled." >&2; exit 1;
-    }
+    check_config
     ;;
   build)
     [[ -f "$output/.config" ]] || { echo "Run configure first." >&2; exit 1; }
+    check_config
+    for target in "$@"; do
+      # Build targets only: options or VAR=value could override O= and ARCH=,
+      # install targets write system paths, and config targets skip check_config.
+      if [[ ! $target =~ ^[A-Za-z0-9_][A-Za-z0-9_./+-]*$ || $target == *install* \
+        || $target == *config ]]; then
+        echo "Refusing make argument '$target': pass build targets only." >&2
+        echo "Use the configure action for configuration targets." >&2
+        exit 2
+      fi
+    done
     jobs=${ASAHI_JOBS:-4}
     [[ $jobs =~ ^[1-9][0-9]*$ ]] || { echo "ASAHI_JOBS must be positive." >&2; exit 2; }
     available_kib=$(df -Pk -- "$output" | awk 'END {print $4}')

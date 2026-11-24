@@ -18,7 +18,12 @@ case "$ID" in
     ;;
   *) echo "Supported hosts: Arch Linux and Debian 13." >&2; exit 1 ;;
 esac
-mapfile -t packages < <(awk '{sub(/#.*/, ""); if (NF) print $1}' "$package_list")
+# Read in a plain command substitution so a failed read stops the script;
+# process substitution would hide awk's status and yield an empty list.
+[[ -r $package_list ]] || { echo "Cannot read package list: $package_list" >&2; exit 1; }
+package_names=$(awk '{sub(/#.*/, ""); if (NF) print $1}' "$package_list")
+[[ -n $package_names ]] || { echo "Package list is empty: $package_list" >&2; exit 1; }
+mapfile -t packages <<<"$package_names"
 
 case "$mode" in
   --plan) printf '%s\n' "${packages[@]}" ;;

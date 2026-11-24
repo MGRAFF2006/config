@@ -20,8 +20,11 @@ Arch uses the current synchronized package database without a separate refresh;
 perform a normal full system upgrade first if the host is behind that database.
 
 Builds explicitly select distribution `/usr/bin/rustc`, matching `rust-src` and
-`bindgen`. Debian uses LLVM 19; Arch uses its distribution LLVM. Existing rustup
-and mise defaults are preserved. `doctor` checks compatibility against the actual
+`bindgen`. Debian uses LLVM 19; Arch uses its distribution LLVM. Existing
+user-local rustup (in `~/.cargo`) and mise defaults are preserved. On Arch the
+`rustup` package conflicts with the required `rust` package, so `--install`
+cannot add the distribution compiler while that package is installed; switch to
+a user-local rustup first. `doctor` checks compatibility against the actual
 kernel, rather than assuming that installed version numbers are sufficient.
 
 ## Get the experiment
@@ -57,9 +60,13 @@ bash scripts/asahi-build.sh build ~/Projects/asahi-linux
 
 Set `ASAHI_OUTPUT` for a different output directory and `ASAHI_JOBS` for parallel
 jobs. The default is four jobs and `~/.cache/asahi-linux/build`. Use a separate
-output directory for each source worktree. The build command refuses to start
-with less than 10 GiB free. Allow additional space for outputs; this guard is
-not a quota or a guarantee against exhausting a filesystem during a build.
+output directory for each source worktree: the first run claims an empty or new
+directory for its source tree, and other trees or unmarked nonempty directories
+are refused. `build` rechecks the Asahi options in `.config` and accepts only
+build targets; Make options, `VAR=value` assignments, install and config
+targets are refused. The build command refuses to start with less than 10 GiB
+free. Allow additional space for outputs; this guard is not a quota or a
+guarantee against exhausting a filesystem during a build.
 
 To compile only the C files changed by the 7.2.15 update:
 

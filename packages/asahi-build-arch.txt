@@ -12,6 +12,8 @@ openssl
 pahole
 python
 rsync
+# Distribution rust conflicts with the Arch rustup package. Only a user-local
+# rustup in ~/.cargo can coexist with it; replace the rustup package first.
 rust
 rust-bindgen
 rust-src
