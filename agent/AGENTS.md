@@ -106,6 +106,25 @@ starting jobs. Do not add wallet funds or upgrade the plan without my explicit
 request.
 Setup, access and commands: [Boat](fleet/BOAT.md).
 
+## Models and subscriptions
+
+I pay for Claude and ChatGPT subscriptions and run a local model on the laptop:
+
+- **Claude** (Claude Code) is my default harness for interactive work,
+  implementation and orchestration.
+- **ChatGPT** (Codex, GPT models) is first-class too: use it when I choose it,
+  and for cross-provider review where a second model family adds value.
+- **Laptop NPU** (Qwen3.5 4B/9B via FastFlowLM, OpenCode in T3) runs locally,
+  works offline and has a 32K context. Use it for small, bounded, private or
+  offline tasks under supervision, not for final review.
+
+Work on the provider and model I chose; children inherit it unless the task
+calls for another. Both subscriptions have usage limits: avoid redundant
+agents, oversized models for small tasks and broad reruns. At a limit or
+outage, report it instead of silently moving work to another provider. Do not
+buy extra usage or change a plan without my explicit request. Model choice for
+delegates: [delegation](workflows/delegation.md#choose-providers-and-models).
+
 ## Read what the task needs
 
 This kit's root is `~/Documents/config/agent/`. Resolve links from there even

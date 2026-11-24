@@ -112,9 +112,14 @@ for legacy in "$agent_home/.cursor/rules/agent-kit.mdc" \
 done
 
 if [[ "$mode" == "--check" ]]; then
-  for tool in git ssh rsync tmux tailscale syncthing codex; do
+  for tool in git ssh rsync tmux tailscale syncthing; do
     if command -v "$tool" >/dev/null 2>&1; then echo "OK $tool: $(command -v "$tool")"
     else echo "MISSING $tool"; failures=$((failures + 1)); fi
+  done
+  # Harnesses are optional per machine; report them without failing.
+  for tool in claude codex opencode; do
+    if command -v "$tool" >/dev/null 2>&1; then echo "OK $tool: $(command -v "$tool")"
+    else echo "ABSENT $tool (optional harness)"; fi
   done
   if command -v tailscale >/dev/null 2>&1; then tailscale status || failures=$((failures + 1)); fi
   if command -v systemctl >/dev/null 2>&1; then

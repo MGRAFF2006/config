@@ -1,9 +1,11 @@
 # Readable glass with wallpaper colors
 
-This preset keeps 2 px gaps and 4 px window corners while giving the shell
+This preset keeps 2 px gaps and 2 px window corners while giving the shell
 large text and controls. DMS uses a 115% font scale, larger bar text/icons,
-and scalable rounded controls. Window, workspace and panel transitions finish
+and a fixed 4 px radius for shell controls. Window, workspace and panel transitions finish
 quickly with tiny scale/position changes, short fades and no spring overshoot.
+Workspace transitions combine a short slide with a fade, so outgoing windows
+fade away smoothly when the next workspace is empty.
 Hover/press feedback remains enabled. Acrylic blur, shadows and a narrow inner
 glow add depth without continuous animation. Volume/brightness level smoothing
 is provided separately through a user-local DMS slider override.

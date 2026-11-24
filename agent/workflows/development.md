@@ -200,6 +200,8 @@ oversights alongside the review of intended behavior. For a small change, one
 independent reviewer can explicitly cover both perspectives; do not create a
 fixed reviewer hierarchy. A reviewer must not be the author of the changes they
 approve, even when another agent in the same work tree performs the review.
+A fresh Claude or Codex agent can review; for substantial or risky changes,
+prefer the cloud model family that did not write the change. Laptop NPU models do not perform final review.
 
 Record the exact reviewed commit, scope examined, concrete findings, verification
 performed, remaining gaps, and an explicit merge recommendation on the PR.

@@ -24,6 +24,8 @@ power-profiles-daemon
 # Laptop hardware (WiFi and audio firmware; AMD graphics in common.txt)
 iwd
 wireless_tools
+iw # setup:hardware
+wireless-regdb # setup:hardware
 sof-firmware
 alsa-firmware
 
