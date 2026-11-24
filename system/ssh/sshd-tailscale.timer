@@ -1,0 +1,10 @@
+[Unit]
+Description=Start private SSH without blocking desktop startup
+
+[Timer]
+OnBootSec=5s
+AccuracySec=1s
+Unit=sshd.service
+
+[Install]
+WantedBy=timers.target
