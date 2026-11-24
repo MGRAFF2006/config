@@ -23,8 +23,29 @@ transition.
 Launcher results use single-line native styled-text elision for both the title
 and subtitle, preserving search emphasis. Display-only newline normalization
 keeps multiline clipboard entries within their rows; the full name, clipboard
-payload and accessible label remain unchanged. The guarded patch set also
-fingerprints `LauncherRow.qml` before applying this correction.
+payload and accessible label remain unchanged. Plain `dms dmenu` rows keep
+their generated search emphasis and elide the same way; only rows from
+`dms dmenu --markup-rows` keep explicit rich HTML with wrapping, so their CSS
+font sizes survive. The guarded patch set also fingerprints `LauncherRow.qml`
+before applying this correction.
+
+Check the launcher rows against pristine DMS UI input:
+
+```bash
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI
+python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI --unpatched  # reproduces the overflow
+```
+
+It stages the override into a temporary directory, checks that the launch
+guard falls back when any patched renderer or the version changes, and runs
+the actual `LauncherRow` with synthetic clipboard, app and dmenu entries
+(searched plain rows and explicit markup) at 620 and 320 px and 115% text
+scale. DMS's components need a real window backend, so the fixture runs on a
+private Xwayland inside a headless KWin, both in bubblewrap with a read-only
+root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
+`bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
+desktop or its settings. Without `--source-dir` it stages from the running
+shell's `dms.path`, like the configure helper.
 
 Stage the reviewed change without changing any running shell:
 

@@ -14,7 +14,7 @@ ShellRoot {
         id: window
         visible: true
         implicitWidth: 620
-        implicitHeight: 270
+        implicitHeight: 340
 
         Column {
             id: rows
@@ -36,7 +36,17 @@ ShellRoot {
                 item: ({ type: "app", name: "T3 Code Nightly", subtitle: "T3 Code nightly desktop build", iconType: "material", icon: "apps" })
             }
             LauncherRow {
+                id: searchedDmenuRow
+                // Plain dmenu rows get generated search emphasis (_hRich) too;
+                // only the controller's --markup-rows flag means explicit HTML.
+                controller: QtObject { property bool dmenuMarkupRows: false }
+                item: ({ type: "dmenu", name: root.fullTitle, subtitle: "", _hRich: true,
+                    _hName: "[Recreate Slides Figures as SVGs](<b>t3</b>-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row",
+                    iconType: "material", icon: "chevron_right", data: { text: root.fullTitle } })
+            }
+            LauncherRow {
                 id: markupRow
+                controller: QtObject { property bool dmenuMarkupRows: true }
                 item: ({ type: "dmenu", name: "Large", subtitle: "", _hRich: true,
                     _hName: '<span style="font-size:30px; color:red">Large</span>', iconType: "material", icon: "apps" })
             }
@@ -86,6 +96,11 @@ ShellRoot {
         onTriggered: {
             if (!root.verifyRow(highlighted, true) || !root.verifyRow(multiline, true)
                     || !root.verifyRow(shortRow, false)) return;
+            const searchedTitle = root.textItems(searchedDmenuRow)[0];
+            const searchedTop = searchedTitle.mapToItem(searchedDmenuRow, 0, 0).y;
+            if (!root.check(searchedTitle.textFormat === Text.StyledText && searchedTitle.lineCount === 1 && searchedTitle.truncated
+                    && searchedTop >= 0 && searchedTop + searchedTitle.height <= searchedDmenuRow.height,
+                    "searched plain dmenu row keeps emphasis and elides within its row at width " + searchedDmenuRow.width)) return;
             if (!root.check(highlighted.item.data.content === root.fullTitle && multiline.item.name === root.multilineTitle
                     && multiline.item.data.content === root.multilineTitle, "full clipboard payload and names stay unchanged")) return;
             if (root.phase++ === 0) {
@@ -96,7 +111,7 @@ ShellRoot {
             const markupTitle = root.textItems(markupRow)[0];
             if (!root.check(markupTitle.textFormat === Text.RichText && markupTitle.contentHeight >= 30,
                     "explicit dmenu rich markup preserves its CSS font size")) return;
-            console.warn("LAUNCHER_TEXT_PASS: highlighted and plain long titles, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
+            console.warn("LAUNCHER_TEXT_PASS: highlighted and plain long titles, searched plain dmenu rows, explicit dmenu markup, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
             const evidence = Quickshell.env("DMS_LAUNCHER_EVIDENCE");
             if (evidence) {
                 rows.grabToImage(result => { result.saveToFile(evidence); Qt.quit(); });
