@@ -49,6 +49,12 @@ port the patch again (keep the AUR epoch and use pkgrel `<n>.1`), or remove this
 workaround once upstream no longer calls `fetch_update`. Check with
 `git grep -n '\.fetch_update(' -- '*.rs'` in the new source.
 
+The same applies to AUR updates that change only packaging and keep the
+Ladybird version. pacman orders `1:2026.47.7-2` above this `1:2026.47.7-1.1`,
+so the helper would install the AUR build without `rust-1.99.patch`. Port the
+packaging change here and rebuild as `1:2026.47.7-2.1`, which sorts above the
+AUR's `-2`.
+
 ## Recovery
 
 The installed `ladybird-20261101-2.1-x86_64.pkg.tar.zst` and the earlier
