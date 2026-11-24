@@ -32,6 +32,13 @@ TestCase {
     QtObject { id: keyboardController; property bool isKeyboardActive: false; function hide() {} }
     QtObject { id: passwordBox; property bool showPassword: false }
     QtObject { id: passwordDisplay; function selectAll() {} function deselect() {} }
+    // Siblings the pinned field's layout bindings read.
+    Item { id: lockIconContainer }
+    Item { id: loadingSpinner; visible: false }
+    Item { id: enterButton; visible: false }
+    Item { id: securityKeyButton; visible: false }
+    Item { id: virtualKeyboardButton; visible: false }
+    Item { id: revealButton; visible: false }
     Item {
         id: passwordField
         // PINNED_PASSWORD_FIELD
@@ -64,6 +71,8 @@ TestCase {
         pam.responseSubmitted = false;
         pam.awaitingUserInput = false;
         pam.state = "";
+        pam.lockMessage = "";
+        pam.passwd.message = "";
         pam.passwd.startCount = 0;
         pam.passwd.abortCount = 0;
         pam.passwd.responses = [];
@@ -314,12 +323,21 @@ TestCase {
         verify(!pam.passwd.active);
         verify(!pam.authBusy);
         compare(pam.passwd.startCount, 1);
-        // The next attempt is manual; with pam_unix first it never reaches Howdy.
-        pam.buffer = "after-stall-test-password";
-        pam.submitPassword();
+        // Enter on the empty field tries the face again, still interruptible.
+        const aborted = pam.passwd.abortCount; // The watchdog's own reset.
+        verify(press(Qt.Key_Return));
         compare(pam.passwd.startCount, 2);
+        verify(!pam.authBusy);
         pam.passwd.askPassword();
-        compare(pam.passwd.responses, ["", "after-stall-test-password"]);
+        // The password is typed while the camera stalls again: no key is lost.
+        type("after-stall-test-password");
+        compare(pam.buffer, "after-stall-test-password");
+        compare(pam.passwd.abortCount, aborted + 1);
+        // With pam_unix first the password attempt never reaches Howdy.
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 3);
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["", "", "after-stall-test-password"]);
         const spy = unlockSpy();
         pam.passwd.active = false;
         pam.passwd.completed(PamResult.Success);
@@ -359,15 +377,126 @@ TestCase {
         compare(pam.passwd.responses, ["k"], "The typed key, not the automatic empty answer");
     }
 
-    function test_enter_on_empty_field_replaces_automatic_attempt() {
+    // Review r3: Enter on the empty field must not start a busy attempt that
+    // holds back password keys while the camera stalls.
+    function test_enter_on_empty_field_keeps_face_attempt_interruptible() {
+        startAutomatic();
+        pam.passwd.askPassword(); // Empty answer sent; Howdy is running.
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 1, "Enter keeps the running face attempt");
+        compare(pam.passwd.abortCount, 0);
+        verify(!pam.authBusy);
+        type("t");
+        compare(pam.buffer, "t", "The first key after Enter must not be dropped");
+        verify(!pam.passwd.active);
+        compare(pam.passwd.abortCount, 1);
+        type("est-only-password");
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 2);
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["", "test-only-password"]);
+    }
+
+    function test_enter_on_empty_field_starts_interruptible_face_attempt() {
         startAutomatic();
         pam.passwd.askPassword();
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Failed); // The automatic attempt found no face.
         verify(press(Qt.Key_Return));
-        compare(pam.passwd.abortCount, 1);
-        compare(pam.passwd.startCount, 2);
-        verify(pam.authBusy, "A submitted attempt is busy as before");
+        compare(pam.passwd.startCount, 2, "Enter on the empty field tries the face");
+        verify(!pam.authBusy, "The requested face attempt keeps taking keys");
         pam.passwd.askPassword();
         compare(pam.passwd.responses, ["", ""]);
+        type("k");
+        compare(pam.buffer, "k");
+        verify(!pam.passwd.active);
+        verify(press(Qt.Key_Return));
+        compare(pam.passwd.startCount, 3);
+        pam.passwd.askPassword();
+        compare(pam.passwd.responses, ["", "", "k"]);
+    }
+
+    function test_enter_on_empty_after_explicit_lock_starts_one_face_attempt() {
+        pam.lockSecured = true;
+        wait(20);
+        verify(press(Qt.Key_Return)); // The key press arms and requests the face at once.
+        compare(pam.passwd.startCount, 1);
+        verify(!pam.authBusy);
+        wait(20);
+        compare(pam.passwd.startCount, 1, "The arming callback must not start a second one");
+    }
+
+    // Review r3: Howdy reports a normal timeout as a PAM notice.
+    function test_automatic_face_timeout_is_quiet() {
+        startAutomatic();
+        pam.passwd.askPassword();
+        pam.passwd.notice("Attempting facial authentication");
+        pam.passwd.notice("Failure, timeout reached");
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Failed);
+        compare(pam.lockMessage, "", "No error text after an automatic no-match");
+        compare(pam.state, "");
+        verify(!pam.responseSubmitted);
+    }
+
+    function test_requested_face_timeout_is_reported() {
+        startAutomatic();
+        pam.passwd.askPassword();
+        verify(press(Qt.Key_Return)); // The person asked for the face.
+        pam.passwd.notice("Failure, timeout reached");
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Failed);
+        verify(pam.lockMessage.indexOf("Failure, timeout reached") >= 0, "Requested attempts keep Howdy's feedback");
+        compare(pam.state, "fail");
+    }
+
+    // Review r3: DMS can secure the lock, request suspend, and have it refused.
+    // Its request timer then clears sleepRequested with no PrepareForSleep.
+    function test_refused_suspend_does_not_start_face() {
+        const spy = unlockSpy();
+        SessionService.sleepRequested = true;
+        pam.lockSecured = true;
+        wait(20);
+        SessionService.sleepRequested = false; // Request timed out; display still on.
+        wait(50);
+        compare(pam.passwd.startCount, 0, "A refused suspend is not a wake");
+        compare(spy.count, 0);
+        pam.retryFprintOnActivity(); // Real lock-screen input still arms.
+        tryCompare(pam.passwd, "startCount", 1);
+        spy.destroy();
+    }
+
+    function test_refused_suspend_after_input_does_not_restart_face() {
+        startAutomatic();
+        pam.passwd.askPassword();
+        pam.passwd.active = false;
+        pam.passwd.completed(PamResult.Failed);
+        SessionService.sleepRequested = true;
+        SessionService.sleepRequested = false;
+        wait(50);
+        compare(pam.passwd.startCount, 1, "Only a real wake or new input re-arms");
+    }
+
+    function test_lock_before_suspend_starts_face_on_resume() {
+        SessionService.sleepRequested = true; // DMS requests suspend, then locks.
+        pam.lockSecured = true;
+        SessionService.preparingForSleep = true; // logind PrepareForSleep(true)
+        SessionService.sleepRequested = false;
+        wait(20);
+        compare(pam.passwd.startCount, 0);
+        SessionService.preparingForSleep = false; // Resume.
+        tryCompare(pam.passwd, "startCount", 1);
+    }
+
+    function test_display_wake_during_pending_suspend_request_waits_for_it() {
+        IdleService.monitorsOff = true;
+        pam.lockSecured = true;
+        SessionService.sleepRequested = true;
+        IdleService.monitorsOff = false; // The display really woke: armed.
+        wait(20);
+        compare(pam.passwd.startCount, 0, "A pending suspend request still guards the start");
+        SessionService.sleepRequested = false;
+        tryCompare(pam.passwd, "startCount", 1);
     }
 
     // Review r2: pam_unix nullok can succeed for a blank password before any

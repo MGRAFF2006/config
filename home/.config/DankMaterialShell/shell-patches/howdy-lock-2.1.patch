@@ -1,43 +1,61 @@
 --- a/Modules/Lock/Pam.qml
 +++ b/Modules/Lock/Pam.qml
-@@ -17,0 +18,87 @@
+@@ -17,0 +18,118 @@
 +    // Howdy on the lock screen. The managed stack asks for the password before
-+    // Howdy, so a typed password never waits for the camera. One automatic
-+    // attempt per wake answers that first prompt with an empty response, which
-+    // falls through to Howdy. It needs a wake (display-off/sleep ended) or
-+    // lock-screen input after locking: an explicit lock with the display on
-+    // must not unlock the person still sitting in front of it. The attempt does
-+    // not make authBusy, so the password field keeps taking keys; the first
-+    // edit or submission abandons it and the password goes to a fresh attempt.
++    // Howdy, so a typed password never waits for the camera. A face attempt
++    // answers that first prompt with an empty response, which falls through to
++    // Howdy. One starts automatically per wake: the display turning back on, a
++    // resume from sleep, or a key press or click on the lock screen. Locking
++    // alone, or a suspend that was requested but never happened, does not start
++    // the camera, so the person still in front of a lit screen stays locked.
++    // Enter on the empty field starts one too, or keeps the running one. A face
++    // attempt never makes authBusy, so the password field keeps taking keys;
++    // the first edit abandons it and the password goes to a fresh attempt.
 +    property bool howdyArmed: false
 +    property bool howdyAutoStarted: false
-+    property bool howdyAutoAttempt: false
-+    // Set once the empty answer is sent. An automatic success before that came
-+    // from a module that accepted no input (pam_unix nullok on a blank
++    property bool howdyFaceAttempt: false
++    // Enter asked for this face attempt, so its failure is reported. Automatic
++    // attempts end silently when no face matches.
++    property bool howdyFaceRequested: false
++    // Set once the empty answer is sent. A face-attempt success before that
++    // came from a module that accepted no input (pam_unix nullok on a blank
 +    // password), not from Howdy, and must not unlock.
-+    property bool howdyAutoAnswered: false
++    property bool howdyFaceAnswered: false
 +    readonly property bool howdyScreenInactive: SessionService.preparingForSleep
 +        || SessionService.sleepRequested || IdleService.monitorsOff
-+    readonly property bool howdyAutoReady: root.lockSecured && root.howdyArmed
-+        && !AdminPolicy.disableCustomLockPam
++    readonly property bool howdyStackReady: !AdminPolicy.disableCustomLockPam
 +        && SettingsData.lockPamExternallyManaged
 +        && SettingsData.lockPamPath === "/etc/pam.d/dankshell"
 +        && root.customPamActive
 +        && /^[ \t]*auth[ \t][^\n]*\bpam_unix\.so\b[\s\S]*^[ \t]*auth[ \t][^\n]*\bpam_howdy\.so\b/m.test(customPamWatcher.text())
++    readonly property bool howdyFaceAvailable: root.lockSecured && root.howdyStackReady
++        && !root.unlockInProgress && !root.u2fPending && !root.howdyScreenInactive
++    readonly property bool howdyAutoReady: root.howdyFaceAvailable && root.howdyArmed
 +        && !root.buffer && !root.responseSubmitted
-+        && !root.unlockInProgress && !root.u2fPending
-+        && !root.howdyScreenInactive
 +
 +    function armHowdy(): void {
 +        if (root.lockSecured)
 +            root.howdyArmed = true;
 +    }
 +
++    function startHowdyFace(): void {
++        root.howdyAutoStarted = true;
++        root.howdyFaceAttempt = true;
++        root.howdyFaceAnswered = false;
++        root.responseSubmitted = true;
++        if (!passwd.start()) {
++            root.howdyFaceAttempt = false;
++            root.howdyFaceRequested = false;
++            root.responseSubmitted = false;
++        }
++    }
++
 +    function abandonHowdyAuto(): void {
-+        if (!root.howdyAutoAttempt)
++        if (!root.howdyFaceAttempt)
 +            return;
-+        root.howdyAutoAttempt = false;
-+        root.howdyAutoAnswered = false;
++        root.howdyFaceAttempt = false;
++        root.howdyFaceRequested = false;
++        root.howdyFaceAnswered = false;
 +        root.responseSubmitted = false;
 +        passwd.abort();
 +    }
@@ -48,15 +66,35 @@
 +    }
 +
 +    onHowdyScreenInactiveChanged: {
-+        if (!howdyScreenInactive) {
-+            root.armHowdy();
++        if (!howdyScreenInactive)
 +            return;
-+        }
-+        // Retry after the next wake. A typed or submitted password and a
++        // Disarm until the next real wake. A typed or submitted password and a
 +        // pending second factor belong to manual attempts and are kept.
 +        if (!root.unlockInProgress && !root.u2fPending)
 +            root.abandonHowdyAuto();
++        root.howdyArmed = false;
 +        root.howdyAutoStarted = false;
++    }
++
++    // Only the display turning back on or a resume arm the automatic attempt.
++    // A refused suspend clears sleepRequested after DMS's request timeout with
++    // neither, while the display is still on, and stays a start guard only.
++    Connections {
++        target: IdleService
++
++        function onMonitorsOffChanged() {
++            if (!IdleService.monitorsOff)
++                root.armHowdy();
++        }
++    }
++
++    Connections {
++        target: SessionService
++
++        function onPreparingForSleepChanged() {
++            if (!SessionService.preparingForSleep)
++                root.armHowdy();
++        }
 +    }
 +
 +    onHowdyAutoReadyChanged: {
@@ -66,14 +104,7 @@
 +            Qt.callLater(() => {
 +                if (!root.howdyAutoReady || root.howdyAutoStarted || passwd.active)
 +                    return;
-+                root.howdyAutoStarted = true;
-+                root.howdyAutoAttempt = true;
-+                root.howdyAutoAnswered = false;
-+                root.responseSubmitted = true;
-+                if (!passwd.start()) {
-+                    root.howdyAutoAttempt = false;
-+                    root.responseSubmitted = false;
-+                }
++                root.startHowdyFace();
 +            });
 +        }
 +    }
@@ -88,41 +119,58 @@
 +        }
 +    }
 +
-@@ -33 +120 @@
+@@ -33 +151 @@
 -    readonly property bool authBusy: passwd.active && !root.awaitingUserInput
-+    readonly property bool authBusy: passwd.active && !root.awaitingUserInput && !root.howdyAutoAttempt
-@@ -64,0 +152 @@
++    readonly property bool authBusy: passwd.active && !root.awaitingUserInput && !root.howdyFaceAttempt
+@@ -41,0 +160,3 @@
++        root.howdyFaceAttempt = false;
++        root.howdyFaceRequested = false;
++        root.howdyFaceAnswered = false;
+@@ -64,0 +186,11 @@
++        // Enter on the empty field asks for the face. On the Howdy stack an
++        // empty password cannot succeed otherwise, so keep that attempt
++        // interruptible instead of a busy one that holds back password keys.
++        if (!root.buffer && root.lockSecured && root.howdyStackReady && (root.howdyFaceAttempt || !passwd.active)) {
++            if (!root.howdyFaceAttempt && root.howdyFaceAvailable)
++                root.startHowdyFace();
++            if (root.howdyFaceAttempt)
++                root.howdyFaceRequested = true;
++            return;
++        }
 +        root.abandonHowdyAuto();
-@@ -247 +335,6 @@
+@@ -247 +379,6 @@
 -                respond(root.buffer);
-+                if (root.howdyAutoAttempt) {
-+                    root.howdyAutoAnswered = true;
++                if (root.howdyFaceAttempt) {
++                    root.howdyFaceAnswered = true;
 +                    respond("");
 +                } else {
 +                    respond(root.buffer);
 +                }
-@@ -254,0 +348,4 @@
-+            const automatic = root.howdyAutoAttempt;
-+            const answered = root.howdyAutoAnswered;
-+            root.howdyAutoAttempt = false;
-+            root.howdyAutoAnswered = false;
-@@ -266,0 +364,5 @@
-+                if (automatic && !answered) {
-+                    root.log.warn("Automatic Howdy attempt succeeded without reaching Howdy (blank password?); staying locked");
+@@ -254,0 +392,6 @@
++            const face = root.howdyFaceAttempt;
++            const answered = root.howdyFaceAnswered;
++            const quiet = face && !root.howdyFaceRequested;
++            root.howdyFaceAttempt = false;
++            root.howdyFaceAnswered = false;
++            root.howdyFaceRequested = false;
+@@ -266,0 +410,6 @@
++                if (face && !answered) {
++                    root.log.warn("Howdy face attempt succeeded without reaching Howdy (blank password?); staying locked");
++                    root.lockMessage = "";
 +                    root.responseSubmitted = false;
 +                    return;
 +                }
-@@ -281,0 +384,6 @@
-+            if (automatic) {
-+                // No face match: no password was entered, so report no failure.
+@@ -281,0 +431,8 @@
++            if (quiet) {
++                // No face match: no password was entered, so report no failure,
++                // including Howdy's own "Failure, timeout reached" notice.
++                root.lockMessage = "";
 +                root.responseSubmitted = false;
 +                return;
 +            }
 +
-@@ -581,0 +690 @@
+@@ -581,0 +739 @@
 +        root.armHowdy();
-@@ -652,0 +762,4 @@
+@@ -652,0 +811,2 @@
 +        root.howdyArmed = false;
 +        root.howdyAutoStarted = false;
-+        root.howdyAutoAttempt = false;
-+        root.howdyAutoAnswered = false;
