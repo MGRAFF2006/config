@@ -10,8 +10,8 @@ their existing behavior.
 
 DMS 2.0's shared slider normally places its handle directly at each integer
 volume or brightness value. Panel-opening motion does not interpolate that
-progress. The `smooth-slider-level.patch` adds a 110 ms OutCubic transition to
-a separate visual ratio. The real value, adjustment signal and hardware update
+progress. The `shell-patches/guarded/smooth-slider-level.patch` adds a 110 ms
+OutCubic transition to a separate visual ratio. The real value, adjustment signal and hardware update
 remain immediate. Pointer dragging, reduced motion and disabled animations
 bypass the transition.
 
@@ -30,7 +30,9 @@ patches. The manifest records the whole source tree's hash, combined patch hash,
 all three patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
-extracted built-in files are changed.
+extracted built-in files are changed. The patches live in
+`shell-patches/guarded/` so the legacy DMS 1.5.x installer never applies them
+without these checks.
 
 The helper prints a supported `dms -c STAGED_UI run -d` command. For a durable
 session launcher, use:

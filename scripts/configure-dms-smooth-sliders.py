@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SLIDER = Path("DCommon/Widgets/DSlider.qml")
 SUPPORTED_VERSION = "v2.0.0"
 SUPPORTED_SLIDER = "0888dce6b3c9c1e7b748ee47470bd978700a8878793f071bf0641ccc63cc3adb"
-PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/smooth-slider-level.patch"
+PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/guarded/smooth-slider-level.patch"
 PATCHES = (PATCH, PATCH.with_name("control-center-pages.patch"))
 SUPPORTED_FILES = {
     SLIDER: SUPPORTED_SLIDER,
