@@ -1,8 +1,13 @@
 #%PAM-1.0
-# Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
+# Managed by Documents/config/scripts/install-howdy-polkit.py (explicit opt-in;
+# install-pam-keyring-howdy.sh does not install this stack).
 # DMS 2.1 supports face authentication followed by the normal password prompt.
 # The polkit helper also needs the managed camera-only sandbox drop-in.
+# A successful face check skips system-auth's auth section, so its mandatory
+# lockout guard runs first and denies a locked account for both methods. The
+# installer refuses when system-auth has any other auth module face would skip.
 
+auth       required                     pam_faillock.so      preauth
 auth       sufficient                   pam_howdy.so
 auth       include                      system-auth
 account    include                      system-auth

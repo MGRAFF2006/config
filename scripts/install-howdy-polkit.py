@@ -17,6 +17,11 @@ HOWDY_CONFIG = Path("/etc/howdy/config.ini")
 PAM_TARGET = Path("/etc/pam.d/polkit-1")
 DROPIN_TARGET = Path("/etc/systemd/system/polkit-agent-helper@.service.d/howdy-camera.conf")
 VENDOR_UNIT = Path("/usr/lib/systemd/system/polkit-agent-helper@.service")
+SYSTEM_AUTH = Path("/etc/pam.d/system-auth")
+# A face match is "sufficient" and skips system-auth's whole auth section. These
+# are the only auth modules that may be skipped: password methods, lockout
+# bookkeeping (preauth runs first in the managed stack) and environment setup.
+SKIPPABLE_AUTH = {"pam_faillock.so", "pam_systemd_home.so", "pam_unix.so", "pam_permit.so", "pam_env.so"}
 
 
 def camera_path(config=HOWDY_CONFIG):
@@ -29,6 +34,30 @@ def camera_path(config=HOWDY_CONFIG):
     if not re.fullmatch(r"/dev/[A-Za-z0-9_./:+-]+", path) or ".." in Path(path).parts:
         raise ValueError("Howdy device_path must be a literal path below /dev")
     return path
+
+
+def check_system_auth(path=SYSTEM_AUTH):
+    """Refuse when face success would skip an auth guard this stack does not know."""
+    unknown = []
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if not fields or fields[0].startswith("#"):
+            continue
+        if fields[0].startswith("@"):  # @include pulls in unchecked lines
+            unknown.append(line.strip())
+            continue
+        if fields[0].lstrip("-") != "auth":
+            continue
+        rest = line.split(None, 1)[1].strip() if len(fields) > 1 else ""
+        if rest.startswith("[") and "]" in rest:
+            control, module = "[...]", rest.split("]", 1)[1].split()[:1]
+        else:
+            control, module = (rest.split() + [""])[0], rest.split()[1:2]
+        name = Path(module[0]).name if module else ""
+        if control in ("include", "substack") or name not in SKIPPABLE_AUTH:
+            unknown.append(line.strip())
+    if unknown:
+        raise ValueError(f"{path} has auth steps a face match would skip: " + "; ".join(unknown))
 
 
 def render_dropin(camera):
@@ -121,6 +150,10 @@ def main():
     args = parser.parse_args()
     camera, files = plan()
     verify_unit(files[DROPIN_TARGET])
+    try:
+        check_system_auth()
+    except ValueError as error:
+        parser.error(str(error))
     if args.check:
         failures = [str(path) for path, content in files.items()
                     if path.is_symlink() or not path.is_file() or path.read_bytes() != content

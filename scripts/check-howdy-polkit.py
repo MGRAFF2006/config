@@ -11,9 +11,11 @@ import argparse
 import configparser
 import ctypes
 import importlib.util
+import itertools
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +51,24 @@ def check_installer(module):
                 pass
             else:
                 raise AssertionError("Unsafe camera path accepted: " + repr(invalid))
+        system_auth = root / "system-auth"
+        arch = ("auth required pam_faillock.so preauth\n-auth [success=2 default=ignore] pam_systemd_home.so\n"
+                "auth [success=1 default=bad] pam_unix.so try_first_pass nullok\nauth [default=die] pam_faillock.so authfail\n"
+                "auth optional pam_permit.so\nauth required pam_env.so\nauth required pam_faillock.so authsucc\n"
+                "account required pam_unix.so\naccount required pam_time.so\n#auth required pam_unknown.so\n")
+        for accepted in (arch, "auth sufficient pam_unix.so try_first_pass likeauth nullok\n" + arch):
+            system_auth.write_text(accepted)
+            module.check_system_auth(system_auth)
+        for skipped in ("auth required pam_google_authenticator.so", "auth requisite /usr/lib/security/pam_u2f.so",
+                        "auth include other-auth", "auth substack other-auth", "@include common-auth",
+                        "-auth [success=ok default=die] pam_oath.so", "auth"):
+            system_auth.write_text(arch + skipped + "\n")
+            try:
+                module.check_system_auth(system_auth)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("system-auth guard skipped by face success was accepted: " + skipped)
         path = root / "target.conf"
         path.write_bytes(b"before")
         path.chmod(0o640)
@@ -83,7 +103,7 @@ def check_installer(module):
         else:
             raise AssertionError("Reload failure was hidden")
         assert alias.is_symlink() and alias.read_bytes() == source.read_bytes() == b"shared"
-    print("PASS: generated unit, path validation, backups, idempotence and rollback")
+    print("PASS: generated unit, path and system-auth validation, backups, idempotence and rollback")
 
 
 def check_pam():
@@ -109,26 +129,35 @@ def check_pam():
         helper = root / "module.sh"
         helper.write_text('printf "%s\\n" "$2" >> "$1"\nexit "$3"\n')
         source = (ROOT / "system/pam.d/polkit-1").read_text()
-        for face, password, account in ((True, False, True), (False, True, True), (False, False, True), (True, False, False)):
+        module = f"pam_exec.so quiet /bin/sh {helper} {trace}"
+        assert len(re.findall(r"pam_faillock\.so\s+preauth", source)) == 1, "polkit-1 must run the lockout guard"
+        # Model Arch's system-auth auth section: a mandatory guard (faillock
+        # preauth) before the password, so either method must be deniable by it.
+        for guard, face, password, account in itertools.product((True, False), repeat=4):
             trace.write_text("")
-            module = f"pam_exec.so quiet /bin/sh {helper} {trace}"
-            (root / "check").write_text(source.replace("pam_howdy.so", f"{module} face {0 if face else 1}"))
-            (root / "system-auth").write_text(f"auth required {module} password {0 if password else 1}\naccount required {module} account {0 if account else 1}\n")
+            stack = re.sub(r"pam_faillock\.so\s+preauth", f"{module} guard {0 if guard else 1}", source)
+            (root / "check").write_text(stack.replace("pam_howdy.so", f"{module} face {0 if face else 1}"))
+            (root / "system-auth").write_text(
+                f"auth required {module} guard {0 if guard else 1}\n"
+                f"auth required {module} password {0 if password else 1}\n"
+                f"account required {module} account {0 if account else 1}\n")
             handle = ctypes.c_void_p()
             result = pam.pam_start_confdir(b"check", b"inert-user", ctypes.byref(conversation), str(root).encode(), ctypes.byref(handle))
             assert result == 0, result
             try:
                 result = pam.pam_authenticate(handle, 0)
-                assert (result == 0) == (face or password), (face, password, result)
+                case = dict(guard=guard, face=face, password=password, result=result)
+                assert (result == 0) == (guard and (face or password)), ("guard bypassed or method lost", case)
                 reached = trace.read_text().splitlines()
-                assert reached == (["face"] if face else ["face", "password"]), reached
+                expected = ["guard", "face"] if guard and face else ["guard", "face", "guard", "password"]
+                assert reached == expected, (reached, case)
                 if result == 0:
                     result = pam.pam_acct_mgmt(handle, 0)
                     assert (result == 0) == account, ("account prerequisite bypassed", result)
                     assert trace.read_text().splitlines()[-1] == "account"
             finally:
                 pam.pam_end(handle, result)
-    print("PASS: real libpam face-first authorization, password fallback, denial and account guards")
+    print("PASS: real libpam face-first authorization, password fallback, denial, lockout and account guards")
 
 
 def write_module(root, name, files, singletons=()):
