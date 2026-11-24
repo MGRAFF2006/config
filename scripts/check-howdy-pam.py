@@ -23,28 +23,37 @@ ROOT = Path(__file__).resolve().parents[1]
 MANAGED_LOCK = "/etc/pam.d/dankshell"
 
 
+SECOND_FACTOR = {"enableU2f": True, "u2fMode": "and"}
+
+
 def check_settings_editor():
-    """The installer edits the settings file DMS 2.1 reads, never replacing a custom stack."""
+    """The installer edits the settings file DMS 2.1 reads, never replacing a custom
+    stack and never dropping a security key that DMS requires as a second factor."""
     installer = (ROOT / "scripts/install-pam-keyring-howdy.sh").read_text()
     assert 'scripts/configure-dms-lock-pam.py" "$dms_config_home"' in installer, "installer no longer runs the settings step"
     script = ROOT / "scripts/configure-dms-lock-pam.py"
     flags = {"greeterPamExternallyManaged": True, "lockPamExternallyManaged": True}
     legacy_text = json.dumps({"lockPamPath": "/etc/pam.d/legacy-untouched"}) + "\n"
 
-    def run(config, before, legacy="absent"):
-        """legacy: "absent", "separate" (its own file) or "symlink" (laptop layout)."""
+    def run(config, before, legacy="absent", overlays=(), check=False):
+        """legacy: "absent", "separate" (its own file) or "symlink" (laptop layout).
+        overlays: (name, values) written to dms/config.d, which DMS merges on top."""
         shutil.rmtree(config, ignore_errors=True)
         canonical = config / "dms/settings.json"
         if before is not None:
             canonical.parent.mkdir(parents=True)
             canonical.write_text(json.dumps({"other": 1, **before}, indent=2) + "\n")
+        for name, values in overlays:
+            (config / "dms/config.d").mkdir(parents=True, exist_ok=True)
+            (config / "dms/config.d" / name).write_text(json.dumps(values))
         if legacy == "separate":
             (config / "DankMaterialShell").mkdir(parents=True)
             (config / "DankMaterialShell/settings.json").write_text(legacy_text)
         elif legacy == "symlink":
             (config / "DankMaterialShell").symlink_to("dms")
         original = canonical.read_text() if before is not None else None
-        result = subprocess.run(["python3", "-I", str(script), str(config)], capture_output=True, text=True)
+        command = ["python3", "-I", str(script), *(["--check"] if check else []), str(config)]
+        result = subprocess.run(command, capture_output=True, text=True)
         if legacy == "separate":
             assert (config / "DankMaterialShell/settings.json").read_text() == legacy_text, "edited the legacy file"
         return result, canonical, original
@@ -55,6 +64,11 @@ def check_settings_editor():
         ({**flags, "lockPamPath": MANAGED_LOCK}, MANAGED_LOCK),
         ({"lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
         ({**flags, "lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
+        # A key as an alternative, or a second-factor mode with the key off, is no
+        # second factor: the migration goes ahead and says what DMS stops offering.
+        ({"enableU2f": True, "u2fMode": "or"}, MANAGED_LOCK),
+        ({"enableU2f": True}, MANAGED_LOCK),
+        ({"enableU2f": False, "u2fMode": "and"}, MANAGED_LOCK),
     )
     with tempfile.TemporaryDirectory(prefix="howdy-settings-check-") as directory:
         config = Path(directory) / "config"
@@ -68,14 +82,118 @@ def check_settings_editor():
                 assert after["other"] == 1, (before, legacy, after)
                 custom = expected != MANAGED_LOCK
                 assert custom == ("kept custom lockPamPath" in result.stderr), (before, result.stderr)
+                assert (before.get("enableU2f") is True) == ("security key (OR) unlock is not offered" in result.stderr), (before, result.stderr)
                 if before.keys() >= flags.keys() and before.get("lockPamPath"):
                     assert canonical.read_text() == original, ("rewrote unchanged settings", before, legacy)
+                result, canonical, original = run(config, before, legacy, check=True)
+                assert result.returncode == 0 and canonical.read_text() == original, ("--check", before, result)
+
+        # DMS requires the key after the password. An externally managed lock makes
+        # DMS skip that step and dankshell has no pam_u2f, so refuse and change nothing,
+        # whether the policy comes from settings.json or a config.d overlay.
+        refused = (
+            (SECOND_FACTOR, ()),
+            ({**SECOND_FACTOR, **flags, "lockPamPath": MANAGED_LOCK}, ()),
+            ({**SECOND_FACTOR, "lockPamPath": "/etc/pam.d/custom-lock"}, ()),
+            ({"enableU2f": True}, (("50-key.json", {"u2fMode": "and"}),)),
+            ({}, (("10-key.json", {"enableU2f": True}), ("20-mode.json", {"u2fMode": "and"}))),
+        )
+        for legacy in ("absent", "symlink"):
+            for before, overlays in refused:
+                for check in (False, True):
+                    result, canonical, original = run(config, before, legacy, overlays, check)
+                    assert result.returncode == 2, ("dropped the security key", before, overlays, check, result)
+                    assert "security key" in result.stderr and "Nothing was changed" in result.stderr, result.stderr
+                    assert canonical.read_text() == original, ("wrote settings although refused", before, overlays)
+        # A later overlay that turns the second factor off wins, as in DMS.
+        result, canonical, _ = run(config, SECOND_FACTOR, overlays=(("90-or.json", {"u2fMode": "or"}),))
+        assert result.returncode == 0 and json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, result
+
         # DMS has not created its settings yet: warn and fail without writing anywhere.
         for legacy in ("absent", "separate"):
             result, canonical, _ = run(config, None, legacy)
-            assert result.returncode == 1 and "not found" in result.stderr, (legacy, result)
+            assert result.returncode == 3 and "not found" in result.stderr, (legacy, result)
             assert not canonical.exists(), legacy
-    print("PASS: installer settings: DMS 2.1 settings file selected (legacy path ignored), custom lockPamPath preserved")
+    print("PASS: installer settings: DMS 2.1 settings file selected (legacy path ignored), custom lockPamPath preserved, "
+          "a DMS second-factor security key (settings.json or config.d) refused without changes")
+
+
+# The laptop's PAM on 2026-11-24 after the approved interim fix: greetd and
+# dankshell password-only (pam_howdy removed), stock pambase system-auth. Its
+# sudo is the managed Howdy-first file, added from the repository below.
+LIVE_INTERIM = {
+    "greetd": "auth required pam_securetty.so\nauth requisite pam_nologin.so\n"
+              "auth [success=1 default=ignore] pam_unix.so try_first_pass nullok\nauth requisite pam_deny.so\n",
+    "dankshell": "auth requisite pam_nologin.so\nauth required pam_shells.so\n"
+                 "auth [success=1 default=ignore] pam_unix.so try_first_pass nullok\nauth requisite pam_deny.so\n",
+    "system-auth": "auth required pam_faillock.so preauth\n-auth [success=2 default=ignore] pam_systemd_home.so\n"
+                   "auth [success=1 default=bad] pam_unix.so try_first_pass nullok\n"
+                   "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\n",
+}
+INSTALLED = ("greetd", "sddm", "dankshell", "sudo", "polkit-1")
+
+
+def check_installer(pam_root):
+    """Run the real installer as namespace root against throwaway /etc/pam.d,
+    /etc/howdy and DMS settings: it refuses a DMS second factor before writing
+    anything, and it applies cleanly from the laptop's interim password-only state."""
+    bwrap = shutil.which("bwrap")
+    assert bwrap, "bwrap is required to run the installer against throwaway system directories"
+    with tempfile.TemporaryDirectory(prefix="howdy-installer-check-") as directory:
+        root = Path(directory)
+        fakes = root / "fakes"
+        (fakes / "security").mkdir(parents=True)
+        for module in ("pam_howdy.so", "pam_kwallet5.so"):  # presence checks only
+            (fakes / "security" / module).write_text("")
+        (fakes / "python").mkdir()
+        (fakes / "python/dlib.py").write_text("")
+
+        def run(settings):
+            for name in ("pam.d", "howdy", "config"):
+                shutil.rmtree(root / name, ignore_errors=True)
+                (root / name).mkdir()
+            for name, text in LIVE_INTERIM.items():
+                (root / "pam.d" / name).write_text(text)
+            shutil.copyfile(pam_root / "sudo", root / "pam.d/sudo")
+            (root / "config/dms").mkdir()
+            (root / "config/dms/settings.json").write_text(json.dumps(settings) + "\n")
+            before = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
+            command = [bwrap, "--unshare-user", "--uid", "0", "--gid", "0", "--ro-bind", "/", "/",
+                       "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--die-with-parent",
+                       "--bind", str(root / "pam.d"), "/etc/pam.d", "--bind", str(root / "howdy"), "/etc/howdy",
+                       "--ro-bind", str(fakes / "security"), "/usr/lib/security", "--tmpfs", "/usr/lib/howdy",
+                       "--bind", str(root / "config"), str(root / "config"),
+                       "--setenv", "PYTHONPATH", str(fakes / "python"),
+                       "bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh"), str(root / "config")]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            return result, before
+
+        settings = {"lockPamPath": MANAGED_LOCK, "lockPamExternallyManaged": True, "greeterPamExternallyManaged": True}
+        result, before = run({**settings, **SECOND_FACTOR})
+        assert result.returncode != 0, ("installer went ahead with a DMS second factor", result.stdout, result.stderr)
+        assert "security key" in result.stderr, result.stderr
+        after = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
+        assert after == before, ("PAM changed although the installer refused", sorted(after))
+        assert not any((root / "howdy").iterdir()), "Howdy config written although the installer refused"
+        assert json.loads((root / "config/dms/settings.json").read_text()) == {**settings, **SECOND_FACTOR}
+
+        # From the live interim state (password-only greetd/dankshell, stock
+        # system-auth, Howdy-first sudo) the installer restores the managed files.
+        for initial in (settings, {}):
+            result, before = run(initial)
+            assert result.returncode == 0, (initial, result.stdout, result.stderr)
+            for name in INSTALLED:
+                assert (root / "pam.d" / name).read_bytes() == (pam_root / name).read_bytes(), (initial, name)
+            for name, text in before.items():
+                if name != "system-auth":
+                    assert [p.read_bytes() for p in (root / "pam.d").glob(f"{name}.backup-*")] == [text], (initial, name)
+            assert (root / "pam.d/system-auth").read_bytes() == before["system-auth"], "system-auth changed"
+            assert (root / "pam.d/sudo").read_bytes() == before["sudo"], "sudo changed"
+            assert "system-auth still has an active pam_howdy" not in result.stdout + result.stderr
+            assert (root / "howdy/config.ini").read_bytes() == (ROOT / "system/howdy/config.ini").read_bytes()
+            assert json.loads((root / "config/dms/settings.json").read_text()) == settings, initial
+    print("PASS: installer: refuses a DMS second factor before writing any file; applies from the interim "
+          "password-only state (system-auth untouched, backups kept, sudo reinstalled unchanged)")
 
 
 pam = ctypes.CDLL("libpam.so.0")
@@ -260,6 +378,7 @@ def main():
             print(f"PASS: {service}: password first (independent of a stalled camera), Howdy fallback, deny both failures, continuation and prerequisite guards")
     check_real_unix(args.pam_root)
     check_settings_editor()
+    check_installer(args.pam_root)
 
 
 if __name__ == "__main__":

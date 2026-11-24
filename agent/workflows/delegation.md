@@ -65,3 +65,25 @@ scope and ownership of its files or deliverables; avoid competing coordinators
 and concurrent edits to the same files. Check deliveries against your acceptance
 criteria and verify the combined outcome. A child's completion report is input
 to your judgment; you remain accountable until your outcome is complete.
+
+## Choose providers and models
+
+Resolve available providers and models from the running harness (in T3,
+`orchestrator_capabilities`); do not hardcode model IDs. Children use the
+parent's provider and model unless the assignment gives a reason to change:
+
+| Work | Default |
+| --- | --- |
+| Interactive work, implementation, coordination | The parent's model; at the top, Mathis's default (Claude flagship) |
+| Narrow searches, summaries, mechanical edits | A smaller model or lower effort from the same provider |
+| Independent or second-opinion review | A fresh agent; for substantial or risky changes, a cloud model family (Claude or GPT) other than the one that wrote the change |
+| Small private or offline tasks with a short context | Laptop NPU |
+
+Mathis's explicit choice overrides this table. Size effort to the task: higher
+reasoning for design, security and final review, lower for routine work.
+Laptop NPU agents run only while the laptop is awake and have a 32K context;
+give them self-contained inputs and verify their output locally. Do not send
+material Mathis kept local to a cloud model without Mathis's permission; PR review
+rules still apply to anything that becomes a PR. A usage limit or unavailable
+provider blocks that branch: report it through the tree rather than
+substituting a model.

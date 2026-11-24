@@ -147,6 +147,9 @@ dms restart
 ```
 
 These patches are version-specific and are not part of normal installation.
+The installer applies only top-level `shell-patches/*.patch` files. Exact-version
+DMS 2.x patches live in `shell-patches/guarded/` and are applied only by the
+fingerprint-checked stager in [dms-smooth-sliders.md](dms-smooth-sliders.md).
 Recent DMS packages embed QML and may leave only old patched files under
 `/usr/share/quickshell/dms`; the presence of that directory alone is not proof
 that patching it will affect the running shell.
@@ -165,6 +168,15 @@ scripts/configure-dms-app-integration.py
 Restart Zen after first applying the integration or after changing managed
 preferences. DMS color changes are picked up from the generated stylesheet on
 the next Zen restart.
+
+OnlyOffice's default custom window frame includes invisible shadow padding
+that leaves a large gap inside a Hyprland tile. Switch it to the system frame
+once: save your documents, close OnlyOffice, then run
+`onlyoffice-desktopeditors --system-title-bar`. OnlyOffice saves this choice
+in its own settings, so later launches keep the system frame. Revert the same
+way with `--custom-title-bar`. The integration script prints this reminder when
+OnlyOffice is installed but never edits OnlyOffice's settings file. See the
+[OnlyOffice window-frame flags](https://api.onlyoffice.com/docs/desktop-editors/usage-api/command-line-flags/).
 
 WiFi: prefer **system** NetworkManager secrets (not KWallet). Helper:
 `nm-wifi-system-secret "SSID"` for networks that still prompt.
@@ -230,6 +242,14 @@ The installer (via `scripts/configure-dms-lock-pam.py`) edits
 `$XDG_CONFIG_HOME/dms/settings.json`, the file DMS 2.1 reads, never the legacy
 `~/.config/DankMaterialShell/settings.json`. It sets an empty `lockPamPath`,
 keeps any custom one, and warns if DMS has not created its settings yet.
+It refuses, before changing any PAM or Howdy file, when DMS requires a security
+key as a second factor (Security key mode: Second factor (AND)), in
+`settings.json` or a `dms/config.d` overlay. An externally managed lock makes
+DMS skip that step and `dankshell` has no `pam_u2f`, so the key would silently
+stop being required. Switch the key to Alternative (OR) or turn it off first if
+the managed password/face lock should replace it. DMS's own fingerprint and
+security-key (OR) unlock are not offered with the managed stack either; the
+installer warns when they are on.
 
 The guarded `howdy-lock-2.1.patch` starts one face attempt after the display
 turns back on, after a resume from sleep, or after a key press or click on the
@@ -270,6 +290,13 @@ Re-apply PAM after greeter/package changes:
 ```bash
 ~/Documents/config/scripts/install-pam-keyring-howdy.sh
 ```
+
+The installer replaces `greetd`, `sddm`, `dankshell`, `sudo` and `polkit-1`
+whatever they contain (each with a `.backup-<stamp>` copy), so it also applies
+over a hand-edited password-only `greetd` or `dankshell`. It never edits
+`system-auth`. Face unlock on the lock screen also needs the staged
+`howdy-lock-2.1.patch`; with a password-only `dankshell` that patch stays
+inactive.
 
 Howdy needs a working `python-dlib`. Rebuild it against current libraries if
 its import fails after an upgrade. The PAM installer checks the import before
