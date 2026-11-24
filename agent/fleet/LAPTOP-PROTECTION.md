@@ -58,37 +58,12 @@ in VM backups. No backup dataset/repository has been created by this task.
 
 Before disk or firmware changes:
 
-1. Back up the recoverable installation, all six subvolumes, ESP, partition
-   table and relevant metadata to the off-laptop target. Preserve owner IDs,
-   ACLs, extended attributes, links and boot configuration. Same-disk snapshots
-   do not replace the off-device backup. List the subvolumes in the final
-   backup and match them against `btrfs subvolume list /`; all six must be
-   present and non-empty where the source is.
-2. Verify the backup and restore representative data, including dirty project
-   work and account configuration, without exposing credentials in logs/Git.
-   Keep the backup password and homelab access credentials recoverable without
-   this laptop, for example in Bitwarden.
-3. Prove the complete restore fits before anything is erased. A representative
-   restore is not enough. The target is the final LUKS mapping: partition 2
-   minus the LUKS2 header (16 MiB by default), with at least 10% kept free.
-   Use one of these:
-   - Preferred: a full trial restore of all six subvolumes onto encrypted
-     scratch storage on the homelab, such as a zvol in an encrypted ZFS
-     dataset or a LUKS2 container on a zvol. Never use an unencrypted zvol,
-     image or directory: it would leave a second plaintext copy of the
-     installation. Size it exactly like the final mapping, use the same
-     `mkfs.btrfs` options, mount options (`compress=`) and restore commands
-     as the real migration, then confirm every subvolume is complete and
-     check `btrfs filesystem usage`. Destroy the scratch volume afterwards.
-   - Otherwise: a conservative bound with no credit for compression or shared
-     extents. Data is the sum of `du -sx --apparent-size` per subvolume
-     (`-x` stops at nested subvolume boundaries, so each one is counted
-     once). Metadata is twice the logical metadata used from
-     `btrfs filesystem usage` (the default single-device profile is DUP),
-     plus 1 GiB for system chunks and the global reserve. This bound holds
-     for `rsync` and for `btrfs send` with or without compressed data.
-   If neither shows a fit, reduce or exclude data deliberately before erasing.
-4. Prepare a recovery path that does not depend on this laptop's ESP or boot
+1. Arrange an AC-powered maintenance window and explicit reboot authorization,
+   with Mathis present for firmware menus. Export current firmware trust data
+   (`PK`, `KEK`, `db`, `dbx`) and preserve off-device LUKS/header/signing-key
+   recovery material. Keep the backup password and homelab access credentials
+   recoverable without this laptop, for example in Bitwarden.
+2. Prepare a recovery path that does not depend on this laptop's ESP or boot
    manager. A recovery UKI on the same ESP is a convenience, not the
    independent path. Choose one:
    - Off-disk rescue media that the final Secure Boot policy accepts. Examples
@@ -101,26 +76,47 @@ Before disk or firmware changes:
    Mathis currently has neither a recovery USB nor an external backup disk.
    Homelab storage can replace the disk, but recovery boot remains an
    unresolved prerequisite.
-5. Prove recovery before erasing. Boot this laptop from the exact rescue
-   medium that will be used. With only tools on that medium and credentials
-   available without the laptop, reach the backup, open the repository, and
-   restore a sample: some files from each subvolume, a dirty project and the
-   ESP. Compare checksums with the live system. Create a disposable LUKS2
-   container (a file-backed loop device is enough) and unlock it by typing the
-   passphrase. Reaching the backup over the network is not enough.
-6. Arrange an AC-powered maintenance window and explicit reboot authorization,
-   with Mathis present for firmware menus. Export current firmware trust data
-   (`PK`, `KEK`, `db`, `dbx`) and preserve off-device LUKS/header/signing-key
-   recovery material.
+3. Take the final backup with no writers. Shut the installed system down
+   cleanly and boot the exact rescue medium from step 2. With only tools on
+   that medium and credentials available without the laptop, mount partition 2
+   and the ESP read-only (or mount partition 2 only to create read-only
+   snapshots for `btrfs send`). Back up all six subvolumes, the ESP, the
+   partition table and relevant metadata to the off-laptop target. Preserve
+   owner IDs, ACLs, extended attributes, links and boot configuration. A backup
+   of the running system is not the final backup: open files such as databases
+   can be captured inconsistently, and later checks cannot detect that.
+   Same-disk snapshots do not replace the off-device backup.
+4. Verify that exact backup from the same rescue session, without exposing
+   credentials in logs/Git. List its subvolumes and match them against
+   `btrfs subvolume list` of the source; all six must be present and non-empty
+   where the source is. Restore a sample (some files from each subvolume, a
+   dirty project, account configuration and the ESP) and compare checksums with
+   the read-only source. Create a disposable LUKS2 container (a file-backed
+   loop device is enough) and unlock it by typing the passphrase.
+5. Prove the complete restore fits with a full trial restore of that exact
+   backup. No size estimate replaces it. Restore all six subvolumes onto
+   encrypted scratch storage on the homelab, such as a zvol in an encrypted ZFS
+   dataset or a LUKS2 container on a zvol. Never use an unencrypted zvol, image
+   or directory: it would leave a second plaintext copy of the installation.
+   Size it exactly like the final mapping (partition 2 minus the LUKS2 header,
+   16 MiB by default), use the same `mkfs.btrfs` options, mount options
+   (`compress=`) and restore commands as the real migration. Every subvolume
+   must restore completely, and `btrfs filesystem usage` must show at least 10%
+   free. Destroy the scratch volume afterwards. If it does not fit, reduce or
+   exclude data deliberately, then repeat steps 3–5.
+6. Keep the source quiescent from step 3 until the erase: leave the laptop
+   powered off or in the rescue medium, and do not boot the installed system.
+   If the installed system boots or anything else writes to partition 2 or the
+   ESP, the final backup is stale; repeat steps 3–5.
 
 ## Migration sequence and boundaries
 
-After the verified backup, restore-fit proof and recovery proof, prefer creating
-a fresh LUKS2 container and restoring the existing Btrfs installation into it.
-That erases the current partition contents and therefore requires review of the
-exact disk, restore evidence and explicit authorization before execution. No
-such erase, partition, boot-order, firmware-key or reboot operation has been
-performed.
+After the verified final backup, full trial restore and recovery proof, prefer
+creating a fresh LUKS2 container and restoring the existing Btrfs installation
+into it. That erases the current partition contents and therefore requires
+review of the exact disk, restore evidence and explicit authorization before
+execution. No such erase, partition, boot-order, firmware-key or reboot
+operation has been performed.
 
 `luksFormat` only writes a header and keyslots. It does not overwrite the data
 area. A restore that never writes some sectors leaves the old plaintext in
@@ -133,9 +129,13 @@ use the first supported method and verify that method, not another one.
 
 1. NVMe sanitize: crypto erase, or block erase if crypto erase is unsupported.
    Check `sanicap` in `nvme id-ctrl`. Sanitize is device-wide and reaches
-   spare or remapped flash that host writes cannot. Verify with
-   `nvme sanitize-log`: the most recent sanitize status must be "completed
-   successfully" and progress must be finished.
+   spare or remapped flash that host writes cannot. Before submitting, save
+   `nvme sanitize-log -H`; Global Data Erased must be clear, since the drive
+   holds data. The `nvme sanitize` submission must return success, otherwise
+   the log still describes an older operation. Then, before writing anything
+   to the drive, `nvme sanitize-log -H` must show the requested action in
+   SCDW10 (crypto or block erase), most recent status "completed
+   successfully", progress finished and Global Data Erased set.
 2. NVMe format with secure erase if sanitize is unsupported:
    `nvme format --ses=2` (crypto erase, if `fna` lists support) or `--ses=1`
    (user data erase); `--ses=0` erases nothing. `fna` also shows whether it
