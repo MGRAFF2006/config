@@ -106,7 +106,7 @@ def main():
 
         binaries = root / "bin"
         binaries.mkdir()
-        for tool in ("git", "ssh", "rsync", "tmux", "tailscale", "syncthing", "codex", "systemctl"):
+        for tool in ("git", "ssh", "rsync", "tmux", "tailscale", "syncthing", "systemctl"):
             path = binaries / tool
             path.write_text("#!/bin/sh\nexit 0\n")
             path.chmod(0o755)

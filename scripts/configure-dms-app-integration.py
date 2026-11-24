@@ -126,9 +126,22 @@ def configure_desktop_defaults() -> None:
     print("defaults: Nautilus for folders and Zen for web links; start DMS to generate application colors")
 
 
+def explain_onlyoffice_frame() -> None:
+    # OnlyOffice's custom frame reserves invisible shadow padding inside
+    # Hyprland tiles. Its own flag stores the system frame in its settings, so
+    # setup never edits OnlyOffice's Qt settings file itself.
+    if shutil.which("onlyoffice-desktopeditors"):
+        print(
+            "OnlyOffice: to fill Hyprland tiles, close OnlyOffice and run "
+            "`onlyoffice-desktopeditors --system-title-bar` once "
+            "(revert with `--custom-title-bar`)"
+        )
+
+
 def main() -> int:
     configure_zen()
     configure_desktop_defaults()
+    explain_onlyoffice_frame()
     print("Restart Zen once to load its managed theme and performance preferences.")
     return 0
 
