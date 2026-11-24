@@ -231,6 +231,23 @@ def main():
                 if not path.is_symlink() and path.read_text() == "Keep external instructions\n"]
         assert len(kept) == 1 and kept[0].resolve().is_relative_to(saved.resolve())
         assert not any(path.name == "external.." for path in root.rglob("external.."))
+        # A root through a symlink and `..` follows the filesystem, not lexical
+        # normalization: aliases/current/.. is intended/, not aliases/.
+        (root / "intended/profile").mkdir(parents=True)
+        (root / "intended/config").mkdir()
+        (root / "aliases").mkdir()
+        (root / "aliases/current").symlink_to(root / "intended/profile", target_is_directory=True)
+        (root / "aliases/config").mkdir()
+        (root / "aliases/config/AGENTS.md").write_text("Unrelated file\n")
+        (root / "intended/config/AGENTS.md").write_text("Old intended file\n")
+        env["CODEX_HOME"] = str(root / "aliases/current/../config")
+        run()
+        assert (root / "intended/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert (root / "aliases/config/AGENTS.md").read_text() == "Unrelated file\n"
+        assert any(path.read_text() == "Old intended file\n"
+                   for path in saved.glob("*/external/**/AGENTS.md") if not path.is_symlink())
+        assert all(path.resolve().is_relative_to(saved.resolve())
+                   for path in saved.glob("*/external/**/AGENTS.md"))
         env.pop("CODEX_HOME")
     print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates, linked backup and relative-root safety, and readiness checks")
 

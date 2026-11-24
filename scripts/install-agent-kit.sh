@@ -3,11 +3,9 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# Absolute roots keep backup paths inside the backup directory, even when a root
-# is given relative to the current directory. Symlinks are kept as configured.
-agent_home="$(realpath -m -s -- "${AGENT_KIT_HOME:-$HOME}")"
-codex_root="$(realpath -m -s -- "${CODEX_HOME:-$agent_home/.codex}")"
-config_root="$(realpath -m -s -- "${XDG_CONFIG_HOME:-$agent_home/.config}")"
+agent_home="${AGENT_KIT_HOME:-$HOME}"
+codex_root="${CODEX_HOME:-$agent_home/.codex}"
+config_root="${XDG_CONFIG_HOME:-$agent_home/.config}"
 mode="${1:-install}"
 case "$mode" in
   install|--dry-run|--check) ;;
@@ -35,8 +33,14 @@ backup_path() {
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
-  relative="${dst#"$agent_home"/}"
-  [[ "$relative" != "$dst" ]] || relative="external$dst"
+  # Name the backup from a lexically normalized absolute path so `..` or a
+  # relative root cannot place it outside the backup directory. Only the name
+  # is normalized; the configured path is still what gets moved.
+  local name home_name
+  name="$(realpath -m -s -- "$dst")"
+  home_name="$(realpath -m -s -- "$agent_home")"
+  relative="${name#"$home_name"/}"
+  [[ "$relative" != "$name" ]] || relative="external$name"
   mkdir -p -- "$(dirname -- "$backup_root/$relative")"
   mv -- "$dst" "$backup_root/$relative"
   echo "BACKUP $dst -> $backup_root/$relative"
