@@ -192,9 +192,6 @@ def main():
         work = Path(directory)
         ui = prepare_ui(module, source, work, args.unpatched)
         env = {"DMS_LAUNCHER_EVIDENCE": str(work / "evidence.png")} if args.evidence else {}
-        # The 2.0.0 override patches result rows only; later versions also patch tiles.
-        if (ui / "VERSION").read_text().strip() == module.SUPPORTED_VERSION:
-            env["DMS_LAUNCHER_CHECK_TILES"] = "0"
         logs = run_isolated(work, ui, "launcher-text-bounds.qml", env)
         if args.evidence and (work / "evidence.png").exists():
             shutil.copyfile(work / "evidence.png", args.evidence)

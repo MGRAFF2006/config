@@ -156,6 +156,10 @@ remains active. Reapply through `scripts/configure-dms-smooth-sliders.py --apply
 all patched source and staged files are fingerprinted before use. See
 [the override guide](../../../docs/dms-smooth-sliders.md).
 
+Retired 2026-11-24: the laptop runs DMS 2.1.2, which these 2.0.0 patches never
+supported, and DMS 2.0.0 is no longer a supported fallback. The detail-page and
+slider patches were removed from the repository.
+
 ## Desktop startup dependency — verified 2026-11-04
 
 Private SSH now starts through `sshd-tailscale.timer`, retaining its existing

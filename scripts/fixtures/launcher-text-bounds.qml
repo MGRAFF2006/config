@@ -7,8 +7,6 @@ import qs.Modals.DLauncherV2.Components
 ShellRoot {
     id: root
     property int phase: 0
-    // The DMS 2.0.0 override patches result rows only; 2.1.2 also patches tiles.
-    readonly property bool checkTiles: Quickshell.env("DMS_LAUNCHER_CHECK_TILES") !== "0"
     Component.onCompleted: Theme.fontScale = 1.15
     readonly property string fullTitle: "[Recreate Slides Figures as SVGs](t3-context://v1/thread/thread_1234) a long clipboard entry that must fit its result row"
     readonly property string multilineTitle: "A multiline clipboard entry\nsecond line\r\nthird line https://example.org/a/very/long/url/without/spaces"
@@ -162,11 +160,11 @@ ShellRoot {
         repeat: true
         onTriggered: {
             const imageLabel = root.tileLabel(imageTile);
-            if (root.checkTiles && !root.check(imageLabel && imageLabel.lineCount === 1 && imageLabel.truncated
+            if (!root.check(imageLabel && imageLabel.lineCount === 1 && imageLabel.truncated
                     && imageLabel.contentHeight <= imageLabel.height + 1,
                     "image tile caption stays within one line and elides")) return;
-            if (root.checkTiles && (!root.verifyTile(highlightedTile, true) || !root.verifyTile(plainTile, true)
-                    || !root.verifyTile(shortTile, false))) return;
+            if (!root.verifyTile(highlightedTile, true) || !root.verifyTile(plainTile, true)
+                    || !root.verifyTile(shortTile, false)) return;
             if (!root.verifyRow(highlighted, true) || !root.verifyRow(multiline, true)
                     || !root.verifyRow(shortRow, false)) return;
             const searchedTitle = root.textItems(searchedDmenuRow)[0];
@@ -184,10 +182,10 @@ ShellRoot {
             const markupTitle = root.textItems(markupRow)[0];
             if (!root.check(markupTitle.textFormat === Text.RichText && markupTitle.contentHeight >= 30,
                     "explicit dmenu rich markup preserves its CSS font size")) return;
-            if (root.checkTiles && !root.check(root.tileLabel(markupTile).textFormat === Text.RichText
+            if (!root.check(root.tileLabel(markupTile).textFormat === Text.RichText
                     && root.tileLabel(markupTile).contentHeight >= 30,
                     "explicit tile dmenu rich markup preserves CSS font size")) return;
-            console.warn("LAUNCHER_TEXT_PASS: " + (root.checkTiles ? "tiles at 180px/120px and rows" : "rows") + "; highlighted and plain long titles, searched plain dmenu rows, explicit dmenu markup, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
+            console.warn("LAUNCHER_TEXT_PASS: tiles at 180px/120px and rows; highlighted and plain long titles, searched plain dmenu rows, explicit dmenu markup, multiline clipboard payloads, subtitles, short titles at 620px and 320px, font scale 1.15");
             const evidence = Quickshell.env("DMS_LAUNCHER_EVIDENCE");
             running = false;
             if (evidence) {
