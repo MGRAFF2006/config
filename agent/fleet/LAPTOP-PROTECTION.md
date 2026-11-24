@@ -61,27 +61,36 @@ Before disk or firmware changes:
 1. Back up the recoverable installation, all six subvolumes, ESP, partition
    table and relevant metadata to the off-laptop target. Preserve owner IDs,
    ACLs, extended attributes, links and boot configuration. Same-disk snapshots
-   do not replace the off-device backup.
+   do not replace the off-device backup. List the subvolumes in the final
+   backup and match them against `btrfs subvolume list /`; all six must be
+   present and non-empty where the source is.
 2. Verify the backup and restore representative data, including dirty project
    work and account configuration, without exposing credentials in logs/Git.
-   Ensure the backup password is recoverable without this laptop.
+   Keep the backup password and homelab access credentials recoverable without
+   this laptop, for example in Bitwarden.
 3. Prove the complete restore fits before anything is erased. A representative
-   restore is not enough. For each of the six subvolumes, including both nested
-   ones, record its logical size with `btrfs filesystem du -s` and its
-   compression ratio with `compsize`. Then estimate the size the chosen restore
-   method writes. `btrfs send` without clone sources (`-c`) or a parent (`-p`)
-   and file-level copies such as `rsync` duplicate reflinked and
-   snapshot-shared extents. They also store data uncompressed unless the target
-   mounts with the same `compress=` option. Compare the total with the final
-   LUKS mapping's size: the partition minus the LUKS2 header, 16 MiB by
-   default. Keep at least 10% of the mapping free. Preferably restore all six
-   subvolumes once into a scratch target of the same size on the homelab,
-   such as a sparse zvol or file-backed image, and confirm each one is
-   complete. Otherwise, reduce or exclude data deliberately before erasing.
+   restore is not enough. The target is the final LUKS mapping: partition 2
+   minus the LUKS2 header (16 MiB by default), with at least 10% kept free.
+   Use one of these:
+   - Preferred: a full trial restore of all six subvolumes onto encrypted
+     scratch storage on the homelab, such as a zvol in an encrypted ZFS
+     dataset or a LUKS2 container on a zvol. Never use an unencrypted zvol,
+     image or directory: it would leave a second plaintext copy of the
+     installation. Size it exactly like the final mapping, use the same
+     `mkfs.btrfs` options, mount options (`compress=`) and restore commands
+     as the real migration, then confirm every subvolume is complete and
+     check `btrfs filesystem usage`. Destroy the scratch volume afterwards.
+   - Otherwise: a conservative bound with no credit for compression or shared
+     extents. Data is the sum of `du -sx --apparent-size` per subvolume
+     (`-x` stops at nested subvolume boundaries, so each one is counted
+     once). Metadata is twice the logical metadata used from
+     `btrfs filesystem usage` (the default single-device profile is DUP),
+     plus 1 GiB for system chunks and the global reserve. This bound holds
+     for `rsync` and for `btrfs send` with or without compressed data.
+   If neither shows a fit, reduce or exclude data deliberately before erasing.
 4. Prepare a recovery path that does not depend on this laptop's ESP or boot
    manager. A recovery UKI on the same ESP is a convenience, not the
-   independent path. Prove one of these works on this laptop before Secure
-   Boot is enforced, and again after it is enforced:
+   independent path. Choose one:
    - Off-disk rescue media that the final Secure Boot policy accepts. Examples
      are shim-signed media when Microsoft's UEFI CA stays in `db`, or media
      whose EFI binaries are signed with the new owner key. The plain Arch ISO
@@ -89,18 +98,24 @@ Before disk or firmware changes:
    - A tested firmware rollback. Mathis, at the laptop, enters firmware setup
      with a known supervisor password, disables Secure Boot, boots the
      unsigned rescue media, and re-enables Secure Boot afterward.
-   With either path, demonstrate that it can open the LUKS container with the
-   manual passphrase or recovery key, mount the subvolumes, and reach the
-   backup over the network. Mathis currently has neither a recovery USB nor an
-   external backup disk available. Homelab storage can replace the disk, but
-   recovery boot remains an unresolved prerequisite.
-5. Arrange an AC-powered maintenance window and explicit reboot authorization,
+   Mathis currently has neither a recovery USB nor an external backup disk.
+   Homelab storage can replace the disk, but recovery boot remains an
+   unresolved prerequisite.
+5. Prove recovery before erasing. Boot this laptop from the exact rescue
+   medium that will be used. With only tools on that medium and credentials
+   available without the laptop, reach the backup, open the repository, and
+   restore a sample: some files from each subvolume, a dirty project and the
+   ESP. Compare checksums with the live system. Create a disposable LUKS2
+   container (a file-backed loop device is enough) and unlock it by typing the
+   passphrase. Reaching the backup over the network is not enough.
+6. Arrange an AC-powered maintenance window and explicit reboot authorization,
    with Mathis present for firmware menus. Export current firmware trust data
-   and preserve off-device LUKS/header/signing-key recovery material.
+   (`PK`, `KEK`, `db`, `dbx`) and preserve off-device LUKS/header/signing-key
+   recovery material.
 
 ## Migration sequence and boundaries
 
-After the verified backup, restore-fit check and recovery boot, prefer creating
+After the verified backup, restore-fit proof and recovery proof, prefer creating
 a fresh LUKS2 container and restoring the existing Btrfs installation into it.
 That erases the current partition contents and therefore requires review of the
 exact disk, restore evidence and explicit authorization before execution. No
@@ -109,25 +124,36 @@ performed.
 
 `luksFormat` only writes a header and keyslots. It does not overwrite the data
 area. A restore that never writes some sectors leaves the old plaintext in
-them, readable from the raw device. Sanitize the old plaintext before
-restoring, from the recovery path, within the same authorized erase:
+them, readable from the raw device. Erase the old plaintext before
+restoring, from the recovery path, within the same authorized erase.
 
-1. Prefer the drive's NVMe sanitize: crypto erase, or block erase if crypto
-   erase is not supported. Check support first in `nvme id-ctrl`
-   (`sanicap`). Sanitize is device-wide and reaches blocks that host
-   overwrites cannot, such as spare or remapped flash. It also erases the ESP
-   and the partition table, so recreate both and restore the ESP from the
-   backup. If sanitize is not supported, use an NVMe format with a secure-erase
-   setting (`nvme format --ses`). Check `fna` in `nvme id-ctrl` to see whether
-   that format covers the whole device.
-2. If neither method is supported, overwrite all of partition 2 through a
-   throwaway random-key mapping before `luksFormat`. The
-   [cryptsetup FAQ](https://gitlab.com/cryptsetup/cryptsetup/-/wikis/FrequentlyAskedQuestions)
-   describes this. Record the residual risk: old plaintext can survive in
-   spare or remapped flash that host writes never reach.
-3. Verify the result before restoring. `nvme sanitize-log` should report
-   success. Sampled raw reads at several offsets, including some within the old
-   data range, should show no recognizable former content.
+First confirm the target: match the model and serial from `nvme list` to the
+recorded laptop drive and check `nvme list-ns` shows a single namespace. Then
+use the first supported method and verify that method, not another one.
+
+1. NVMe sanitize: crypto erase, or block erase if crypto erase is unsupported.
+   Check `sanicap` in `nvme id-ctrl`. Sanitize is device-wide and reaches
+   spare or remapped flash that host writes cannot. Verify with
+   `nvme sanitize-log`: the most recent sanitize status must be "completed
+   successfully" and progress must be finished.
+2. NVMe format with secure erase if sanitize is unsupported:
+   `nvme format --ses=2` (crypto erase, if `fna` lists support) or `--ses=1`
+   (user data erase); `--ses=0` erases nothing. `fna` also shows whether it
+   covers all namespaces. `sanitize-log` says nothing about a format. Verify
+   that this format command returned success and that `nvme id-ns` shows the
+   expected LBA format.
+3. Host overwrite of partition 2 through a throwaway random-key mapping, as in
+   the
+   [cryptsetup FAQ](https://gitlab.com/cryptsetup/cryptsetup/-/wikis/FrequentlyAskedQuestions),
+   only if neither NVMe method is supported and Mathis explicitly accepts that
+   old plaintext can survive in spare or remapped flash. Record that
+   acceptance before running it. Verify that the write ended only at the end
+   of the mapping ("No space left on device") with the full partition size
+   written.
+
+Sanitize and format also erase the ESP and partition table; recreate both and
+restore the ESP from the backup. After any method, raw reads at several
+offsets, including some within the old data range, are a spot check only.
 
 Then create the partition layout and LUKS2 container, make the Btrfs filesystem,
 and restore all six subvolumes as subvolumes, not plain directories. The new
@@ -157,11 +183,21 @@ and otherwise fall back to the unsigned `.efi`. See
 So keep a signed `/usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed`,
 for example with `sbctl sign -s -o`, and have it re-signed whenever systemd
 updates. After every systemd, kernel or initramfs update, and before
-rebooting, verify every `.efi` file on the ESP. Check them against the
-enrolled `db` certificate with `sbctl verify` or `sbverify --cert`. Remove any
-leftover unsigned loaders, or make sure no boot entry points to one.
+rebooting, verify every `.efi` file on the ESP with `sbctl verify` or
+`sbverify --cert`. Remove any leftover unsigned loaders, or make sure no boot
+entry points to one.
 
-Verify encrypted-root boot, Secure Boot enforcement, the independent recovery
-path under the final policy, manual LUKS unlock, and the chosen TPM policy before installing/enrolling the wallet bridge. Its physical
-TPM dummy-secret and restricted-polkit sandbox tests passed, but actual wallet
-and graphical authentication with the final integration remain unverified.
+Those file checks only use the local signing certificate. Separately confirm
+the firmware trusts it: read the live `db` (`mokutil --db` or
+`efi-readvar -v db`) and match the signing certificate's fingerprint
+(`openssl x509 -fingerprint`). Repeat after firmware updates or key changes.
+
+With Secure Boot enforced (`bootctl status`), boot each path once: the normal
+UKI, the fallback `EFI/BOOT/BOOTX64.EFI` (select the disk itself in the
+firmware boot menu), the recovery UKI and the independent recovery path.
+From the recovery path, unlock the actual LUKS volume manually with the
+passphrase and with the recovery key, mount the subvolumes and restore a
+sample from the backup. Verify this and the chosen TPM policy before
+installing/enrolling the wallet bridge. Its physical TPM dummy-secret and
+restricted-polkit sandbox tests passed, but actual wallet and graphical
+authentication with the final integration remain unverified.
