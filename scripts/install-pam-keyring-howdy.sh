@@ -34,6 +34,18 @@ if [[ -z "$dms_config_home" && -n "${SUDO_USER:-}" ]]; then
   dms_config_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config"
 fi
 
+# Refuse before changing anything when the DMS settings cannot be switched to
+# the managed lock stack safely (e.g. DMS requires a security key as a second
+# factor, which an externally managed lock would skip). 3 = no settings yet.
+if [[ -n "$dms_config_home" ]]; then
+  dms_status=0
+  python3 "$repo_root/scripts/configure-dms-lock-pam.py" --check "$dms_config_home" || dms_status=$?
+  if [[ "$dms_status" -ne 0 && "$dms_status" -ne 3 ]]; then
+    printf 'DMS settings check failed (see above); no PAM or Howdy file was changed\n' >&2
+    exit 1
+  fi
+fi
+
 stamp="$(date +%Y%m%d-%H%M%S)"
 install_pam() {
   local name="$1"

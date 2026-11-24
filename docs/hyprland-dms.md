@@ -223,6 +223,14 @@ The installer (via `scripts/configure-dms-lock-pam.py`) edits
 `$XDG_CONFIG_HOME/dms/settings.json`, the file DMS 2.1 reads, never the legacy
 `~/.config/DankMaterialShell/settings.json`. It sets an empty `lockPamPath`,
 keeps any custom one, and warns if DMS has not created its settings yet.
+It refuses, before changing any PAM or Howdy file, when DMS requires a security
+key as a second factor (Security key mode: Second factor (AND)), in
+`settings.json` or a `dms/config.d` overlay. An externally managed lock makes
+DMS skip that step and `dankshell` has no `pam_u2f`, so the key would silently
+stop being required. Switch the key to Alternative (OR) or turn it off first if
+the managed password/face lock should replace it. DMS's own fingerprint and
+security-key (OR) unlock are not offered with the managed stack either; the
+installer warns when they are on.
 
 The guarded `howdy-lock-2.1.patch` starts one face attempt after the display
 turns back on, after a resume from sleep, or after a key press or click on the
@@ -259,6 +267,13 @@ Re-apply PAM after greeter/package changes:
 ```bash
 ~/Documents/config/scripts/install-pam-keyring-howdy.sh
 ```
+
+The installer replaces `greetd`, `sddm`, `dankshell`, `sudo` and `polkit-1`
+whatever they contain (each with a `.backup-<stamp>` copy), so it also applies
+over a hand-edited password-only `greetd` or `dankshell`. It never edits
+`system-auth`. Face unlock on the lock screen also needs the staged
+`howdy-lock-2.1.patch`; with a password-only `dankshell` that patch stays
+inactive.
 
 Howdy needs a working `python-dlib`. Rebuild it against current libraries if
 its import fails after an upgrade. The PAM installer checks the import before

@@ -24,8 +24,16 @@ at once. The repository now keeps both stacks password-first and the lock patch
 starts face authentication only after a wake or lock-screen input. Typing
 abandons a running face attempt, and the lock stack no longer accepts a blank
 Unix password (`nullok` removed). The installer now edits
-`~/.config/dms/settings.json`, which DMS 2.1 reads. The laptop still runs the
-2026-11-14 files until the installer and staging are deliberately reapplied.
+`~/.config/dms/settings.json`, which DMS 2.1 reads, and refuses when DMS
+requires a security key as a second factor.
+
+Interim live state since 2026-11-24 17:54 Berlin time (approved by Mathis): `greetd` and
+`dankshell` are password-only (the `pam_howdy` line removed), and the
+hand-added leading `auth sufficient pam_unix.so … likeauth nullok` line is gone
+from `system-auth`, which is back to the pambase order. Backups:
+`/etc/pam.d/{system-auth,greetd,dankshell}.backup-20261124-175457`. `sudo`
+still tries Howdy first (the managed file). Face unlock returns only when the
+installer and the lock patch staging are deliberately reapplied.
 
 ## Power and sleep — verified 2026-11-13
 
