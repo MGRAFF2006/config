@@ -23,8 +23,11 @@ Enrollment prompts invisibly for the existing wallet password. It seals to
 `/etc/howdy-tpm/humunkulud.cred`, root-owned mode 0600, using systemd's host key,
 the local TPM2, and PCR 7. The secret never appears in arguments or source files.
 A private runtime secret file is also supported for the agent's secret-input
-facility. Exact readback is verified before atomic replacement; old ciphertext
-and PAM files are retained under `/var/backups/howdy-kwallet-tpm/`.
+facility; it must be a regular owner-only file of the selected account and is
+read through one validated, no-follow descriptor, at most 4096 bytes. Exact
+readback is verified before atomic replacement. A failed enrollment leaves
+greetd PAM untouched and restores only a credential it already replaced; old
+ciphertext and PAM files are retained under `/var/backups/howdy-kwallet-tpm/`.
 
 This keeps the wallet encrypted. It does not make software face recognition a
 hardware-verified authenticator. With the laptop's current unencrypted disk and
@@ -56,6 +59,7 @@ Verification uses a dummy secret and temporary PAM stacks:
 sudo python scripts/check-howdy-tpm.py \
   --module packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/pam_howdy_tpm.so \
   --source packages/aur-builds/howdy-tpm/src/howdy-tpm-6483553f7f7b163b5790f9c763f6fa1e08624ddd/src/pam_howdy_tpm.c
+python scripts/check-howdy-kwallet-enroll.py
 python scripts/check-howdy-polkit.py
 sudo python scripts/check-howdy-polkit.py --sandbox --user humunkulud
 ```

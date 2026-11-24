@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STORE = Path("/etc/howdy-tpm")
 PAM = Path("/etc/pam.d/greetd")
 MODULE = Path("/usr/lib/security/pam_howdy_tpm.so")
+MAX_PASSWORD = 4096
 
 
 def command(arguments, **kwargs):
@@ -33,10 +34,51 @@ def decrypt(path, name):
                     f"--name={name}", str(path), "-"]).stdout
 
 
-def private_file(path, owner):
-    info = path.lstat()
+def check_private(info, owner, path):
     if not stat.S_ISREG(info.st_mode) or info.st_uid != owner or info.st_mode & 0o077:
         raise ValueError(f"Expected an owner-only regular file: {path}")
+
+
+def private_file(path, owner):
+    check_private(os.lstat(path), owner, path)
+
+
+def read_secret_file(path, owner):
+    """Read a user-supplied secret through one validated, bounded descriptor.
+
+    The pathname is user-controlled, so it may change between checks. The
+    pathname precheck only avoids opening devices or FIFOs; the decision uses
+    the descriptor that is actually read.
+    """
+    private_file(path, owner)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_NOCTTY | os.O_CLOEXEC)
+    try:
+        check_private(os.fstat(fd), owner, path)
+        data = b""
+        while len(data) <= MAX_PASSWORD:
+            chunk = os.read(fd, MAX_PASSWORD + 1 - len(data))
+            if not chunk:
+                break
+            data += chunk
+    finally:
+        os.close(fd)
+    if len(data) > MAX_PASSWORD:
+        raise ValueError(f"Secret file exceeds {MAX_PASSWORD} bytes")
+    return data
+
+
+def atomic_install(content, path, mode):
+    """Replace path in one rename; on failure the original stays untouched."""
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def seal(password, target, name):
@@ -54,6 +96,30 @@ def seal(password, target, name):
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def enroll(password, target, name, source, backup):
+    """Replace the credential, then greetd PAM; undo only what was replaced."""
+    backup.mkdir(parents=True, mode=0o700)
+    # Preserve the old credential and PAM before either replacement.
+    shutil.copy2(PAM, backup / PAM.name)
+    previous = None
+    if target.exists():
+        private_file(target, 0)
+        previous = target.read_bytes()
+        shutil.copy2(target, backup / target.name)
+    # seal() verifies the readback before its atomic rename; a failure there
+    # leaves both the credential and PAM untouched.
+    seal(password, target, name)
+    try:
+        atomic_install(source, PAM, 0o644)
+    except BaseException:
+        # PAM replacement is a single rename, so only the credential changed.
+        if previous is None:
+            target.unlink(missing_ok=True)
+        else:
+            atomic_install(previous, target, 0o600)
+        raise
 
 
 def main():
@@ -99,46 +165,17 @@ def main():
     else:
         STORE.mkdir(mode=0o700)
     if args.secret_file:
-        private_file(args.secret_file, account.pw_uid)
-        password = args.secret_file.read_bytes()
+        password = read_secret_file(args.secret_file, account.pw_uid)
     else:
         password = getpass.getpass("Existing KWallet/login password: ").encode()
         if not hmac.compare_digest(password, getpass.getpass("Again: ").encode()):
             raise ValueError("Passwords do not match")
-    if not password or len(password) > 4096 or b"\0" in password or b"\n" in password:
-        raise ValueError("Expected a nonempty single-line password, at most 4096 bytes")
+    if not password or len(password) > MAX_PASSWORD or b"\0" in password or b"\n" in password:
+        raise ValueError(f"Expected a nonempty single-line password, at most {MAX_PASSWORD} bytes")
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     backup = Path("/var/backups/howdy-kwallet-tpm") / stamp
-    backup.mkdir(parents=True, mode=0o700)
-    # Preserve the old credential and PAM before either replacement.
-    shutil.copy2(PAM, backup / "greetd")
-    existed = target.exists()
-    if existed:
-        private_file(target, 0)
-        shutil.copy2(target, backup / target.name)
-    changed = False
-    try:
-        seal(password, target, name)
-        changed = True
-        fd, temporary = tempfile.mkstemp(prefix=".greetd-howdy-", dir=PAM.parent)
-        try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(source)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.chmod(temporary, 0o644)
-            os.replace(temporary, PAM)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
-    except BaseException:
-        if changed:
-            if existed:
-                shutil.copy2(backup / target.name, target)
-            else:
-                target.unlink(missing_ok=True)
-        shutil.copy2(backup / "greetd", PAM)
-        raise
+    enroll(password, target, name, source, backup)
     print(f"Installed account-bound KWallet handoff; backups: {backup}")
     print("Applies at your next normal login. Manual wallet/password fallback remains available.")
 
