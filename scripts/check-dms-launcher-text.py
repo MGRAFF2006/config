@@ -8,6 +8,7 @@ components. Qt's offscreen platform cannot load DMS's PanelWindow types, so the
 fixture runs on a private rootful Xwayland inside a headless KWin. Both run in
 bubblewrap with a read-only root, throwaway HOME and /tmp, no network and a
 private D-Bus; nothing reaches the running desktop, its settings or services.
+--self-test checks the private copy and guard probes without a desktop or DMS.
 """
 
 import argparse
@@ -34,6 +35,12 @@ def load_configure():
     return module
 
 
+def running_ui_source():
+    """The running shell's extracted UI, found the same way as the configure helper."""
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+    return Path((runtime / "dms.path").read_text().strip())
+
+
 def check_launch_guard(module, staged, work):
     """The staged UI launches only while its version and every patched renderer match."""
     manifest = json.loads((staged / "smooth-sliders.json").read_text())
@@ -56,6 +63,9 @@ def check_launch_guard(module, staged, work):
     assert launch_arguments() == ["dms", "-c", str(staged), "run", "-d"]
     for name in manifest["files_sha256"]:
         target = staged / name
+        # The probe below writes; only ever into regular files of the private tree.
+        if target.is_symlink() or not target.resolve().is_relative_to(work.resolve()):
+            raise AssertionError(f"Refusing to probe {target}: it is not a private regular file")
         original = target.read_bytes()
         target.write_bytes(original + b"\n// altered\n")
         assert launch_arguments() == ["dms", "run", "-d"]
@@ -69,9 +79,10 @@ def prepare_ui(module, source, work, unpatched):
         raise SystemExit(f"{source} is a staged override, not pristine input; pass --source-dir PRISTINE_DMS_UI with --unpatched.")
     # stage() reuses an intact active stage whose extraction was cleared on
     # reboot. A private copy keeps the tamper checks away from the live stage,
-    # and the sandbox cannot see /run/user or HOME anyway.
+    # and the sandbox cannot see /run/user or HOME anyway. Symlinks are copied
+    # as their targets so no probe write can follow one out of the copy.
     private = work / "input"
-    shutil.copytree(source, private, symlinks=True)
+    shutil.copytree(source, private, symlinks=False, ignore_dangling_symlinks=True)
     if unpatched:
         return private
     staged = module.stage(private, work / "staged")
@@ -117,14 +128,62 @@ def run_isolated(work, ui, fixture_name, env_extra):
     return result.stdout + result.stderr
 
 
+def self_test():
+    """Regression without a desktop: guard probes never write outside the private copy."""
+    module = load_configure()
+    with tempfile.TemporaryDirectory(prefix="launcher-check-self-test-") as directory:
+        root = Path(directory)
+        runtime = root / "runtime"
+        runtime.mkdir()
+        (runtime / "dms.path").write_text(str(root / "stage") + "\n")
+        with patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(runtime)}):
+            assert running_ui_source() == root / "stage", "dms.path ignored XDG_RUNTIME_DIR"
+        # An intact active stage whose extraction was cleared on reboot and
+        # whose renderer is a symlink to an identical file outside the stage.
+        stage, outside = root / "stage", root / "outside"
+        outside.mkdir()
+        for path in module.SUPPORTED_FILES:
+            (stage / path.parent).mkdir(parents=True, exist_ok=True)
+            (stage / path).write_text(f"reviewed {path.name}\n")
+        (stage / "VERSION").write_text(module.SUPPORTED_VERSION + "\n")
+        linked = stage / list(module.SUPPORTED_FILES)[-1]
+        external = outside / linked.name
+        external.write_bytes(linked.read_bytes())
+        linked.unlink()
+        linked.symlink_to(external)
+        binary = root / "dms"
+        binary.write_text("reviewed binary")
+        manifest = {"version": module.SUPPORTED_VERSION, "source": str(root / "extraction-cleared-on-reboot"),
+                    "patch_sha256": module.patch_digest(), "files_sha256": module.patched_files(stage),
+                    "dms_binary_sha256": module.digest(binary)}
+        (stage / "smooth-sliders.json").write_text(json.dumps(manifest))
+        expected = external.read_bytes()
+        launch = module.launch
+
+        def watched_launch(output):
+            assert external.read_bytes() == expected, "launch-guard probe wrote through a symlink outside the private copy"
+            return launch(output)
+
+        work = root / "work"
+        work.mkdir()
+        with patch.object(module.shutil, "which", return_value=str(binary)), patch.object(module, "launch", watched_launch):
+            staged = prepare_ui(module, stage, work, unpatched=False)
+        assert staged.resolve().is_relative_to(work.resolve())
+        assert linked.is_symlink() and external.read_bytes() == expected
+    print("PASS: dms.path honors XDG_RUNTIME_DIR; guard probes stay in the private copy when the input stage links outside it")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source-dir", type=Path, help="Pristine DMS UI; defaults to the running shell's dms.path")
     parser.add_argument("--unpatched", action="store_true", help="Reproduce the failure against pristine components")
     parser.add_argument("--evidence", type=Path, help="Save the rendered fixture as a PNG")
+    parser.add_argument("--self-test", action="store_true", help="Check staging isolation only; needs no desktop or DMS")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     module = load_configure()
-    source = args.source_dir or Path((Path(f"/run/user/{os.getuid()}") / "dms.path").read_text().strip())
+    source = args.source_dir or running_ui_source()
     source = source.resolve(strict=True)
     original_hash = module.tree_digest(source)
     with tempfile.TemporaryDirectory(prefix="launcher-text-check-") as directory:

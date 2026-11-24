@@ -45,7 +45,11 @@ private Xwayland inside a headless KWin, both in bubblewrap with a read-only
 root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
 `bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
 desktop or its settings. Without `--source-dir` it stages from the running
-shell's `dms.path`, like the configure helper.
+shell's `dms.path` (under `XDG_RUNTIME_DIR`), like the configure helper. It
+first copies that input into private storage, replacing symlinks with their
+contents, so its tamper probes never write to the input or anything it links
+to. `--self-test`, part of `check-config.py`, checks that isolation without a
+desktop or DMS.
 
 Stage the reviewed change without changing any running shell:
 
