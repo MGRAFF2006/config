@@ -38,24 +38,44 @@ python3 scripts/check-dms-launcher-text.py --source-dir PRISTINE_DMS_UI --unpatc
 
 It stages the override into a temporary directory, checks that the launch
 guard falls back when any patched renderer or the version changes, and runs
-the actual `LauncherRow` with synthetic clipboard, app and dmenu entries
-(searched plain rows and explicit markup) at 620 and 320 px and 115% text
-scale. DMS's components need a real window backend, so the fixture runs on a
-private Xwayland inside a headless KWin, both in bubblewrap with a read-only
+the actual launcher components with synthetic clipboard, app and dmenu entries:
+rows at 620/320 px, and on 2.1.2 also grid tiles at 180/120 px and image
+captions; highlighted and multiline entries, long subtitles, short app labels,
+searched plain dmenu rows, explicit dmenu HTML, 115% text scale and unchanged
+payloads. DMS's components need a real window backend, so the fixture runs on
+a private Xwayland inside a headless KWin, both in bubblewrap with a read-only
 root, throwaway HOME and `/tmp`, private D-Bus and no network. It needs
 `bwrap`, `kwin_wayland`, `Xwayland` and `qs`; nothing reaches the running
-desktop or its settings. Without `--source-dir` it stages from the running
-shell's `dms.path` (under `XDG_RUNTIME_DIR`), like the configure helper. It
-first copies that input into private storage, replacing symlinks with their
-contents, so its tamper probes never write to the input or anything it links
-to. `--self-test`, part of `check-config.py`, checks that isolation without a
-desktop or DMS.
+desktop, its settings or the clipboard. Without `--source-dir` it stages from
+the running shell's `dms.path` (under `XDG_RUNTIME_DIR`), like the configure
+helper. It first copies that input into private storage, replacing symlinks
+with their contents, so its tamper probes never write to the input or anything
+it links to. `--self-test`, part of `check-config.py`, checks that isolation
+without a desktop or DMS. `--evidence /absolute/path.png` saves the rendered
+fixture. Backend clipboard copy/paste and physical keyboard use are outside
+these checks.
 
-Stage the reviewed change without changing any running shell:
+DMS 2.1.2 uses a separate reviewed patch for launcher rows, grid labels and image
+tile captions. Generated search emphasis uses native styled text so Qt honors
+line limits and ellipses; explicit `--markup-rows` dmenu HTML retains its rich
+formatting. The older 2.0.0 slider and control-center patches are not applied
+to changed 2.1 internals. The version, binary and each patched renderer must
+match before the override launches. An upgrade to another version falls back
+to built-in DMS until its source is reviewed again.
+
+Stage the reviewed change for the installed version (2.0.0 or 2.1.2) without
+changing any running shell, then check the launch guard and launcher text:
 
 ```bash
 python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
+python3 scripts/check-dms-launcher-text.py
+```
+
+On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
+with a pointer to the launcher check, since they have no slider patch:
+
+```bash
 python3 scripts/check-dms-smooth-sliders.py --ui
 ```
 
@@ -71,9 +91,9 @@ python3 scripts/check-dms-smooth-sliders.py --ui --source-dir PRISTINE_DMS_2.0.0
 
 The helper reads the running shell's `dms.path` and copies its current extracted
 UI into `~/.local/share/dms-ui-overrides`. It checks the exact reviewed DMS
-version and the exact slider/control-center source hashes before applying all
+version and the exact version-specific source hashes before applying all
 patches. The manifest records the whole source tree's hash, combined patch hash,
-all four patched-file hashes, binary hash and
+all version-specific patched-file hashes, binary hash and
 original source path. Reapplying while `dms.path` points at the override reads
 the original source, so the patch is not applied twice. No system files or
 extracted built-in files are changed. The patches live in
@@ -94,7 +114,7 @@ the new source and rerun setup before using the patch again. It never silently
 keeps a previous DMS UI active after an update. Starting the launch command does
 not stop an already running shell; activation requires a separate shell reload.
 
-The `--ui` check uses the real patched slider with a software-rendered offscreen
+On DMS 2.0.0, the `--ui` check uses the real patched slider with a software-rendered offscreen
 Qt window, isolated runtime and no display, desktop input or hardware service.
 It checks an intermediate level, final settling, bounded rapid retargeting,
 a held-key sequence with rendered progress between repeats, velocity kept
