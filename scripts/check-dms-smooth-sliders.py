@@ -20,10 +20,23 @@ def isolated_ui_source(module, source, destination):
     manifest = destination / "smooth-sliders.json"
     if manifest.exists():
         recorded = json.loads(manifest.read_text())
-        assert recorded["patch_sha256"] == module.digest(module.PATCH)
-        assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
-        (destination / module.SLIDER).chmod(0o644)
-        subprocess.run(["patch", "--reverse", "--batch", "-p1", "-d", str(destination), "-i", str(module.PATCH)], check=True, capture_output=True, text=True)
+        stale = f"{source} was staged with a different patch set and cannot be reversed with the current patches. Rerun with --source-dir PRISTINE_DMS_{module.SUPPORTED_VERSION.lstrip("v")}_UI."
+        if "files_sha256" in recorded:
+            if recorded["patch_sha256"] != module.patch_digest():
+                raise SystemExit(stale)
+            assert module.stage_intact(destination, recorded)
+            patches = module.PATCHES
+        else:
+            # Existing slider-only stages can be used as isolated test input
+            # only while the slider patch is unchanged since they were staged.
+            if recorded.get("patch_sha256") != module.digest(module.PATCH):
+                raise SystemExit(stale)
+            assert recorded["slider_sha256"] == module.digest(destination / module.SLIDER)
+            patches = (module.PATCH,)
+        for path in module.SUPPORTED_FILES:
+            (destination / path).chmod(0o644)
+        for patch_file in reversed(patches):
+            subprocess.run(["patch", "--reverse", "--batch", "-p1", "-d", str(destination), "-i", str(patch_file)], check=True, capture_output=True, text=True)
         manifest.unlink()
         assert module.tree_digest(destination) == recorded["source_sha256"]
     return destination
@@ -32,6 +45,7 @@ def isolated_ui_source(module, source, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ui", action="store_true")
+    parser.add_argument("--source-dir", type=Path, help="Pristine UI input when checking a changed patch set")
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location("smooth_sliders", Path(__file__).with_name("configure-dms-smooth-sliders.py"))
     module = importlib.util.module_from_spec(spec)
@@ -40,15 +54,23 @@ def main():
     class Launched(Exception):
         pass
 
+    # The legacy 1.5.x installer applies every top-level shell-patches/*.patch
+    # without fingerprint checks; guarded patches must stay out of its reach.
+    legacy = {path.resolve() for path in (module.ROOT / "home/.config/DankMaterialShell/shell-patches").glob("*.patch")}
+    guarded = {path.resolve() for patches in module.VERSION_PATCHES.values() for path in patches}
+    assert all(path.is_file() for path in guarded), "guarded DMS patch missing"
+    assert legacy.isdisjoint(guarded), "guarded DMS patch visible to install-dms-shell-overrides.sh"
+
     with tempfile.TemporaryDirectory(prefix="smooth-slider-check-") as directory:
         root = Path(directory)
         output, target = root / "output", root / "staged"
         output.mkdir()
-        (target / module.SLIDER.parent).mkdir(parents=True)
-        (target / module.SLIDER).write_text("reviewed slider")
+        for path in module.SUPPORTED_FILES:
+            (target / path.parent).mkdir(parents=True, exist_ok=True)
+            (target / path).write_text("reviewed UI file")
         binary = root / "dms"
         binary.write_text("reviewed binary")
-        manifest = {"version": "v2.0.0", "slider_sha256": module.digest(target / module.SLIDER), "dms_binary_sha256": module.digest(binary)}
+        manifest = {"version": "v2.0.0", "patch_sha256": module.patch_digest(), "files_sha256": module.patched_files(target), "dms_binary_sha256": module.digest(binary)}
         (target / "smooth-sliders.json").write_text(json.dumps(manifest))
 
         def launched(expected):
@@ -68,11 +90,19 @@ def main():
         launched(["dms", "run", "-d"])
         (output / "active.json").write_text(json.dumps({"target": str(target)}))
         launched(["dms", "-c", str(target), "run", "-d"])
+        (target / "smooth-sliders.json").write_text(json.dumps({**manifest, "patch_sha256": "outdated-patches"}))
+        launched(["dms", "run", "-d"])
+        (target / "smooth-sliders.json").write_text(json.dumps(manifest))
         binary.write_text("updated binary, same version")
         launched(["dms", "run", "-d"])
         binary.write_text("reviewed binary")
-        (target / module.SLIDER).write_text("modified override")
-        launched(["dms", "run", "-d"])
+        for path in module.SUPPORTED_FILES:
+            (target / path).write_text("modified override")
+            launched(["dms", "run", "-d"])
+            (target / path).write_text("reviewed UI file")
+            (target / path).unlink()
+            launched(["dms", "run", "-d"])
+            (target / path).write_text("reviewed UI file")
         (output / "active.json").write_text("{corrupt")
         launched(["dms", "run", "-d"])
         unsupported = root / "unsupported"
@@ -85,11 +115,28 @@ def main():
         else:
             raise AssertionError("Unknown version was accepted")
         assert not (root / "refused").exists()
-        print("PASS: guarded override launch, same-version binary update fallback, tamper/corrupt fallback, unknown-source refusal")
+        # A stage from an earlier patch set (current layout or the original
+        # slider-only layout) must ask for pristine input, not fail an assert.
+        for name, stale_manifest in (("stale-current", {**manifest, "patch_sha256": "outdated-patches"}), ("stale-slider-only", {"patch_sha256": "original-slider-patch", "slider_sha256": "original-slider", "source_sha256": "original-source"})):
+            stale_stage = root / name
+            shutil.copytree(target, stale_stage)
+            (stale_stage / "smooth-sliders.json").write_text(json.dumps(stale_manifest))
+            try:
+                isolated_ui_source(module, stale_stage, root / f"{name}-copy")
+            except SystemExit as error:
+                assert "--source-dir" in str(error), error
+            else:
+                raise AssertionError(f"{name} stage was accepted as UI input")
+        print("PASS: guarded override launch, same-version binary update fallback, tamper/corrupt fallback, unknown-source refusal, stale-stage --source-dir guidance")
 
         if args.ui:
             runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
-            source = Path((runtime / "dms.path").read_text().strip())
+            source = args.source_dir or Path((runtime / "dms.path").read_text().strip())
+            manifest = source / "smooth-sliders.json"
+            version = json.loads(manifest.read_text())["version"] if manifest.is_file() else (source / "VERSION").read_text().strip()
+            if version != module.SUPPORTED_VERSION:
+                raise SystemExit(f"--ui exercises the DMS {module.SUPPORTED_VERSION} slider patch; {source} is DMS {version}, which has no slider patch. "
+                                 "Check its launcher text patches with scripts/check-dms-launcher-text.py instead.")
             input_hash = module.tree_digest(source)
             pristine = isolated_ui_source(module, source, root / "pristine")
             staged = module.stage(pristine, root / "ui-staged")
@@ -125,7 +172,7 @@ def main():
             assert result.returncode == 0 and "SMOOTH_SLIDER_PASS" in logs, logs
             assert module.tree_digest(source) == input_hash, "UI check changed its input source/stage"
             print(next(line for line in logs.splitlines() if "SMOOTH_SLIDER_PASS" in line))
-            print("PASS: actual DSlider intermediate/settled progress, rapid retarget, immediate values/commits, drag and reduced-motion bypass, reapply from staged source")
+            print("PASS: actual DSlider intermediate/settled progress, rapid retarget, held-key progress/settling, immediate values/commits, drag and reduced-motion bypass, reapply from staged source")
 
 
 if __name__ == "__main__":
