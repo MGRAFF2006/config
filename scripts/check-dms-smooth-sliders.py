@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check that the guarded DMS UI override launches only while intact, else falls back."""
 
+import argparse
 import importlib.util
 import json
 from pathlib import Path
@@ -9,6 +10,9 @@ from unittest.mock import patch
 
 
 def main():
+    # No options: the rendered --ui check was retired with DMS 2.0.0. Parsing still
+    # rejects stale arguments so an old verification command fails instead of passing.
+    argparse.ArgumentParser(description=__doc__).parse_args()
     spec = importlib.util.spec_from_file_location("smooth_sliders", Path(__file__).with_name("configure-dms-smooth-sliders.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

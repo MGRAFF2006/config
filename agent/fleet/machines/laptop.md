@@ -151,10 +151,8 @@ full-panel detail pages instead of centering a second card over a dimmed panel.
 Details fit their content within the display bounds; Back returns to the grid.
 All built-in detail sections, keyboard Back/Escape and a smaller display were
 exercised in a private nested Hyprland session. Audio used its unavailable-device
-state there because that runtime has no PipeWire. Existing slider smoothing
-remains active. Reapply through `scripts/configure-dms-smooth-sliders.py --apply`;
-all patched source and staged files are fingerprinted before use. See
-[the override guide](../../../docs/dms-smooth-sliders.md).
+state there because that runtime has no PipeWire. Slider smoothing was active
+alongside it at the time.
 
 Retired 2026-11-24: the laptop runs DMS 2.1.2, which these 2.0.0 patches never
 supported, and DMS 2.0.0 is no longer a supported fallback. The detail-page and
