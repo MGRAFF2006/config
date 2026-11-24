@@ -14,9 +14,15 @@ an elaborate ticket pipeline for every task.
 | Change shell, desktop, or package configuration | `~/Documents/config` |
 | Research or write project documentation | The project or existing docs repo |
 
-T3 Code can remain your main interface. Codex is a harness it can launch;
-OpenCode is another option you already have. Choose the tool that
-works for the task and check its actual executable/version when debugging.
+T3 Code is your main interface. Claude Code, on your Claude subscription, is
+your default harness; select it as T3's default model so new threads start on
+it, and check that setting rather than assuming it. Codex, on your ChatGPT subscription, is the second cloud
+harness and the usual route to GPT reviews. The **Laptop NPU** provider runs
+Qwen3.5 locally through OpenCode for small, private or offline tasks; see
+[the NPU guide](../../docs/laptop-npu.md). Choose the tool that works for the
+task and check its actual executable/version when debugging; the
+[delegation workflow](../workflows/delegation.md#choose-providers-and-models)
+covers model choice for delegates.
 Avoid changing models or adding integrations just because another developer
 uses them. Tool capabilities are separate from reusable Markdown instructions.
 The [T3 Code repository](https://github.com/pingdotgg/t3code) documents the app.
@@ -96,9 +102,9 @@ enough for ordinary verification; external artifact uploads need authorization.
 | `prune-agent-context` | Investigate conflicting or stale agent guidance |
 | `audit-agent-failures` | Learn from specific repeated failures you provide |
 
-In Codex, mention a skill with `$name` or inspect `/skills`. Other tools have
-their own skill selectors. A skill is instructions and optional resources;
-it cannot give an agent a browser, account access, or a connector it lacks.
+In Claude Code, invoke a skill with `/name` or describe the task. In Codex,
+mention a skill with `$name` or inspect `/skills`. Other tools have their own
+skill selectors. A skill is instructions and optional resources; it cannot give an agent a browser, account access, or a connector it lacks.
 Keep new integrations tied to a real task. Your ponytail skill now lives in
 the shared kit; built-in Codex skills remain managed by Codex.
 

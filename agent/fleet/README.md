@@ -1,6 +1,7 @@
 # Mathis's AI fleet
 
-Open this folder as a project in T3 Code, OpenCode, or your agent of choice when
+Open this folder as a project in T3 Code (Claude Code by default), Codex,
+OpenCode, or your agent of choice when
 you want help with your computers or AI workflow. It gives the agent a maintained
 map of your machines and links to repeatable procedures. For application work,
 open the application's own repo instead.
@@ -22,8 +23,8 @@ files under `~/.local/share/agent-kit-backups/`. It installs no packages, change
 no services, and makes no model calls. Use it on each machine after the repo
 is fetched there through Git. Instructions and skills use that local checkout.
 New skills appear automatically through the shared directory for Codex
-and OpenCode; rerun the installer to add their Claude links. Restart sessions
-after changing context.
+and OpenCode; rerun the installer to link them for Claude Code, the default
+harness. Restart sessions after changing context.
 
 Try this first in a new Fleet thread:
 
@@ -74,17 +75,18 @@ not a permanent property. Do not assume the laptop is weaker in RAM.
 
 | Tool | Global instructions | Personal skills |
 | --- | --- | --- |
-| Codex, including when launched by T3 Code | `~/.codex/AGENTS.md` → `agent/AGENTS.md` | `~/.agents/skills` → entire shared directory |
-| OpenCode | `~/.config/opencode/AGENTS.md` → `agent/AGENTS.md` | Same shared skills |
-| Claude Code, if used | `~/.claude/CLAUDE.md` → `agent/AGENTS.md` | `~/.claude/skills/<name>` → shared skill |
+| Claude Code, the default T3 harness (Claude subscription) | `~/.claude/CLAUDE.md` → `agent/AGENTS.md` | `~/.claude/skills/<name>` → shared skill |
+| Codex, in T3 or standalone (ChatGPT subscription) | `~/.codex/AGENTS.md` → `agent/AGENTS.md` | `~/.agents/skills` → entire shared directory |
+| OpenCode, including T3's Laptop NPU provider | `~/.config/opencode/AGENTS.md` → `agent/AGENTS.md` | Same shared skills |
 
 Custom `CODEX_HOME` and `XDG_CONFIG_HOME` are respected. T3 Code is the interface;
 the selected harness determines instruction and skill discovery. Local skills
 do not automatically appear on a remote host or cloud worker; install there
 and verify in that session. Discovery paths are documented by
-[OpenAI](https://learn.chatgpt.com/docs/build-skills),
-[OpenCode](https://opencode.ai/docs/skills/), and
-[Claude Code](https://code.claude.com/docs/en/skills).
+[Claude Code](https://code.claude.com/docs/en/skills),
+[OpenAI](https://learn.chatgpt.com/docs/build-skills), and
+[OpenCode](https://opencode.ai/docs/skills/). The laptop's local models are
+described in [the NPU guide](../../docs/laptop-npu.md).
 
 `agent/AGENTS.md` is the shared root and points to task-specific workflows.
 All tools read that same root. Older `GLOBAL.md`, `PERSONAL.md`, and `LETTER.md`

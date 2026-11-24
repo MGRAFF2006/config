@@ -15,9 +15,9 @@ bash scripts/install-agent-kit.sh --check
 ```
 
 Restart the agent, open `agent/fleet`, and ask it to report which instructions
-and skills it can see. In Codex, `/skills` lists available skills; try
-`$machines` for a machine task. Check the app's actual harness instead of
-assuming every interface loads the same files.
+and skills it can see. In Claude Code, try `/machines` for a machine task; in
+Codex, `/skills` lists available skills and `$machines` invokes one. Check the
+app's actual harness instead of assuming every interface loads the same files.
 
 The installer preserves replaced files in its printed backup directory. For
 rollback, restore only the affected paths from that directory: remove the new
@@ -33,7 +33,7 @@ kit. Restore retired rule or skill links from the backup if rolling back.
    focused starting point:
 
    ```bash
-   sudo pacman -S --needed git github-cli openssh rsync tmux ripgrep tailscale syncthing openai-codex
+   sudo pacman -S --needed git github-cli openssh rsync tmux ripgrep tailscale syncthing
    sudo systemctl enable --now tailscaled.service
    sudo tailscale up
    ```
@@ -41,8 +41,8 @@ kit. Restore retired rule or skill links from the backup if rolling back.
    Follow the normal Tailscale login flow. Choose the device's real name and
    permissions; do not reuse `laptop` or `desktop` for another computer. Confirm
    current package availability with `pacman -Si` before installing if needed.
-   The baseline package lists already include most tools; `openai-codex` is the
-   package for Codex, whose executable is `codex`.
+   The baseline package lists already include most tools. Agent harnesses are
+   installed in step 4.
 
 2. Clone `MGRAFF2006/config` into `~/Documents/config` with your established
    GitHub access. Use independent Git checkouts on each machine and preserve
@@ -57,8 +57,8 @@ kit. Restore retired rule or skill links from the backup if rolling back.
    Pair only personal folders such as Documents, Downloads and media. Preview
    `python3 scripts/configure-personal-sync.py`, then use `--apply` to exclude
    software and generated caches, keeping the printed local recovery command.
-   Do not sync `~/.codex`, `~/.cursor`, `~/.config/opencode`, `~/.ssh`, or provider
-   auth/state directories. The kit installer recreates local links from Git.
+   Do not sync `~/.claude`, `~/.codex`, `~/.cursor`, `~/.config/opencode`,
+   `~/.ssh`, or provider auth/state directories. The kit installer recreates local links from Git.
 
 3. Run the focused kit installer and `--check`. It works independently of the
    device name. The full `scripts/link-home.sh laptop|desktop` is intended for
@@ -67,9 +67,15 @@ kit. Restore retired rule or skill links from the backup if rolling back.
 
 4. Install only the AI interfaces you plan to use. T3 Code is already in
    `packages/aur-common.txt`; OpenCode is in `packages/common.txt`.
-   Codex CLI alone is enough to start. Login through each tool's own flow;
-   `codex login` is the normal Codex entry point. Do not copy another device's
-   `auth.json`, session database, or private SSH keys.
+   Claude Code is the default harness: install it with
+   [Anthropic's native installer](https://code.claude.com/docs/en/setup), which
+   puts `claude` in `~/.local/bin` and updates itself, then sign in to the
+   Claude subscription with `claude auth login`. For Codex on the ChatGPT
+   subscription, install `openai-codex` (executable `codex`) with pacman and
+   run `codex login`. Login through each tool's own flow; do
+   not copy another device's credentials, `auth.json`, session database, or
+   private SSH keys. Local NPU models apply only to hardware with a supported
+   NPU; on the laptop, follow [the NPU guide](../../docs/laptop-npu.md).
 
 5. Configure remote access only if this computer should host work. Generate
    its own SSH key locally if needed, enroll the public key through your usual
@@ -83,7 +89,8 @@ kit. Restore retired rule or skill links from the backup if rolling back.
    or unavailable remote steps. Verify one small real task in a new agent
    session and inspect the resulting files/diff.
 
-The tool paths above are supported by [Codex's instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+The tool paths above are supported by [Claude Code's memory files](https://code.claude.com/docs/en/memory),
+[Codex's instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 and [Tailscale's setup guide](https://tailscale.com/docs/how-to/quickstart).
 Arch package availability should be checked on the target machine; do not use
 Debian commands from a third-party fleet installer.
@@ -103,7 +110,7 @@ For the existing desktop, first run a bounded read-only probe:
 
 ```bash
 tailscale status
-ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s; command -v tmux; command -v codex'
+ssh -o BatchMode=yes -o ConnectTimeout=5 desktop 'uname -s; command -v tmux; command -v claude codex'
 ```
 
 If that fails, report the host as unavailable and continue appropriate local
@@ -130,8 +137,11 @@ a suspended or powered-off computer execute work.
 tailscale status --json
 lscpu
 free -h
-command -v codex opencode t3code tmux
+command -v claude codex opencode t3code tmux
+claude --version
+claude auth status
 codex --version
+codex login status
 opencode --version
 systemctl --user is-active syncthing.service
 git -C ~/Documents/config status --short
