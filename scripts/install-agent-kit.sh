@@ -3,9 +3,11 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-agent_home="$(realpath -m -- "${AGENT_KIT_HOME:-$HOME}")"
-codex_root="$(realpath -m -- "${CODEX_HOME:-$agent_home/.codex}")"
-config_root="$(realpath -m -- "${XDG_CONFIG_HOME:-$agent_home/.config}")"
+# Absolute roots keep backup paths inside the backup directory, even when a root
+# is given relative to the current directory. Symlinks are kept as configured.
+agent_home="$(realpath -m -s -- "${AGENT_KIT_HOME:-$HOME}")"
+codex_root="$(realpath -m -s -- "${CODEX_HOME:-$agent_home/.codex}")"
+config_root="$(realpath -m -s -- "${XDG_CONFIG_HOME:-$agent_home/.config}")"
 mode="${1:-install}"
 case "$mode" in
   install|--dry-run|--check) ;;
@@ -15,19 +17,21 @@ esac
 
 backup_root=""
 failures=0
-ensure_local_destination() {
+guard_destination() {
   local parent
-  parent="$(realpath -m -- "$(dirname -- "$1")")"
-  case "$parent/" in
-    "$repo_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
-  esac
+  parent="$(readlink -m -- "$(dirname -- "$1")")"
+  if [[ "$parent" == "$repo_root" || "$parent" == "$repo_root/"* ]]; then
+    echo "Refusing to change a destination inside the source repo: $1" >&2
+    exit 1
+  fi
 }
 
 backup_path() {
   local dst="$1" relative
-  ensure_local_destination "$dst"
+  guard_destination "$dst"
   if [[ -z "$backup_root" ]]; then
-    ensure_local_destination "$agent_home/.local/share/agent-kit-backups/new-backup"
+    # A linked backup directory must not move local files into the source repo.
+    guard_destination "$agent_home/.local/share/agent-kit-backups/new-backup"
     mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
     backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
@@ -51,7 +55,7 @@ link_path() {
       failures=$((failures + 1)) ;;
     --dry-run) echo "LINK $dst -> $src (back up existing destination)" ;;
     install)
-      ensure_local_destination "$dst"
+      guard_destination "$dst"
       mkdir -p -- "$(dirname -- "$dst")"
       if [[ -e "$dst" || -L "$dst" ]]; then backup_path "$dst"; fi
       ln -s -- "$src" "$dst"
@@ -59,10 +63,22 @@ link_path() {
   esac
 }
 
+# Older setups linked these whole roots. Localize them before touching children;
+# otherwise a child path can be the shared source directory itself.
+for skill_root in "$codex_root/skills" "$agent_home/.claude/skills"; do
+  if [[ -L "$skill_root" && "$skill_root" -ef "$repo_root/agent/skills" ]]; then
+    case "$mode" in
+      install) backup_path "$skill_root"; mkdir -p -- "$skill_root" ;;
+      --dry-run) echo "LOCALIZE skill root: $skill_root (back up existing link)" ;;
+      --check) echo "SHARED skill-root link needs migration: $skill_root"; failures=$((failures + 1)) ;;
+    esac
+  fi
+done
+
 for target in "$agent_home/AGENTS.md" "$codex_root/AGENTS.md" \
   "$config_root/opencode/AGENTS.md" "$agent_home/.claude/CLAUDE.md" \
   "$agent_home/.claude/AGENTS.md"; do
-  link_path "$repo_root/agent/GLOBAL.md" "$target"
+  link_path "$repo_root/agent/AGENTS.md" "$target"
 done
 
 # Linking the whole directory makes future shared skills available after sync.
@@ -74,6 +90,8 @@ for skill in "$repo_root"/agent/skills/*; do
   link_path "$skill" "$agent_home/.claude/skills/$name"
   # Retire only duplicate kit links, or a byte-identical old Codex skill copy.
   for legacy in "$agent_home/.cursor/skills/$name" "$codex_root/skills/$name"; do
+    # An ancestor may alias the shared tree; this is the source, not a copy.
+    [[ ! -L "$legacy" && "$legacy" -ef "$skill" ]] && continue
     if [[ -L "$legacy" && "$(readlink -- "$legacy")" == "$skill" ]] || \
       { [[ -d "$legacy" && ! -L "$legacy" ]] && diff -qr -- "$legacy" "$skill" >/dev/null; }; then
       case "$mode" in
@@ -88,7 +106,7 @@ done
 # Retire this kit's Cursor rules now that Cursor is no longer used.
 for legacy in "$agent_home/.cursor/rules/agent-kit.mdc" \
   "$agent_home/.cursor/rules/letter.mdc" "$agent_home/.cursor/rules/personal-machines.mdc"; do
-  if [[ -L "$legacy" && "$(readlink -f -- "$legacy")" == "$repo_root/agent/GLOBAL.md" ]]; then
+  if [[ -L "$legacy" && "$(readlink -f -- "$legacy")" == "$repo_root/agent/AGENTS.md" ]]; then
     case "$mode" in
       install) backup_path "$legacy" ;;
       --dry-run) echo "RETIRE duplicate rule: $legacy (back up)" ;;

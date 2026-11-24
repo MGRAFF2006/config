@@ -1,23 +1,22 @@
 ---
 name: write-agents-md
-description: >-
-  Author or slim AGENTS.md or the global letter Theo-style. Use when creating
-  AGENTS.md, rewriting agent.md/CLAUDE.md, writing a letter to the agent, or
-  adding a glossary.
+description: "Use when authoring or editing global agent instructions, project AGENTS.md or CLAUDE.md, or a project glossary."
 ---
 
-# Write AGENTS.md / letter (Theo-style)
+# Write agent instructions (Theo-style)
 
 ## Pick the layer
 
-- **Global instructions and letter** → `~/Documents/config/agent/GLOBAL.md`.
+- **Root instructions** → `~/Documents/config/agent/AGENTS.md`.
   All tool instruction links read the same file; there is no rendered copy.
-  Preserve the user's stated preferences when editing the letter section.
+  Keep preferences, permissions, and ownership principles in the root; put
+  detailed procedures in linked `agent/workflows/` files. Preserve the user's
+  stated preferences and make supporting guidance reachable from the root.
 - **Project AGENTS.md** → repo root. How to *change* this codebase; not a README.
 
 Theo: the value is the **process**, not copy-pasting his private letter.
 
-## Letter checklist
+## Root checklist
 
 1. Introduce the human in first person; address the agent as "you".
 2. State building taste (simple systems, YAGNI) so the model tone-matches.

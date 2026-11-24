@@ -23,9 +23,11 @@ The [T3 Code repository](https://github.com/pingdotgg/t3code) documents the app.
 
 ## Start a fresh task
 
-Use one thread per coherent outcome. Give the agent the problem and the
-important limits, then let it inspect manifests, project instructions, and
-existing implementations. For example:
+Use one owning thread per coherent outcome. It can delegate immediate
+subproblems to children, which can investigate, implement, or delegate further.
+Follow the [delegation workflow](../workflows/delegation.md).
+Give the agent the problem and important limits, then let it inspect manifests,
+project instructions, and existing implementations. For example:
 
 > The JCH scoreboard loses its selected match after refresh. Find the cause,
 > fix it using the existing stack, and show me how you verified the behavior.
@@ -73,11 +75,14 @@ it. For a system change, verify the resulting command/service/link rather
 than accepting “configured” as proof. For research, require sources and a
 clear separation between facts, unknowns, and proposed choices.
 
-Your established rules still apply: no commits, pushes, PRs, merges, destructive
-changes, or remote power actions beyond what you authorize. A more autonomous
-workflow does not require adopting Theo's personal merge permissions. Share
-artifacts externally only when requested; a local screenshot or recording is
-enough for ordinary verification.
+Follow the [root permissions](../AGENTS.md#permissions-and-boundaries) and
+[development workflow](../workflows/development.md): an
+implementation request authorizes branches, worktrees, commits, pushes, PRs, and
+related reviews within scope. Record consequential findings, decisions, and
+review resolutions in GitHub. Merges retain the independent final review and
+required-check conditions in the letter. Destructive changes and remote power
+actions still need explicit authorization. A local screenshot or recording is
+enough for ordinary verification; external artifact uploads need authorization.
 
 ## Use skills when they help
 
@@ -101,10 +106,10 @@ the shared kit; built-in Codex skills remain managed by Codex.
 
 Your recent hung thread demonstrates the practical boundary: a laptop-hosted
 app or job may stop responding when the laptop suspends. tmux helps with
-terminal disconnects, not sleep. The desktop must be online and awake to host
-work that continues while the laptop is closed.
+terminal disconnects, not sleep. Use a verified awake host for work that must continue while the laptop is
+closed; choose its role from the [fleet index](README.md#computers).
 
-When remote hosting becomes available, verify one small job there first. Keep
+Verify one small remote job first. Keep
 builds/servers in named remote tmux sessions, then connect your interface using
 its supported remote workflow. Persistent GUI agent threads depend on that
 app's server and reconnection behavior; running an unrelated tmux session does
@@ -128,3 +133,10 @@ Review stale guidance after significant tool or model changes. OpenAI's
 also recommends keeping reusable instructions focused and avoiding mandatory
 doc-reading routines for unrelated tasks. Preserve your explicit preferences
 unless you choose to change them.
+
+## Dated task handoffs
+
+The [2026-10-16 laptop portfolio handoff](handoffs/2026-10-16-laptop-portfolio.md)
+contains that campaign's owners, publication holds, local-PR receipts and
+remaining gates. Read it when resuming that task. Its historical observations
+are not current service or PR state; moving the record does not release a hold.

@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -13,6 +16,7 @@ import time
 from typing import Any
 
 
+NET_PATH = Path("/sys/class/net")
 SAMPLE_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "dms-network-sample.json"
 
 
@@ -53,8 +57,10 @@ def split_escaped(value: str, separator: str = ":") -> list[str]:
     return parts
 
 
-def active_device() -> tuple[str, str]:
-    output, _ = run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"])
+def active_device(preferred_device: str = "") -> tuple[str, str] | None:
+    output, code = run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"])
+    if code != 0:
+        return None
     candidates: list[tuple[str, str]] = []
     for line in output.splitlines():
         fields = split_escaped(line)
@@ -62,21 +68,45 @@ def active_device() -> tuple[str, str]:
             continue
         if fields[1] in ("wifi", "ethernet"):
             candidates.append((fields[0], fields[1]))
-    candidates.sort(key=lambda item: 0 if item[1] == "wifi" else 1)
-    return candidates[0] if candidates else ("", "")
+    if preferred_device:
+        for candidate in candidates:
+            if candidate[0] == preferred_device:
+                return candidate
+        raise ValueError("Requested interface " + preferred_device +
+                         " is not a connected Wi-Fi or Ethernet device. Refresh network status.")
+    if not candidates:
+        return ("", "")
+    # Prefer the physical interface carrying a default route, including IPv6-only links.
+    route_metrics: dict[str, int] = {}
+    for family in ("-4", "-6"):
+        routes, route_code = run(["ip", "-j", family, "route", "show", "default"])
+        if route_code != 0:
+            continue
+        try:
+            for route in json.loads(routes):
+                device = route.get("dev", "")
+                metric = int(route.get("metric", 0))
+                route_metrics[device] = min(metric, route_metrics.get(device, metric))
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+            continue
+    candidates.sort(key=lambda item: (item[0] not in route_metrics,
+                                      route_metrics.get(item[0], 0), item[1] != "ethernet"))
+    return candidates[0]
 
 
-def device_details(device: str) -> dict[str, list[str]]:
-    fields = "GENERAL.CONNECTION,GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS"
-    output, _ = run(["nmcli", "-t", "-f", fields, "device", "show", device])
+def device_details(device: str) -> tuple[dict[str, list[str]], bool]:
+    fields = "GENERAL.CONNECTION,GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.ADDRESS,IP6.GATEWAY,IP6.DNS"
+    output, code = run(["nmcli", "-t", "-f", fields, "device", "show", device])
     result: dict[str, list[str]] = {}
     for line in output.splitlines():
         key_value = split_escaped(line)
         if len(key_value) < 2:
             continue
         key = re.sub(r"\[\d+\]$", "", key_value[0])
-        result.setdefault(key, []).append(":".join(key_value[1:]))
-    return result
+        value = ":".join(key_value[1:])
+        if value and value != "--":
+            result.setdefault(key, []).append(value)
+    return result, code == 0
 
 
 def first(details: dict[str, list[str]], key: str) -> str:
@@ -105,34 +135,27 @@ def wifi_details(device: str) -> dict[str, Any]:
         if len(fields) >= 5 and fields[0] == "*":
             return {
                 "ssid": fields[1],
-                "signal": int(fields[2] or 0),
+                "signal": int(fields[2]) if fields[2].isdigit() else 0,
                 "rate": fields[3],
                 "security": fields[4],
             }
     return {"ssid": "", "signal": 0, "rate": "", "security": ""}
 
 
-def wifi_password(connection: str) -> str:
-    if not connection:
-        return ""
-    output, code = run(
-        [
-            "nmcli",
-            "--show-secrets",
-            "-g",
-            "802-11-wireless-security.psk",
-            "connection",
-            "show",
-            connection,
-        ]
-    )
-    return output if code == 0 else ""
+def connectivity() -> str:
+    # This reads NetworkManager's cached assessment; it never starts a connectivity check.
+    output, code = run(["nmcli", "-g", "CONNECTIVITY", "general"])
+    state = output.lower()
+    return state if code == 0 and state in ("full", "limited", "portal", "none") else "unknown"
 
 
-def ping_ms(host: str) -> float | None:
+def ping_ms(host: str, interface: str = "") -> float | None:
     if not host:
         return None
-    output, code = run(["/usr/bin/ping", "-n", "-c", "1", "-W", "1", host], timeout=2)
+    command = ["/usr/bin/ping", "-n", "-c", "1", "-W", "1"]
+    if interface:
+        command.extend(["-I", interface])
+    output, code = run([*command, host], timeout=2)
     if code != 0:
         return None
     match = re.search(r"time[=<]([\d.]+)\s*ms", output)
@@ -141,7 +164,7 @@ def ping_ms(host: str) -> float | None:
 
 def dns_ms() -> float | None:
     started = time.monotonic()
-    _, code = run(["resolvectl", "query", "--legend=no", "--type=A", "example.com"], timeout=2)
+    _, code = run(["resolvectl", "query", "--legend=no", "example.com"], timeout=2)
     if code != 0:
         return None
     return round((time.monotonic() - started) * 1000, 1)
@@ -150,8 +173,8 @@ def dns_ms() -> float | None:
 def network_rates(device: str) -> tuple[float, float]:
     now = time.monotonic()
     try:
-        rx = int((Path("/sys/class/net") / device / "statistics/rx_bytes").read_text())
-        tx = int((Path("/sys/class/net") / device / "statistics/tx_bytes").read_text())
+        rx = int((NET_PATH / device / "statistics/rx_bytes").read_text())
+        tx = int((NET_PATH / device / "statistics/tx_bytes").read_text())
     except (OSError, ValueError):
         return (0.0, 0.0)
 
@@ -163,11 +186,16 @@ def network_rates(device: str) -> tuple[float, float]:
     except (OSError, json.JSONDecodeError):
         pass
 
-    elapsed = now - float(previous.get("time", now))
-    if previous.get("device") == device and 0 < elapsed < 1:
-        return (float(previous.get("down", 0)), float(previous.get("up", 0)))
-    down = max(0.0, (rx - int(previous.get("rx", rx))) / elapsed) if elapsed > 0 else 0.0
-    up = max(0.0, (tx - int(previous.get("tx", tx))) / elapsed) if elapsed > 0 else 0.0
+    down, up = 0.0, 0.0
+    try:
+        elapsed = now - float(previous["time"])
+        old_rx, old_tx = int(previous["rx"]), int(previous["tx"])
+        if (previous.get("device") == device and math.isfinite(elapsed)
+                and 0 < elapsed <= 30 and 0 <= old_rx <= rx and 0 <= old_tx <= tx):
+            down = (rx - old_rx) / elapsed
+            up = (tx - old_tx) / elapsed
+    except (KeyError, TypeError, ValueError, OverflowError):
+        pass
 
     SAMPLE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=SAMPLE_PATH.name + ".", dir=SAMPLE_PATH.parent)
@@ -183,37 +211,62 @@ def network_rates(device: str) -> tuple[float, float]:
     return (down, up)
 
 
-def main() -> int:
-    device, connection_type = active_device()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--interface", default="", help="Sample this connected Wi-Fi or Ethernet interface")
+    args = parser.parse_args(argv)
+    state = connectivity()
+    try:
+        active = active_device(args.interface)
+    except ValueError as error:
+        print(json.dumps({"connected": None, "connectivity": state, "error": str(error)}, separators=(",", ":")))
+        return 0
+    if active is None:
+        print(json.dumps({"connected": None, "connectivity": state,
+                          "error": "Could not read NetworkManager device status. Retry or check NetworkManager."},
+                         separators=(",", ":")))
+        return 0
+    device, connection_type = active
     if not device:
-        print(json.dumps({"connected": False}, separators=(",", ":")))
+        print(json.dumps({"connected": False, "connectivity": state}, separators=(",", ":")))
         return 0
 
-    details = device_details(device)
+    details, details_ok = device_details(device)
     connection = first(details, "GENERAL.CONNECTION")
     wifi = wifi_details(device) if connection_type == "wifi" else {}
-    gateway = first(details, "IP4.GATEWAY")
+    gateway = first(details, "IP4.GATEWAY") or first(details, "IP6.GATEWAY")
+    probe_gateway = gateway
+    if ":" in gateway and "%" not in gateway:
+        probe_gateway += "%" + device
+    internet_target = "1.1.1.1" if details.get("IP4.ADDRESS") else "2606:4700:4700::1111"
+    with ThreadPoolExecutor(max_workers=3) as probes:
+        gateway_probe = probes.submit(ping_ms, probe_gateway, device)
+        internet_probe = probes.submit(ping_ms, internet_target)
+        dns_probe = probes.submit(dns_ms)
+        gateway_ping, internet_ping, dns_lookup = gateway_probe.result(), internet_probe.result(), dns_probe.result()
     down, up = network_rates(device)
     result = {
         "connected": True,
+        "connectivity": state,
         "type": connection_type,
         "connection": connection,
         "ssid": wifi.get("ssid", "") or connection,
-        "password": wifi_password(connection) if connection_type == "wifi" else "",
         "signal": wifi.get("signal", 0),
         "linkRate": wifi.get("rate", ""),
         "security": wifi.get("security", ""),
         "interface": device,
         "mac": first(details, "GENERAL.HWADDR"),
-        "addresses": details.get("IP4.ADDRESS", []),
+        "addresses": details.get("IP4.ADDRESS", []) + details.get("IP6.ADDRESS", []),
         "gateway": gateway,
-        "dnsServers": details.get("IP4.DNS", []),
-        "gatewayPingMs": ping_ms(gateway),
-        "internetPingMs": ping_ms("1.1.1.1"),
-        "dnsLookupMs": dns_ms(),
+        "dnsServers": details.get("IP4.DNS", []) + details.get("IP6.DNS", []),
+        "gatewayPingMs": gateway_ping,
+        "internetPingMs": internet_ping,
+        "dnsLookupMs": dns_lookup,
         "downloadBytesPerSecond": round(down),
         "uploadBytesPerSecond": round(up),
     }
+    if not details_ok:
+        result["error"] = "Could not read NetworkManager details for " + device + ". Retry or check NetworkManager."
     print(json.dumps(result, separators=(",", ":")))
     return 0
 

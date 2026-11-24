@@ -1,0 +1,13 @@
+[Unit]
+Description=T3 worktrees on development storage
+Requires=srv-development.mount
+After=srv-development.mount
+
+[Mount]
+What=/srv/development/worktrees
+Where=/home/humunkulud/.t3/worktrees
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

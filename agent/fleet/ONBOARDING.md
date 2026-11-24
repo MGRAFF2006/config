@@ -44,20 +44,21 @@ kit. Restore retired rule or skill links from the backup if rolling back.
    The baseline package lists already include most tools; `openai-codex` is the
    package for Codex, whose executable is `codex`.
 
-2. Get `~/Documents/config` through the existing Syncthing share or clone
-   `MGRAFF2006/config` with your established GitHub access. Use one checkout as
-   the source of truth; do not pull Git changes concurrently with Syncthing
-   rewriting that checkout. Syncthing service/configuration is device-local.
-   Enable its user service when ready:
+2. Clone `MGRAFF2006/config` into `~/Documents/config` with your established
+   GitHub access. Use independent Git checkouts on each machine and preserve
+   local edits when fetching and integrating updates. Software and the agent
+   kit are Git-only; Syncthing service/configuration remains device-local.
+   Enable its user service when ready for personal files:
 
    ```bash
    systemctl --user enable --now syncthing.service
    ```
 
-   Configure the folder/device pairing in Syncthing. If you also sync the whole
-   Documents folder, follow the config repo README's nested-folder exclusions.
+   Pair only personal folders such as Documents, Downloads and media. Preview
+   `python3 scripts/configure-personal-sync.py`, then use `--apply` to exclude
+   software and generated caches, keeping the printed local recovery command.
    Do not sync `~/.codex`, `~/.cursor`, `~/.config/opencode`, `~/.ssh`, or provider
-   auth/state directories. The kit syncs source files and recreates local links.
+   auth/state directories. The kit installer recreates local links from Git.
 
 3. Run the focused kit installer and `--check`. It works independently of the
    device name. The full `scripts/link-home.sh laptop|desktop` is intended for

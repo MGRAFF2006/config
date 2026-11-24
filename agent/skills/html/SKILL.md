@@ -1,6 +1,6 @@
 ---
 name: html
-description: Create or redesign responsive, self-contained HTML files for plans, reports, explainers, presentations, mockups, diagrams, and small tools. Use when a standalone HTML artifact is the deliverable; do not use for ordinary application implementation.
+description: "Create or redesign responsive, self-contained HTML files for plans, reports, explainers, presentations, mockups, diagrams, and small tools. Use when a standalone HTML artifact is the deliverable; do not use for ordinary application implementation."
 ---
 
 # HTML
