@@ -1,5 +1,48 @@
 # Hetzner development VM
 
+## T3 disconnect recovery and agent memory budget — verified 2026-11-13
+
+The VM answered private pings but SSH and the guest agent timed out. It drove
+roughly 500 MiB/s of SSD reads; T3 recorded heavy major page faults and a
+41-second event-loop stall. Journald reported memory pressure before the stall.
+The graceful reboot failed; a user-authorized reset restored SSH, the guest
+agent and the linked T3 relay. Today's exact offending process was not captured.
+Earlier logs also show global OOM kills, including the T3 server.
+
+T3's automatic agent limit allowed about 27 GiB of a 32 GiB VM, without accounting
+for the separate Windows container's 8 GiB limit, mail or the server. The managed
+`app-t3code.slice` parent now has a 14 GiB soft threshold and 16 GiB hard limit.
+This contains agent workloads even when T3 rewrites its child slice's limits;
+T3's connection service and mail run outside that parent. Under excess load,
+agent jobs can be throttled or killed rather than consuming the entire VM.
+Docker containers are outside this budget and still require their own limits.
+
+Apply with `bash scripts/setup-homelab-t3-memory.sh` from this config checkout;
+verify with `bash scripts/setup-homelab-t3-memory.sh --check`. Normal homelab
+setup includes it. Applying the limit reloads the user manager without restarting
+T3. Recovery: remove `~/.config/systemd/user/app-t3code.slice.d/50-homelab-memory.conf`
+and run `systemctl --user daemon-reload`. The original full workload was not
+replayed, so this is verified containment rather than proof of every disconnect's
+cause.
+
+## Windows browser desktop — provisioned 2026-11-04
+
+Windows 11 Pro and Office LTSC Professional Plus 2024 run in Docker container
+`windows-vm`, using nested KVM.
+Full graphical console: <https://homelab-dev.tail03caec.ts.net/windows/>, private
+through Tailscale; the existing T3 route at `/` is preserved. Windows account
+`Mathis` has a generated password saved in Bitwarden as **Homelab Windows VM**.
+The console opens the automatically signed-in Windows session.
+
+Configuration and operating commands: [Windows VM](../../../headless/windows-vm/README.md).
+The 96 GiB growable Windows disk lives in `/srv/development/windows-vm` on
+the development data disk. Four CPU cores, 6 GiB guest RAM,
+8 GiB container limit, no GPU or audio. Only the
+console's loopback port 8006 is published; no public or direct RDP/VNC endpoint.
+The first evaluation disk is preserved separately. Provisioning installs the
+private QEMU Guest Agent, restores normal UAC/update/SMB settings, and checks
+Windows and Office activation results; see the operating guide for details.
+
 ## Worktree storage and T3 recovery — 2026-11-03
 
 The 172 GiB SSD root disk filled, and `t3code.service` failed. Removing the
