@@ -4,10 +4,15 @@ This is the [unofficial Linux port](https://github.com/wispr-flow-linux/wispr-fl
 repackaged through the upstream AUR `wispr-flow-appimage` recipe. The proprietary
 application still uses Wispr's account and cloud service.
 
-Local package release 7 keeps the upstream download and SHA-256 check and repairs:
+Local package release 8 keeps the upstream download and SHA-256 check and repairs:
 
 - Root-only directories: installed directories use mode 0755.
 - The bundled Electron sandbox: `chrome-sandbox` is root-owned mode 04755.
+  The upstream AppRun uses the launcher library's `appimage` mode, which adds
+  `--no-sandbox` because a FUSE mount drops the setuid bit. The extracted,
+  installed package does not have that limitation, so `repair-overlays.py`
+  switches AppRun to the library's installed-package mode (`rpm`, the mode
+  documented for a setuid-root `chrome-sandbox`), and Chromium keeps its sandbox.
 - Clipped popovers: the port's `WISPR_LINUX_STATUS_COMPACT` patch forces a
   200×110 viewport, while the calendar hover card alone is 400×154. The guarded
   `repair-overlays.py` disables that compact branch, restoring the app's normal
@@ -20,7 +25,10 @@ Local package release 7 keeps the upstream download and SHA-256 check and repair
   applies only the X11 **input** region; the painted/bounding region stays intact.
   Changing the painted shape caused flickering under Hyprland and was rolled
   back. Empty reports produce an empty input region rather than exposing the
-  whole canvas. Python and python-xlib are declared runtime dependencies.
+  whole canvas. If the helper exits before applying a queued region, the shim
+  clears the shape controller's cache so the next report, even an identical
+  one, is sent again (`node test-input-region.cjs` checks this). Python and
+  python-xlib are declared runtime dependencies.
 - Hyprland window selection: in 0.57.0, floating XWayland windows are picked by
   their whole rectangle, even outside their input shape. An X11-only underlay
   test missed this; clicks to native Wayland windows were still blocked. The
@@ -34,7 +42,9 @@ Local package release 7 keeps the upstream download and SHA-256 check and repair
   the Wayland helper path. `WISPR_USE_WAYLAND=1` or `WISPR_USE_X11=0` explicitly
   overrides this default.
 
-Build as the normal user:
+`scripts/install.sh laptop` does not install Wispr: the stock AUR recipe lacks
+these repairs and the compositor plugin. Build this recipe instead, as the
+normal user:
 
 ```sh
 cd ~/Documents/config/packages/aur-builds/wispr-flow-appimage

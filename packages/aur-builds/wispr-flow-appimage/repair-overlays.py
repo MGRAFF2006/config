@@ -46,7 +46,7 @@ def main_bundle(original):
     module = replace_once(module, b'e&&!e.isDestroyed()&&($=(0,g.Bi)(e))', b'e&&!e.isDestroyed()&&(M.H8||!$X?($=(0,g.Bi)(e)):(e.setIgnoreMouseEvents(!1),Q.lastShapeKey=null,Q.applyCurrentShape()))')
     patched = patched[:start] + module + patched[end:]
     patched = replace_once(patched, b'this.enabled?this.applyShape(this.latestRects):', b'this.enabled?this.applyShape(this.latestRects.length?this.latestRects:o):')
-    patched = replace_once(patched, b't.setShape(e),this.lastShapeKey=n', b'("linux"===process.platform&&"x11"===r.app.commandLine.getSwitchValue("ozone-platform")?require(require("path").join(process.resourcesPath,"Release","wispr-input-region.cjs"))(t,e):t.setShape(e)),this.lastShapeKey=n')
+    patched = replace_once(patched, b't.setShape(e),this.lastShapeKey=n', b'("linux"===process.platform&&"x11"===r.app.commandLine.getSwitchValue("ozone-platform")?require(require("path").join(process.resourcesPath,"Release","wispr-input-region.cjs"))(t,e,this):t.setShape(e)),this.lastShapeKey=n')
     prefix_end = patched.index(b';(function () {')
     prefix = patched[:prefix_end]
     prefix = b''.join(line for line in prefix.splitlines(keepends=True) if not line.startswith(b'//'))
@@ -119,5 +119,12 @@ if [[ "${wispr_desktop,,}" == *hyprland* && "${WISPR_USE_WAYLAND:-}" != "1" ]]; 
 fi
 
 '''
-    launcher.write_text(text.replace(anchor,backend+anchor))
-    print('Defaulted Hyprland to XWayland while preserving explicit overrides')
+    text=text.replace(anchor,backend+anchor)
+    # 'appimage' mode adds --no-sandbox because a FUSE mount drops setuid. This
+    # package installs root-owned chrome-sandbox 04755, so use the launcher's
+    # installed-package mode and keep Chromium's sandbox enabled.
+    mode="build_electron_args 'appimage'\n"
+    assert text.count(mode)==1,'Unexpected launcher mode; refusing to modify'
+    text=text.replace(mode,"build_electron_args 'rpm' # installed package: setuid chrome-sandbox, no --no-sandbox\n")
+    launcher.write_text(text)
+    print('Defaulted Hyprland to XWayland while preserving explicit overrides; Chromium sandbox enabled')

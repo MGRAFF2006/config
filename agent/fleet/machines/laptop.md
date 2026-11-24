@@ -40,6 +40,9 @@ geometry checks. It is loaded in the live session with no config errors, and
 package verification found no altered files. User confirmation of this final
 click-through change is pending. Rebuild the local package after compositor or
 core-library upgrades; mismatched ABIs are refused.
+Recipe release 8 (not installed yet) also keeps Chromium's sandbox enabled
+instead of launching with `--no-sandbox`, and resends an input region lost to a
+helper exit.
 See the [repair and verification details](../../../packages/aur-builds/wispr-flow-appimage/README.md).
 
 The native **Show Flow Bar at all times** preference is off at Mathis's request:
