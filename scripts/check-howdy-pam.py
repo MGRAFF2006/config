@@ -55,6 +55,7 @@ spec = importlib.util.spec_from_file_location("configure_dms_lock_pam", script)
 editor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(editor)
 editor.POLICY_PATHS = tuple(Path(path) for path in setup["policies"])
+editor.PAM_DIRS = tuple(Path(path) for path in setup["pam_dirs"])
 sys.argv = [script, *args]
 sys.exit(editor.main())
 """
@@ -87,13 +88,14 @@ def write_fixture(path, contents):
         path.write_text(contents if isinstance(contents, str) else json.dumps(contents), encoding="utf-8")
 
 
-def invoke_editor(config, policy_paths=(), processes=(), check=False, env=None, limit=False):
+def invoke_editor(config, policy_paths=(), processes=(), check=False, env=None, limit=False, pam_dirs=()):
     """The editor on CONFIG_HOME=config in a private PID namespace. policy_paths
     replace its cli-policy.json paths; see run_editor for the rest."""
     environment = {key: value for key, value in os.environ.items() if key != "DMS_POLICY_LOCK_SETTINGS"}
     shells = [(name, mode, {"PATH": environment["PATH"], **({} if value is None else {"DMS_POLICY_LOCK_SETTINGS": value})})
               for name, mode, value in processes]
-    setup = json.dumps({"policies": [str(path) for path in policy_paths], "processes": shells, "fake_shell": FAKE_SHELL})
+    setup = json.dumps({"policies": [str(path) for path in policy_paths], "processes": shells,
+                        "fake_shell": FAKE_SHELL, "pam_dirs": [str(path) for path in pam_dirs]})
     command = private_pids([sys.executable, "-I", "-c", EDITOR, str(EDITOR_SCRIPT), setup,
                             *(["--check"] if check else []), str(config)])
     if env is not None:
@@ -103,14 +105,19 @@ def invoke_editor(config, policy_paths=(), processes=(), check=False, env=None, 
 
 
 def run_editor(config, before, legacy="absent", overlays=(), check=False, policy=(None, None), env=None,
-               processes=(), limit=False):
+               processes=(), limit=False, pam=None):
     """before: settings.json (a dict gets "other": 1 added; None means no file).
     legacy: "absent", "separate" (its own file) or "symlink" (laptop layout).
     overlays: (name, contents) in dms/config.d. policy: (packaged, administrator)
     cli-policy.json contents. env: DMS_POLICY_LOCK_SETTINGS for the editor.
     processes: (name, "readable"|"private", DMS_POLICY_LOCK_SETTINGS or None)
-    running next to it as the same user."""
+    running next to it as the same user. pam: {name: text} as the editor's
+    /etc/pam.d (an empty one by default)."""
     shutil.rmtree(config.parent / "policy", ignore_errors=True)
+    shutil.rmtree(config.parent / "pam", ignore_errors=True)
+    (config.parent / "pam").mkdir()
+    for name, text in (pam or {}).items():
+        (config.parent / "pam" / name).write_text(text)
     shutil.rmtree(config, ignore_errors=True)
     canonical = config / "dms/settings.json"
     if before is not None:
@@ -130,7 +137,7 @@ def run_editor(config, before, legacy="absent", overlays=(), check=False, policy
             path.parent.mkdir(exist_ok=True)
             write_fixture(path, contents)
     original = canonical.read_bytes() if canonical.is_file() else None
-    result = invoke_editor(config, policy_paths, processes, check, env, limit)
+    result = invoke_editor(config, policy_paths, processes, check, env, limit, (config.parent / "pam",))
     if legacy == "separate":
         assert (config / "DankMaterialShell/settings.json").read_text() == LEGACY_TEXT, "edited the legacy file"
     return result, canonical, original
@@ -177,8 +184,52 @@ def regression_failure_after_rename(config):
     assert "WAS changed" in result.stderr and "unchanged" not in result.stderr, result.stderr
 
 
+# Each of these let b03ab01 drop a required security key or damage settings.
+def regression_pam_security_key(config):
+    """An empty lockPamPath makes DMS use login; a key there (or in a stack this
+    replaces, or anything they include) would be dropped by the managed stacks."""
+    key_stack = "auth required pam_unix.so\nauth required pam_u2f.so cue\n"
+    for before, pam, needle in (
+        ({"lockPamPath": ""}, {"login": "auth include system-local-login\n", "system-local-login": key_stack},
+         "system-local-login:2"),
+        ({}, {"dankshell": key_stack}, "dankshell:2"),
+        ({"lockPamPath": "/etc/pam.d/custom-lock"}, {"greetd": "-auth [success=1 default=ignore] pam_u2f.so\n"}, "greetd:1"),
+    ):
+        case = run_editor(config, before, pam=pam)
+        assert_unchanged(("PAM key", pam), *case, 2, needle)
+    # A smartcard module in a stack nothing here uses does not count.
+    result, _, _ = run_editor(config, {}, pam={"kde-smartcard": "auth required pam_pkcs11.so\n"})
+    assert result.returncode == 0, result.stderr
+
+
+def regression_out_of_range_number(config):
+    """1e400 parses as inf and was written back as Infinity, which is not JSON."""
+    case = run_editor(config, '{"lockPamPath": "", "scale": 1e400}')
+    assert_unchanged("1e400", *case, 1, "out of range")
+
+
+def regression_concurrent_save(config):
+    """A DMS save between reading and replacing settings.json must not be undone."""
+    spec = importlib.util.spec_from_file_location("configure_dms_lock_pam", EDITOR_SCRIPT)
+    editor = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(editor)
+    run_editor(config, {})  # creates the fixture
+    canonical = config / "dms/settings.json"
+    original = canonical.read_bytes()
+    canonical.write_text('{"theme": "saved by DMS meanwhile"}\n')
+    try:
+        editor.write_atomically(canonical, {"lockPamPath": MANAGED_LOCK}, original)
+    except editor.WriteError as error:
+        assert not error.replaced and "changed while this ran" in str(error), error
+    else:
+        raise AssertionError("replaced settings.json that DMS had saved meanwhile")
+    assert json.loads(canonical.read_text()) == {"theme": "saved by DMS meanwhile"}
+    assert not [path for path in canonical.parent.iterdir() if path.name.endswith(".tmp")], "left a temporary file"
+
+
 REGRESSIONS = (regression_nan_overlay, regression_policy_key_casing, regression_running_shell,
-               regression_failure_after_rename)
+               regression_failure_after_rename, regression_pam_security_key,
+               regression_out_of_range_number, regression_concurrent_save)
 
 
 def check_settings_editor():

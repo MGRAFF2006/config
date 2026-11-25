@@ -10,6 +10,10 @@ Before any change, every input that could give DMS a security-key setting is
 read: settings.json, every file in CONFIG_HOME/dms/config.d, the packaged and
 administrator cli-policy.json, DMS_POLICY_LOCK_SETTINGS in this environment,
 and the launch environment of the user's running DMS/Quickshell processes.
+The PAM stacks involved are read too: the lock stack DMS uses now
+(lockPamPath, or login when it is empty), the greetd and dankshell stacks this
+replaces, and every file they include. A security-key module in any of them
+also refuses, since the managed stacks have none.
 The check does not reproduce how DMS merges them. It refuses when any of them,
 at any level and in any letter case, has a security-key setting that is not
 clearly off, so it can refuse more often than DMS would require a key, but it
@@ -22,7 +26,9 @@ and the message says whether settings.json was changed.
 """
 
 import json
+import math
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -38,6 +44,11 @@ PROC = Path("/proc")
 # Common/SettingsData.qml) and the only values that leave each clearly off.
 # None (JSON null) never turns one on. Any other value, including 0, "" for a
 # switch or "OR", counts as possibly on.
+# PAM modules for security keys and smartcards; the managed stacks use none.
+SECURITY_KEY_MODULES = ("pam_u2f", "pam_yubico", "pam_p11", "pam_pkcs11")
+PAM_DIRS = (Path("/etc/pam.d"), Path("/usr/lib/pam.d"))
+REPLACED_STACKS = ("greetd", "dankshell")
+PAM_INCLUDE = re.compile(r"^(?:@include\s+(\S+)|-?\w+\s+(?:include|substack)\s+(\S+))", re.IGNORECASE)
 SECURITY_KEY_OFF = {
     "enableU2f": (False,),
     "u2fMode": ("or",),
@@ -53,6 +64,14 @@ class SettingsError(Exception):
 
 def reject_constant(name):
     raise ValueError(f"{name} is not JSON")
+
+
+def finite_float(text):
+    # Python reads 1e400 as inf and would write it back as Infinity, which is not JSON.
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"number {text} is out of range")
+    return value
 
 
 def reject_duplicates(pairs):
@@ -73,7 +92,8 @@ def parse_strict(label, raw):
     if not text.strip():
         return {}
     try:
-        return json.loads(text, parse_constant=reject_constant, object_pairs_hook=reject_duplicates)
+        return json.loads(text, parse_constant=reject_constant, parse_float=finite_float,
+                          object_pairs_hook=reject_duplicates)
     except (ValueError, RecursionError) as error:
         raise SettingsError(f"cannot parse {label}: {error}") from error
 
@@ -146,6 +166,40 @@ def environment_inputs(uids):
     return inputs
 
 
+def pam_file(name):
+    """The file PAM reads for a service or include name, or None."""
+    if name.startswith("/"):
+        return Path(name) if Path(name).is_file() else None
+    return next((directory / name for directory in PAM_DIRS if (directory / name).is_file()), None)
+
+
+def security_key_modules(settings):
+    """Lines loading a security-key module in the lock stack DMS uses now, the
+    stacks this replaces, and every file they include."""
+    lock = settings.get("lockPamPath") if isinstance(settings, dict) else None
+    pending = [lock if isinstance(lock, str) and lock else "login", *REPLACED_STACKS]
+    seen, found = set(), []
+    while pending:
+        path = pam_file(pending.pop())
+        if path is None or path in seen:
+            continue
+        seen.add(path)
+        try:
+            lines = path.read_text(errors="replace").splitlines()
+        except OSError as error:
+            raise SettingsError(f"cannot read PAM file {path}: {error}") from error
+        for number, line in enumerate(lines, 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            included = PAM_INCLUDE.match(line)
+            if included:
+                pending.append(included.group(1) or included.group(2))
+            if any(module in line.lower() for module in SECURITY_KEY_MODULES):
+                found.append(f"{path}:{number}: {line}")
+    return found
+
+
 def target_uids(config_home):
     """The user whose DMS this configures: the owner of CONFIG_HOME and the
     invoking user (the sudo caller when run through sudo)."""
@@ -207,11 +261,12 @@ class WriteError(Exception):
         self.replaced = replaced
 
 
-def write_atomically(path, data):
+def write_atomically(path, data, original):
     """Replace the file as DMS itself saves it (QSaveFile): a temporary file in the
     same directory, flushed to disk, then renamed over it. Mode and owner are
-    kept; a symlink keeps pointing at it. WriteError.replaced says whether the
-    rename happened, i.e. whether the new settings are in place."""
+    kept; a symlink keeps pointing at it. If the file no longer holds
+    `original` (DMS saved meanwhile), nothing is replaced. WriteError.replaced
+    says whether the rename happened, i.e. whether the new settings are in place."""
     target = Path(os.path.realpath(path))
     try:
         status = target.stat()
@@ -220,12 +275,14 @@ def write_atomically(path, data):
         raise WriteError(error, replaced=False) from error
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump(data, stream, indent=2)
+            json.dump(data, stream, indent=2, allow_nan=False)
             stream.write("\n")
             stream.flush()
             os.fchmod(stream.fileno(), status.st_mode & 0o7777)
             os.fchown(stream.fileno(), status.st_uid, status.st_gid)
             os.fsync(stream.fileno())
+        if target.read_bytes() != original:
+            raise OSError("it changed while this ran (DMS may have saved it); re-run")
         os.replace(temporary, target)
     except OSError as error:
         Path(temporary).unlink(missing_ok=True)
@@ -254,14 +311,25 @@ def main():
     path = config_home / "dms/settings.json"
     try:
         exists = path.is_file()
-        settings = read_file(path) if exists else None
+        original = path.read_bytes() if exists else None
+        settings = parse_strict(str(path), original) if exists else None
         overlays = overlay_inputs(path.parent / "config.d")
         inputs = [(str(path), settings)] if exists else []
         inputs += overlays + policy_inputs() + environment_inputs(target_uids(config_home))
+        modules = security_key_modules(settings)
     except (SettingsError, OSError) as error:
         print(f"[ERROR] {error}; cannot tell whether DMS requires a security key. "
               "Nothing was changed.", file=sys.stderr)
         return 1
+    if modules:
+        print("[ERROR] These PAM lines load a security-key module, which the managed "
+              "stacks do not have:", file=sys.stderr)
+        for line in modules:
+            print(f"[ERROR]   {line}", file=sys.stderr)
+        print("[ERROR] Switching DMS to the managed stacks could drop that factor. Remove the "
+              "module from these stacks first if that is intended, then re-run. Nothing was "
+              "changed.", file=sys.stderr)
+        return 2
     found = security_key_settings(inputs)
     if found:
         return refuse(path, found, settings)
@@ -304,10 +372,10 @@ def main():
         print(f"[OK]    already set {path}")
         return 0
     try:
-        write_atomically(path, settings)
+        write_atomically(path, settings, original)
     except WriteError as error:
         if error.replaced:
-            print(f"[ERROR] {path} WAS changed to use the managed lock, but flushing its "
+            print(f"[ERROR] {path} WAS changed (its PAM management settings), but flushing its "
                   f"directory failed: {error}. It may revert after a crash; re-run once the "
                   "cause is fixed.", file=sys.stderr)
         else:
