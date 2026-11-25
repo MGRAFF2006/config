@@ -262,6 +262,20 @@ def check_token_scope(enrollment):
     print("PASS: no managed PAM file loads the TPM token module; only the opt-in adds it to greetd")
 
 
+def check_managed_greetd(enrollment):
+    """Enrollment replaces greetd only when it is the managed stack, so a
+    customized one (e.g. requiring a security key) is never silently dropped."""
+    base = (ROOT / "system/pam.d/greetd").read_bytes()
+    source = enrollment.token_stack(base, "someone", Path("/etc/howdy-tpm/someone.cred"), "howdy-kwallet-someone")
+    enrollment.require_managed_greetd(base, base, source)
+    enrollment.require_managed_greetd(source, base, source)
+    key = base.replace(b"auth       requisite                    pam_deny.so",
+                       b"auth       required                     pam_u2f.so\nauth       requisite                    pam_deny.so", 1)
+    assert key != base, "fixture did not add pam_u2f"
+    assert rejected(enrollment.require_managed_greetd, key, base, source), "replaced a greetd stack with pam_u2f"
+    print("PASS: enrollment refuses to replace a greetd stack other than the managed one")
+
+
 def check_hold():
     """--apply refuses without the explicit acknowledgment, before any lookup or write."""
     result = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/install-howdy-kwallet-tpm.py"),
@@ -276,6 +290,7 @@ def main():
         os.execvp("unshare", ["unshare", "-r", sys.executable, *sys.argv])
     enrollment = load_installer()
     check_token_scope(enrollment)
+    check_managed_greetd(enrollment)
     check_hold()
     with tempfile.TemporaryDirectory(prefix="howdy-kwallet-enroll-check-") as directory:
         root = Path(directory)

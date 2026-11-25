@@ -122,6 +122,16 @@ def token_stack(base, user, target, name):
     return "".join(lines[:deny[0] + 1] + [supplier] + lines[deny[0] + 1:]).encode()
 
 
+def require_managed_greetd(live, base, source):
+    """Enrollment replaces greetd wholesale, so it may only replace the managed
+    stack (with or without this token step). Anything else may enforce more,
+    e.g. a security key, which the replacement would silently drop."""
+    if live not in (base, source):
+        raise ValueError(f"{PAM} is not the managed greetd stack; enrolling would replace it and "
+                         "could drop a factor it requires. Run scripts/install-pam-keyring-howdy.sh "
+                         "(which refuses a security-key setup) or restore the managed file, then re-run")
+
+
 def enroll(password, target, name, source, backup):
     """Replace the credential, then greetd PAM; undo only what was replaced.
     An exclusive lock on the credential directory serializes enrollments from
@@ -176,7 +186,8 @@ def main():
         parser.error("Select the desktop account with --user")
     target = STORE / f"{account.pw_name}.cred"
     name = f"howdy-kwallet-{account.pw_name}"
-    source = token_stack((ROOT / "system/pam.d/greetd").read_bytes(), account.pw_name, target, name)
+    base = (ROOT / "system/pam.d/greetd").read_bytes()
+    source = token_stack(base, account.pw_name, target, name)
     if not args.apply and not args.check:
         print(f"Plan: enroll host+TPM2 credential {target}, bound to PCR 7; install {PAM} "
               "with the token step")
@@ -199,6 +210,7 @@ def main():
         print("PASS: account-bound credential unseals; installed greetd matches the source with the token step")
         return
 
+    require_managed_greetd(PAM.read_bytes(), base, source)
     os.umask(0o077)
     if STORE.exists():
         info = STORE.lstat()

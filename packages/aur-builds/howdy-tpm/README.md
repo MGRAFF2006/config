@@ -47,6 +47,9 @@ sudo python scripts/install-howdy-kwallet-tpm.py --user humunkulud --apply --boo
 sudo python scripts/install-howdy-kwallet-tpm.py --user humunkulud --check
 ```
 
+Enrollment replaces `/etc/pam.d/greetd` and refuses unless it is the managed
+stack (with or without the token step), so it never drops a customization such
+as a security key; run `scripts/install-pam-keyring-howdy.sh` first.
 Enrollment prompts invisibly for the existing wallet password. It seals to
 `/etc/howdy-tpm/humunkulud.cred`, root-owned mode 0600, using systemd's host key,
 the local TPM2, and PCR 7. The secret never appears in arguments or source files.
