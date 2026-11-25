@@ -1,0 +1,22 @@
+# Use the distribution's matching Rust source and LLVM toolchain.
+bc
+bindgen
+bison
+build-essential
+clang-19
+cpio
+device-tree-compiler
+dwarves
+flex
+git
+libclang-19-dev
+libelf-dev
+libssl-dev
+lld-19
+llvm-19
+perl
+python3
+rsync
+rust-src
+rustc
+tmux
