@@ -26,21 +26,41 @@ MANAGED_LOCK = "/etc/pam.d/dankshell"
 
 
 SECOND_FACTOR = {"enableU2f": True, "u2fMode": "and"}
-# Runs the real editor with its policy files moved into the fixture, so the
-# host's /usr/share/dms and /etc/dms policy never decide a case.
+# A stand-in for the running DMS shell: `dms run` starts it as qs with
+# DMS_POLICY_LOCK_SETTINGS in its environment. "private" makes it non-dumpable,
+# so another process of the same user cannot read its environment.
+FAKE_SHELL = """
+import ctypes, os, sys, time
+libc = ctypes.CDLL(None)
+libc.prctl(15, sys.argv[1].encode(), 0, 0, 0)  # PR_SET_NAME
+if sys.argv[2] == "private":
+    libc.prctl(4, 0, 0, 0, 0)  # PR_SET_DUMPABLE
+os.write(1, b"r")
+time.sleep(600)
+"""
+# Runs the real editor in a private PID namespace (so the host's own DMS never
+# decides a case), next to the fake shells, with its policy files moved into
+# the fixture so the host's /usr/share/dms and /etc/dms never decide one either.
 EDITOR = """
-import importlib.util, json, sys
+import importlib.util, json, subprocess, sys
 from pathlib import Path
-script, policies, *args = sys.argv[1:]
+script, setup, *args = sys.argv[1:]
+setup = json.loads(setup)
+for name, mode, environment in setup["processes"]:
+    shell = subprocess.Popen([sys.executable, "-I", "-c", setup["fake_shell"], name, mode],
+                             env=environment, stdout=subprocess.PIPE)
+    assert shell.stdout.read(1) == b"r"
 spec = importlib.util.spec_from_file_location("configure_dms_lock_pam", script)
 editor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(editor)
-editor.POLICY_PATHS = tuple(Path(path) for path in json.loads(policies))
+editor.POLICY_PATHS = tuple(Path(path) for path in setup["policies"])
 sys.argv = [script, *args]
 sys.exit(editor.main())
 """
 PAD = {"padding": "x" * 65536}  # larger than FSIZE_LIMIT
 FSIZE_LIMIT = 16384
+EDITOR_SCRIPT = ROOT / "scripts/configure-dms-lock-pam.py"
+LEGACY_TEXT = json.dumps({"lockPamPath": "/etc/pam.d/legacy-untouched"}) + "\n"
 
 
 def limit_file_size():
@@ -48,71 +68,141 @@ def limit_file_size():
     resource.setrlimit(resource.RLIMIT_FSIZE, (FSIZE_LIMIT, FSIZE_LIMIT))
 
 
+def private_pids(command):
+    """The command in its own PID namespace with a fresh /proc."""
+    bwrap = shutil.which("bwrap")
+    assert bwrap, "bwrap is required to keep the host's processes out of the check"
+    return [bwrap, "--bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-pid",
+            "--die-with-parent", *command]
+
+
+def write_fixture(path, contents):
+    """dict/list as JSON, str or bytes verbatim, None as a directory."""
+    if contents is None:
+        path.mkdir()
+    elif isinstance(contents, bytes):
+        path.write_bytes(contents)
+    else:
+        path.write_text(contents if isinstance(contents, str) else json.dumps(contents), encoding="utf-8")
+
+
+def invoke_editor(config, policy_paths=(), processes=(), check=False, env=None, limit=False):
+    """The editor on CONFIG_HOME=config in a private PID namespace. policy_paths
+    replace its cli-policy.json paths; see run_editor for the rest."""
+    environment = {key: value for key, value in os.environ.items() if key != "DMS_POLICY_LOCK_SETTINGS"}
+    shells = [(name, mode, {"PATH": environment["PATH"], **({} if value is None else {"DMS_POLICY_LOCK_SETTINGS": value})})
+              for name, mode, value in processes]
+    setup = json.dumps({"policies": [str(path) for path in policy_paths], "processes": shells, "fake_shell": FAKE_SHELL})
+    command = private_pids([sys.executable, "-I", "-c", EDITOR, str(EDITOR_SCRIPT), setup,
+                            *(["--check"] if check else []), str(config)])
+    if env is not None:
+        environment["DMS_POLICY_LOCK_SETTINGS"] = env
+    return subprocess.run(command, capture_output=True, text=True, env=environment, timeout=60,
+                          preexec_fn=limit_file_size if limit else None)
+
+
+def run_editor(config, before, legacy="absent", overlays=(), check=False, policy=(None, None), env=None,
+               processes=(), limit=False):
+    """before: settings.json (a dict gets "other": 1 added; None means no file).
+    legacy: "absent", "separate" (its own file) or "symlink" (laptop layout).
+    overlays: (name, contents) in dms/config.d. policy: (packaged, administrator)
+    cli-policy.json contents. env: DMS_POLICY_LOCK_SETTINGS for the editor.
+    processes: (name, "readable"|"private", DMS_POLICY_LOCK_SETTINGS or None)
+    running next to it as the same user."""
+    shutil.rmtree(config.parent / "policy", ignore_errors=True)
+    shutil.rmtree(config, ignore_errors=True)
+    canonical = config / "dms/settings.json"
+    if before is not None:
+        canonical.parent.mkdir(parents=True)
+        write_fixture(canonical, {"other": 1, **before} if isinstance(before, dict) else before)
+    for name, contents in overlays:
+        (config / "dms/config.d").mkdir(parents=True, exist_ok=True)
+        write_fixture(config / "dms/config.d" / name, contents)
+    if legacy == "separate":
+        (config / "DankMaterialShell").mkdir(parents=True)
+        (config / "DankMaterialShell/settings.json").write_text(LEGACY_TEXT)
+    elif legacy == "symlink":
+        (config / "DankMaterialShell").symlink_to("dms")
+    policy_paths = [config.parent / "policy" / name for name in ("packaged.json", "admin.json")]
+    for path, contents in zip(policy_paths, policy):
+        if contents is not None:
+            path.parent.mkdir(exist_ok=True)
+            write_fixture(path, contents)
+    original = canonical.read_bytes() if canonical.is_file() else None
+    result = invoke_editor(config, policy_paths, processes, check, env, limit)
+    if legacy == "separate":
+        assert (config / "DankMaterialShell/settings.json").read_text() == LEGACY_TEXT, "edited the legacy file"
+    return result, canonical, original
+
+
+def assert_unchanged(case, result, canonical, original, status, needle):
+    assert result.returncode == status, (case, result.returncode, result.stderr)
+    assert needle in result.stderr and "Nothing was changed" in result.stderr, (case, result.stderr)
+    assert (canonical.read_bytes() if canonical.is_file() else None) == original, ("wrote settings", case)
+
+
+# Each of these let aff35d0 drop a required security key or misreport a write.
+def regression_nan_overlay(config):
+    """Qt rejects an overlay with a bare NaN, so DMS keeps settings.json's "and";
+    Python's json read the overlay's "or" and migrated."""
+    case = run_editor(config, SECOND_FACTOR, overlays=(("90-or.json", '{"u2fMode": "or", "x": NaN}'),))
+    assert_unchanged("NaN overlay", *case, 1, "90-or.json")
+
+
+def regression_policy_key_casing(config):
+    """DMS's Go decoder also matches LOCK_SETTINGS (any letter case)."""
+    case = run_editor(config, {}, policy=(None, {"LOCK_SETTINGS": SECOND_FACTOR}))
+    assert_unchanged("LOCK_SETTINGS", *case, 2, "admin.json: enableU2f = true")
+
+
+def regression_running_shell(config):
+    """A running DMS keeps the lock policy it was launched with."""
+    case = run_editor(config, {}, processes=(("qs", "readable", json.dumps(SECOND_FACTOR)),))
+    assert_unchanged("running shell", *case, 2, "DMS_POLICY_LOCK_SETTINGS of running qs")
+
+
+def regression_failure_after_rename(config):
+    """The directory flush fails after settings.json was replaced: say it changed."""
+    run_editor(config, {})  # creates the fixture
+    canonical = config / "dms/settings.json"
+    canonical.write_text("{}\n")
+    canonical.parent.chmod(0o300)  # rename works; opening the directory to fsync it fails
+    try:
+        result = invoke_editor(config)
+    finally:
+        canonical.parent.chmod(0o700)
+    assert result.returncode == 1, result
+    assert json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, "the rename did not happen"
+    assert "WAS changed" in result.stderr and "unchanged" not in result.stderr, result.stderr
+
+
+REGRESSIONS = (regression_nan_overlay, regression_policy_key_casing, regression_running_shell,
+               regression_failure_after_rename)
+
+
 def check_settings_editor():
     """The installer edits the settings file DMS 2.1 reads, never replacing a custom
-    stack and never dropping a security key that DMS requires as a second factor."""
+    stack, and refuses on any DMS security-key setting that is not clearly off."""
     installer = (ROOT / "scripts/install-pam-keyring-howdy.sh").read_text()
     assert 'scripts/configure-dms-lock-pam.py" "$dms_config_home"' in installer, "installer no longer runs the settings step"
-    script = ROOT / "scripts/configure-dms-lock-pam.py"
     flags = {"greeterPamExternallyManaged": True, "lockPamExternallyManaged": True}
-    legacy_text = json.dumps({"lockPamPath": "/etc/pam.d/legacy-untouched"}) + "\n"
-
-    def run(config, before, legacy="absent", overlays=(), check=False, policy=(None, None), env=None, limit=False):
-        """legacy: "absent", "separate" (its own file) or "symlink" (laptop layout).
-        overlays: (name, values) written to dms/config.d, which DMS merges on top;
-        values None makes a directory. policy: (packaged, administrator) cli-policy.json
-        contents, a str written verbatim. env: DMS_POLICY_LOCK_SETTINGS."""
-        shutil.rmtree(config.parent / "policy", ignore_errors=True)
-        shutil.rmtree(config, ignore_errors=True)
-        canonical = config / "dms/settings.json"
-        if before is not None:
-            canonical.parent.mkdir(parents=True)
-            canonical.write_text(json.dumps({"other": 1, **before}, indent=2) + "\n")
-        for name, values in overlays:
-            (config / "dms/config.d").mkdir(parents=True, exist_ok=True)
-            if values is None:
-                (config / "dms/config.d" / name).mkdir()
-            else:
-                (config / "dms/config.d" / name).write_text(json.dumps(values))
-        if legacy == "separate":
-            (config / "DankMaterialShell").mkdir(parents=True)
-            (config / "DankMaterialShell/settings.json").write_text(legacy_text)
-        elif legacy == "symlink":
-            (config / "DankMaterialShell").symlink_to("dms")
-        policy_paths = [config.parent / "policy" / name for name in ("packaged.json", "admin.json")]
-        for path, contents in zip(policy_paths, policy):
-            if contents is not None:
-                path.parent.mkdir(exist_ok=True)
-                path.write_text(contents if isinstance(contents, str) else json.dumps(contents))
-        original = canonical.read_text() if before is not None else None
-        command = [sys.executable, "-I", "-c", EDITOR, str(script), json.dumps([str(path) for path in policy_paths]),
-                   *(["--check"] if check else []), str(config)]
-        environment = {key: value for key, value in os.environ.items() if key != "DMS_POLICY_LOCK_SETTINGS"}
-        if env is not None:
-            environment["DMS_POLICY_LOCK_SETTINGS"] = env
-        result = subprocess.run(command, capture_output=True, text=True, env=environment,
-                                preexec_fn=limit_file_size if limit else None)
-        if legacy == "separate":
-            assert (config / "DankMaterialShell/settings.json").read_text() == legacy_text, "edited the legacy file"
-        return result, canonical, original
-
     cases = (
         ({}, MANAGED_LOCK),
         ({"lockPamPath": ""}, MANAGED_LOCK),
         ({**flags, "lockPamPath": MANAGED_LOCK}, MANAGED_LOCK),
         ({"lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
         ({**flags, "lockPamPath": "/etc/pam.d/custom-lock"}, "/etc/pam.d/custom-lock"),
-        # A key as an alternative, or a second-factor mode with the key off, is no
-        # second factor: the migration goes ahead and says what DMS stops offering.
-        ({"enableU2f": True, "u2fMode": "or"}, MANAGED_LOCK),
-        ({"enableU2f": True}, MANAGED_LOCK),
-        ({"enableU2f": False, "u2fMode": "and"}, MANAGED_LOCK),
+        # Security-key settings that are clearly off, and a fingerprint alternative.
+        ({"enableU2f": False, "u2fMode": "or", "greeterEnableU2f": False, "lockPamInlineU2f": False,
+          "lockU2fPamPath": "", "lockScreenSecurityKeyShortcut": "Ctrl+Q"}, MANAGED_LOCK),
+        ({"enableU2f": None, "u2fMode": None}, MANAGED_LOCK),
+        ({"enableFprint": True}, MANAGED_LOCK),
     )
     with tempfile.TemporaryDirectory(prefix="howdy-settings-check-") as directory:
         config = Path(directory) / "config"
         for legacy in ("absent", "separate", "symlink"):
             for before, expected in cases:
-                result, canonical, original = run(config, before, legacy)
+                result, canonical, original = run_editor(config, before, legacy)
                 assert result.returncode == 0, (before, legacy, result.stderr)
                 after = json.loads(canonical.read_text())
                 assert after["lockPamPath"] == expected, (before, legacy, after)
@@ -120,100 +210,113 @@ def check_settings_editor():
                 assert after["other"] == 1, (before, legacy, after)
                 custom = expected != MANAGED_LOCK
                 assert custom == ("kept custom lockPamPath" in result.stderr), (before, result.stderr)
-                assert (before.get("enableU2f") is True) == ("security key (OR) unlock is not offered" in result.stderr), (before, result.stderr)
+                assert ("enableFprint" in before) == ("fingerprint unlock is not offered" in result.stderr), (before, result.stderr)
                 if before.keys() >= flags.keys() and before.get("lockPamPath"):
-                    assert canonical.read_text() == original, ("rewrote unchanged settings", before, legacy)
-                result, canonical, original = run(config, before, legacy, check=True)
-                assert result.returncode == 0 and canonical.read_text() == original, ("--check", before, result)
+                    assert canonical.read_bytes() == original, ("rewrote unchanged settings", before, legacy)
+                result, canonical, original = run_editor(config, before, legacy, check=True)
+                assert result.returncode == 0 and canonical.read_bytes() == original, ("--check", before, result)
+        # Inputs that do not mention a security key, a running shell without one,
+        # and overlays that DMS may apply over settings.json (warned, not refused).
+        result, canonical, _ = run_editor(
+            config, {}, overlays=((".hidden", {"lockPamPath": "/etc/pam.d/other"}), ("notes.txt", "")),
+            policy=({"lock_settings": {"enableU2f": False}}, {"immutable_system": True}), env="{}",
+            processes=(("qs", "readable", None), ("quickshell", "readable", '{"u2fMode": "or"}')))
+        assert result.returncode == 0, result
+        assert "config.d/.hidden sets lockPamPath, which DMS may apply" in result.stderr, result.stderr
 
-        # DMS requires the key after the password. An externally managed lock makes
-        # DMS skip that step and dankshell has no pam_u2f, so refuse and change nothing,
-        # whether the policy comes from settings.json or a config.d overlay.
+        # A security-key setting anywhere, in any letter case and at any depth, that
+        # is not clearly off refuses before anything is written, even where DMS
+        # would not use it (another overlay turns it off, OR mode, the key off).
         refused = (
-            (SECOND_FACTOR, ()),
-            ({**SECOND_FACTOR, **flags, "lockPamPath": MANAGED_LOCK}, ()),
-            ({**SECOND_FACTOR, "lockPamPath": "/etc/pam.d/custom-lock"}, ()),
-            ({"enableU2f": True}, (("50-key.json", {"u2fMode": "and"}),)),
-            ({}, (("10-key.json", {"enableU2f": True}), ("20-mode.json", {"u2fMode": "and"}))),
-            # Overlays DMS's folder model never lists: hidden, a directory, or a
-            # name the case-sensitive "*.json" filter rejects. They cannot turn it off.
-            (SECOND_FACTOR, ((".90-or.json", {"u2fMode": "or"}),)),
-            (SECOND_FACTOR, (("50-dir.json", None),)),
-            (SECOND_FACTOR, (("90-or.JSON", {"u2fMode": "or"}),)),
-            # DMS applies overlays in JavaScript string order (UTF-16 code units),
-            # so U+1F600 (D83D DE00) comes before U+FF10 and "and" is applied last.
-            ({"enableU2f": True}, (("\U0001F600.json", {"u2fMode": "or"}), ("\uff10.json", {"u2fMode": "and"}))),
+            ((SECOND_FACTOR, ()), "enableU2f = true"),
+            (({**SECOND_FACTOR, **flags, "lockPamPath": MANAGED_LOCK}, ()), "lockPamExternallyManaged is already true"),
+            (({**SECOND_FACTOR, "lockPamPath": "/etc/pam.d/custom-lock"}, ()), 'u2fMode = "and"'),
+            (({"enableU2f": True, "u2fMode": "or"}, ()), "enableU2f = true"),
+            (({"enableU2f": False, "u2fMode": "and"}, ()), 'u2fMode = "and"'),
+            (({"u2fMode": "OR"}, ()), 'u2fMode = "OR"'),
+            (({"enableU2f": 0}, ()), "enableU2f = 0"),
+            (({"greeterEnableU2f": True}, ()), "greeterEnableU2f = true"),
+            (({"lockPamInlineU2f": True}, ()), "lockPamInlineU2f = true"),
+            (({"lockU2fPamPath": "/etc/pam.d/key"}, ()), "lockU2fPamPath"),
+            (({"ENABLEU2F": True}, ()), "ENABLEU2F = true"),
+            (({"plugins": [{"x": {"enableu2f": True}}]}, ()), "enableu2f = true"),
+            (({}, (("10-key.json", {"enableU2f": True}), ("20-mode.json", {"u2fMode": "and"}))), "10-key.json"),
+            ((SECOND_FACTOR, (("90-or.json", {"u2fMode": "or", "enableU2f": False}),)), "settings.json: enableU2f"),
+            # Files DMS would not load still count.
+            (({}, ((".90-key.json", SECOND_FACTOR),)), ".90-key.json"),
+            (({}, (("90-key.JSON", SECOND_FACTOR),)), "90-key.JSON"),
+            (({}, (("key.txt", SECOND_FACTOR),)), "key.txt"),
         )
         for legacy in ("absent", "symlink"):
-            for before, overlays in refused:
+            for (before, overlays), needle in refused:
                 for check in (False, True):
-                    result, canonical, original = run(config, before, legacy, overlays, check)
-                    assert result.returncode == 2, ("dropped the security key", before, overlays, check, result)
-                    assert "security key" in result.stderr and "Nothing was changed" in result.stderr, result.stderr
-                    assert canonical.read_text() == original, ("wrote settings although refused", before, overlays)
-        # A later overlay that turns the second factor off wins, as in DMS.
-        result, canonical, _ = run(config, SECOND_FACTOR, overlays=(("90-or.json", {"u2fMode": "or"}),))
-        assert result.returncode == 0 and json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, result
-
-        # DMS applies the packaged and administrator lock_settings (the latter
-        # wins per key, null skipped, wrong JSON types dropped) over all files.
-        # DMS_POLICY_LOCK_SETTINGS also counts for a shell not started by `dms run`.
-        admin_and = {"lock_settings": SECOND_FACTOR}
-        for before, policy, env in (
-            ({}, (None, admin_and), None),
-            ({"enableU2f": True}, ({"lock_settings": {"u2fMode": "and"}}, None), None),
-            ({}, (admin_and, {"lock_settings": {"u2fMode": None}}), None),
-            (None, (None, admin_and), None),  # no settings.json yet: still refused, not "not found"
-            ({}, (None, None), json.dumps(SECOND_FACTOR)),
-            ({"enableU2f": True, "u2fMode": "or"}, (None, {"lock_settings": {"enableU2f": False}}), json.dumps(SECOND_FACTOR)),
+                    case = run_editor(config, before, legacy, overlays, check)
+                    assert_unchanged((before, overlays, check), *case, 2, needle)
+        # Policy files and DMS_POLICY_LOCK_SETTINGS (the installer's or a running
+        # shell's), whatever their key case or nulls, and with no settings.json yet.
+        for before, policy, env, processes, needle in (
+            ({}, (None, {"lock_settings": SECOND_FACTOR}), None, (), "admin.json"),
+            ({}, ({"lock_settings": SECOND_FACTOR}, {"lock_settings": {"u2fMode": None}}), None, (), "packaged.json"),
+            ({}, (None, {"Lock_Settings": {"u2fmode": "and"}}), None, (), "admin.json: u2fmode"),
+            (None, (None, {"lock_settings": SECOND_FACTOR}), None, (), "admin.json"),
+            ({}, (None, None), json.dumps(SECOND_FACTOR), (), "$DMS_POLICY_LOCK_SETTINGS: "),
+            ({}, (None, None), None, (("quickshell", "readable", '{"enableU2f": true}'),), "running quickshell"),
+            (None, (None, None), None, (("qs", "readable", json.dumps(SECOND_FACTOR)),), "running qs"),
         ):
             for check in (False, True):
-                result, canonical, original = run(config, before, policy=policy, env=env, check=check)
-                assert result.returncode == 2, ("dropped a policy security key", before, policy, env, check, result)
-                assert ("policy" if env is None else "DMS_POLICY_LOCK_SETTINGS") in result.stderr, result.stderr
-                assert (canonical.read_text() if canonical.exists() else None) == original, ("wrote settings", before, policy)
-        for before, policy, env in (
-            ({**SECOND_FACTOR, "other": 1}, (None, {"lock_settings": {"u2fMode": "or"}}), None),
-            ({}, (admin_and, {"lock_settings": {"enableU2f": False}}), None),
-            ({}, (None, {"lock_settings": {"enableU2f": "yes", "u2fMode": "and"}}), None),
-            ({}, (None, {"lock_settings": {"nonLockKey": True}, "immutable_system": True}), "{}"),
+                case = run_editor(config, before, policy=policy, env=env, processes=processes, check=check)
+                assert_unchanged((before, policy, env, processes), *case, 2, needle)
+
+        # An input that is unreadable or not strict JSON is named and stops the
+        # editor without writing, instead of being read differently from DMS.
+        for before, overlays, policy, env, processes, needle in (
+            ({}, (("50.json", b'{"u2fMode": "or\xff"}'),), (None, None), None, (), "50.json is not valid UTF-8"),
+            ({}, (("50.json", '﻿{"u2fMode": "or"}'),), (None, None), None, (), "50.json"),
+            ({}, (("50.json", '{"u2fMode": "and", "u2fMode": "or"}'),), (None, None), None, (), "duplicate key 'u2fMode'"),
+            ({}, (("50.json", "{not json"),), (None, None), None, (), "50.json"),
+            ('{"enableU2f": true, "enableU2f": false}', (), (None, None), None, (), "settings.json"),
+            ({}, (), (None, '{"lock_settings": {"x": Infinity}}'), None, (), "admin.json"),
+            ({}, (), (None, None), '{"u2fMode": -Infinity}', (), "$DMS_POLICY_LOCK_SETTINGS"),
+            ({}, (), (None, None), None, (("qs", "readable", "{"),), "running qs"),
+            ({}, (), (None, None), None, (("qs", "private", "{}"),), "cannot inspect running process"),
         ):
-            result, canonical, _ = run(config, before, policy=policy, env=env)
-            assert result.returncode == 0, ("refused although policy allows it", before, policy, result)
-            assert json.loads(canonical.read_text())["lockPamPath"] == MANAGED_LOCK, result
-        # A policy DMS cannot read is not guessed at: stop without writing.
-        for policy, env in (((None, "{not json"), None), (({"lock_settings": []}, None), None),
-                            ((None, None), "{not json"), ((None, None), "[]")):
-            result, canonical, original = run(config, {}, policy=policy, env=env)
-            assert result.returncode == 1 and "Nothing was changed" in result.stderr, (policy, env, result)
-            assert canonical.read_text() == original, (policy, env)
+            case = run_editor(config, before, overlays=overlays, policy=policy, env=env, processes=processes)
+            assert_unchanged(needle, *case, 1, needle)
+        (config / "dms/config.d").mkdir()
+        (config / "dms/config.d/gone.json").symlink_to("missing.json")
+        result = invoke_editor(config)
+        assert result.returncode == 1 and "gone.json is not a regular file" in result.stderr, result
+        for regression in REGRESSIONS:
+            regression(config)
 
         # The write replaces the file atomically: a failed write (here, a file size
         # limit) leaves the original intact and fails; mode and a symlink are kept.
-        result, canonical, original = run(config, PAD, limit=True)
-        assert result.returncode == 1 and "unchanged" in result.stderr, ("failed write not reported", result)
-        assert canonical.read_text() == original, "a failed write changed the settings file"
+        result, canonical, original = run_editor(config, PAD, limit=True)
+        assert result.returncode == 1 and "The file is unchanged" in result.stderr, ("failed write not reported", result)
+        assert canonical.read_bytes() == original, "a failed write changed the settings file"
         assert sorted(path.name for path in canonical.parent.iterdir()) == ["settings.json"], "left a temporary file"
-        result, canonical, original = run(config, {})
+        result, canonical, original = run_editor(config, {})
         canonical.chmod(0o640)
         moved = config / "dotfiles/dms-settings.json"
         moved.parent.mkdir()
         canonical.rename(moved)
         canonical.symlink_to(moved)
-        moved.write_text(original)
-        result = subprocess.run([sys.executable, "-I", str(script), str(config)], capture_output=True, text=True)
+        moved.write_bytes(original)
+        result = invoke_editor(config)
         assert result.returncode == 0, result
         assert canonical.is_symlink() and json.loads(moved.read_text())["lockPamPath"] == MANAGED_LOCK
         assert moved.stat().st_mode & 0o7777 == 0o640, oct(moved.stat().st_mode)
 
         # DMS has not created its settings yet: warn and fail without writing anywhere.
         for legacy in ("absent", "separate"):
-            result, canonical, _ = run(config, None, legacy)
+            result, canonical, _ = run_editor(config, None, legacy)
             assert result.returncode == 3 and "not found" in result.stderr, (legacy, result)
             assert not canonical.exists(), legacy
-    print("PASS: installer settings: DMS 2.1 settings file selected (legacy path ignored), custom lockPamPath preserved, "
-          "a DMS second-factor security key (settings.json, config.d as DMS lists it, lock_settings policy or "
-          "DMS_POLICY_LOCK_SETTINGS) refused without changes, atomic write keeps the file on failure")
+    print("PASS: installer settings: DMS 2.1 settings file selected (legacy path ignored), custom lockPamPath preserved; "
+          "any security-key setting not clearly off (any case or depth, in settings.json, every config.d file, a "
+          "policy file, DMS_POLICY_LOCK_SETTINGS here or in a running shell) refused without changes; non-strict "
+          "or unreadable inputs refused by name; atomic write keeps the file on failure and reports a failure "
+          "after the rename as a change")
 
 
 # The laptop's PAM on 2026-11-24 after the approved interim fix: greetd and
@@ -256,7 +359,7 @@ def check_installer(pam_root):
             (root / "config/dms").mkdir()
             (root / "config/dms/settings.json").write_text(json.dumps(settings) + "\n")
             before = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
-            command = [bwrap, "--unshare-user", "--uid", "0", "--gid", "0", "--ro-bind", "/", "/",
+            command = [bwrap, "--unshare-user", "--uid", "0", "--gid", "0", "--unshare-pid", "--ro-bind", "/", "/",
                        "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--die-with-parent",
                        "--bind", str(root / "pam.d"), "/etc/pam.d", "--bind", str(root / "howdy"), "/etc/howdy",
                        "--ro-bind", str(fakes / "security"), "/usr/lib/security", "--tmpfs", "/usr/lib/howdy",
@@ -280,7 +383,7 @@ def check_installer(pam_root):
         # error before any PAM or Howdy change, and the settings file is intact.
         result, before = run(PAD, limit=True)
         assert result.returncode != 0, ("installer reported success after a failed settings write", result.stdout, result.stderr)
-        assert "DMS settings were not updated" in result.stderr and "Done" not in result.stdout, result
+        assert "DMS settings step failed" in result.stderr and "Done" not in result.stdout, result
         after = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
         assert after == before, ("PAM changed although the settings write failed", sorted(after))
         assert not any((root / "howdy").iterdir()), "Howdy config written although the settings write failed"
@@ -324,7 +427,7 @@ def check_installer_caller_environment():
             environment.update(PATH=f"{root / 'bin'}:{environment['PATH']}", XDG_CONFIG_HOME=str(root / "config"))
             if env is not None:
                 environment["DMS_POLICY_LOCK_SETTINGS"] = env
-            result = subprocess.run(["bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh")],
+            result = subprocess.run(private_pids(["bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh")]),
                                     capture_output=True, text=True, env=environment, timeout=60)
             assert (root / "sudo-called").exists() == escalates, (env, result.stdout, result.stderr)
             if escalates:
