@@ -48,9 +48,13 @@ dms_config_home="${1:-}"
 if [[ -z "$dms_config_home" && -n "${SUDO_USER:-}" ]]; then
   dms_config_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config"
 fi
-if [[ -n "$dms_config_home" ]]; then
-  check_dms_settings "$dms_config_home"
+# Without a user (e.g. a root login shell) the security-key check has nothing
+# to read, so refuse instead of replacing greetd and dankshell unchecked.
+if [[ -z "$dms_config_home" ]]; then
+  printf 'No DMS user: run this from your user shell, or pass the config home (sudo bash %s /home/<user>/.config); nothing was changed\n' "$0" >&2
+  exit 1
 fi
+check_dms_settings "$dms_config_home"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 install_pam() {
@@ -84,17 +88,13 @@ fi
 # were; the editor says whether settings.json itself was replaced. A later
 # failure leaves the settings pointing at /etc/pam.d/dankshell with whatever
 # content it had; PAM files are not rolled back, and the .backup-* copies stay.
-if [[ -z "$dms_config_home" ]]; then
-  warn "Unknown invoking user; run configure-dms-lock-pam.py ~/.config as that user"
-else
-  dms_status=0
-  python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home" || dms_status=$?
-  if [[ "$dms_status" -eq 3 ]]; then
-    warn "DMS greeter/lock PAM settings not updated"
-  elif [[ "$dms_status" -ne 0 ]]; then
-    printf 'DMS settings step failed (see above); no PAM or Howdy file was changed\n' >&2
-    exit 1
-  fi
+dms_status=0
+python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home" || dms_status=$?
+if [[ "$dms_status" -eq 3 ]]; then
+  warn "DMS greeter/lock PAM settings not updated"
+elif [[ "$dms_status" -ne 0 ]]; then
+  printf 'DMS settings step failed (see above); no PAM or Howdy file was changed\n' >&2
+  exit 1
 fi
 
 # howdy test.py: sum(hist)[0] breaks on numpy 2.x (scalar). Match compare.py.
