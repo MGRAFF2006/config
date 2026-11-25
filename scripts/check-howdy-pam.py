@@ -401,7 +401,7 @@ def check_installer(pam_root):
         (fakes / "python").mkdir()
         (fakes / "python/dlib.py").write_text("")
 
-        def run(settings, limit=False):
+        def run(settings, limit=False, config_arg=True):
             for name in ("pam.d", "howdy", "config"):
                 shutil.rmtree(root / name, ignore_errors=True)
                 (root / name).mkdir()
@@ -417,7 +417,9 @@ def check_installer(pam_root):
                        "--ro-bind", str(fakes / "security"), "/usr/lib/security", "--tmpfs", "/usr/lib/howdy",
                        "--bind", str(root / "config"), str(root / "config"),
                        "--setenv", "PYTHONPATH", str(fakes / "python"),
-                       "bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh"), str(root / "config")]
+                       "--unsetenv", "SUDO_USER",
+                       "bash", str(ROOT / "scripts/install-pam-keyring-howdy.sh"),
+                       *([str(root / "config")] if config_arg else [])]
             result = subprocess.run(command, capture_output=True, text=True, timeout=60,
                                     preexec_fn=limit_file_size if limit else None)
             return result, before
@@ -430,6 +432,13 @@ def check_installer(pam_root):
         assert after == before, ("PAM changed although the installer refused", sorted(after))
         assert not any((root / "howdy").iterdir()), "Howdy config written although the installer refused"
         assert json.loads((root / "config/dms/settings.json").read_text()) == {**settings, **SECOND_FACTOR}
+
+        # Root without a DMS user (e.g. a root login shell): nothing to check the
+        # security-key settings against, so refuse before replacing greetd/dankshell.
+        result, before = run({}, config_arg=False)
+        assert result.returncode != 0 and "No DMS user" in result.stderr, (result.stdout, result.stderr)
+        after = {path.name: path.read_bytes() for path in (root / "pam.d").iterdir()}
+        assert after == before, ("PAM changed without a DMS user to check", sorted(after))
 
         # The settings write fails (file size limit): the installer stops with an
         # error before any PAM or Howdy change, and the settings file is intact.
