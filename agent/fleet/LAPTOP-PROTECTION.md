@@ -288,7 +288,7 @@ recovery key in Bitwarden, the header backup with the encrypted backup), read
 both back from there, and unlock the container once with the passphrase alone
 and once with the recovery key alone. Then test the retrieved header backup
 itself, not the header on the disk: open the container with it as a detached
-header (`cryptsetup open --header <retrieved file> --test-passphrase`) using
+header (`cryptsetup open --test-passphrase --header <retrieved file> <partition>`) using
 the retrieved recovery key. Then make the Btrfs filesystem,
 and restore all six subvolumes as subvolumes, not plain directories, then
 assemble the writable layout exactly as in the step 5 trial. The new
