@@ -55,9 +55,18 @@ Do not bypass dependency validation or substitute an unrelated library.
 
 ## Remove
 
-Remove every `Include = /etc/pacman.d/pypdfium2-hold.conf` line (find them
-with `grep -n pypdfium2-hold /etc/pacman.conf`) with
-`sudoedit /etc/pacman.conf` (or its resolved target, as above), then
-`sudo rm /etc/pacman.d/pypdfium2-hold.conf`. Run `pacman-conf IgnorePkg` to
-verify that `python-pypdfium2` is gone, then use a normal full `yay` upgrade.
-Other independently configured holds must remain.
+Delete the drop-in only after nothing includes it any more; pacman refuses to
+run while an `Include` points at a missing file.
+
+1. Find every reference, including ones in other included files:
+   `grep -rn pypdfium2-hold /etc/pacman.conf /etc/pacman.d/`. Remove each
+   `Include` line for the drop-in with `sudoedit` (on `/etc/pacman.conf` or its
+   resolved target, as above).
+2. Check before deleting: `pacman-conf IgnorePkg` must succeed and no longer
+   list `python-pypdfium2`. If it still does, a reference or another hold
+   remains; fix that first. Other independently configured holds must remain.
+3. `sudo rm /etc/pacman.d/pypdfium2-hold.conf`, then run `pacman-conf >/dev/null`.
+   If it reports the missing file, restore it with
+   `sudo install -m 644 system/pacman/pypdfium2-hold.conf /etc/pacman.d/`
+   from this checkout and repeat step 1.
+4. Use a normal full `yay` upgrade.
