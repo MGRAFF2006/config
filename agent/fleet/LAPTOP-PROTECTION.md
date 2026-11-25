@@ -212,10 +212,9 @@ namespaces, including inactive ones (`nn` in `nvme id-ctrl` is the highest
 possible ID). Record each NSID with its size (`nvme id-ns --force -n <nsid>`
 also reads an inactive one) and the controller's `tnvmcap` and `unvmcap`.
 These allocated-namespace commands are optional on drives without namespace
-management (`oacs` bit 3 clear) and may be rejected. Then record independent
-evidence of a single namespace instead: `nn` is 1, or `nvme list-ns` shows only
-NSID 1, NSID 1's size (`nsze` × LBA size) equals `tnvmcap` and `unvmcap` is 0.
-Without a successful inventory or that evidence, do not authorize the erase.
+management (`oacs` bit 3 clear) and may be rejected. Then the controller's
+`nn` must be 1, which proves a single namespace. Without a successful
+inventory or `nn` of 1, do not authorize the erase.
 
 Then record the erase scope: which namespaces the chosen method affects.
 Sanitize affects every namespace in the subsystem. A format without secure
@@ -287,7 +286,10 @@ enroll its recovery key (`systemd-cryptenroll --recovery-key`) and save a
 header backup (`cryptsetup luksHeaderBackup`). Store both off-device (the
 recovery key in Bitwarden, the header backup with the encrypted backup), read
 both back from there, and unlock the container once with the passphrase alone
-and once with the recovery key alone. Then make the Btrfs filesystem,
+and once with the recovery key alone. Then test the retrieved header backup
+itself, not the header on the disk: open the container with it as a detached
+header (`cryptsetup open --header <retrieved file> --test-passphrase`) using
+the retrieved recovery key. Then make the Btrfs filesystem,
 and restore all six subvolumes as subvolumes, not plain directories, then
 assemble the writable layout exactly as in the step 5 trial. The new
 filesystem and LUKS UUIDs differ from the old ones. Update `fstab`, the
