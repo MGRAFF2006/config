@@ -51,11 +51,9 @@ workaround once upstream no longer calls `fetch_update`. Check with
 
 The same applies to AUR updates that change only packaging and keep the
 Ladybird version. pacman orders `1:2026.47.7-2` above this `1:2026.47.7-1.1`,
-so the helper offers the AUR recipe as an upgrade. It builds without
-`rust-1.99.patch`: with unchanged sources that build fails on the system Rust and
-the patched package stays installed. If the AUR build is successfully
-installed, it replaces the patched package. Port the packaging change here
-and rebuild as `1:2026.47.7-2.1`, which sorts above the AUR's `-2`.
+so the AUR helper offers that recipe as an upgrade, without `rust-1.99.patch`.
+Port the packaging change here and rebuild as `1:2026.47.7-2.1`, which sorts
+above the AUR's `-2`.
 
 ## Recovery
 
