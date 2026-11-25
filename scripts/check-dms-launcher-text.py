@@ -16,6 +16,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -120,7 +121,9 @@ def run_isolated(work, ui, fixture_name, env_extra):
         command += ["--setenv", key, value]
     command += ["dbus-run-session", "--", "kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts",
                 "--no-kactivities", "--socket", "check-wayland", "--width", "1440", "--height", "900",
-                "--exit-with-session", f"sh {work / 'session.sh'} {fixture}"]
+                # KWin splits this argument into words, so a TMPDIR with spaces
+                # would split its paths. --chdir makes these names relative to work.
+                "--exit-with-session", "sh session.sh fixture"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=90)
     except subprocess.TimeoutExpired as error:
@@ -172,7 +175,19 @@ def self_test():
             assert staged.resolve().is_relative_to(work.resolve())
             for path, target in external.items():
                 assert (stage / path).is_symlink() and target.read_bytes() == expected[path]
-    print(f"PASS: dms.path honors XDG_RUNTIME_DIR; guard probes stay in the private copy when an input stage links outside it ({', '.join(module.VERSION_FILES)})")
+        # A TMPDIR with spaces must still start the fixture inside the private desktop.
+        work = root / "tmp with spaces"
+        work.mkdir()
+        (work / "ui" / "Modals").mkdir(parents=True)
+        with patch.object(shutil, "which", return_value="/usr/bin/tool"), \
+                patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            run_isolated(work, work / "ui", "launcher-text-bounds.qml", {})
+        command = run.call_args.args[0]
+        session = shlex.split(command[command.index("--exit-with-session") + 1])
+        directory = Path(command[command.index("--chdir") + 1])
+        assert session[0] == "sh" and (directory / session[1]).is_file() and (directory / session[1]).read_text() == SESSION, session
+        assert (directory / session[2] / "shell.qml").is_file(), session
+    print(f"PASS: dms.path honors XDG_RUNTIME_DIR; guard probes stay in the private copy when an input stage links outside it ({', '.join(module.VERSION_FILES)}); session starts with spaces in TMPDIR")
 
 
 def main():
