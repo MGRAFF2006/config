@@ -1,0 +1,20 @@
+# Native tools for ARM64 cross-compilation; no cross GCC is required.
+base-devel
+bc
+clang
+cpio
+dtc
+git
+libelf
+lld
+llvm
+openssl
+pahole
+python
+rsync
+# Distribution rust conflicts with the Arch rustup package. Only a user-local
+# rustup in ~/.cargo can coexist with it; replace the rustup package first.
+rust
+rust-bindgen
+rust-src
+tmux

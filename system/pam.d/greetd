@@ -1,10 +1,15 @@
 #%PAM-1.0
 # Managed by Documents/config/scripts/install-pam-keyring-howdy.sh
-# Password/PIN first — correct secret skips the camera. Howdy is fallback.
+# Password/PIN first, so a typed secret never waits for the camera; submitting
+# an empty password falls through to Howdy. greetd runs one PAM service per
+# login attempt, so Howdy first would let a stalled camera block password login.
 # Use success=N (not "sufficient") so pam_kwallet5 still runs afterward.
-# Face-only login leaves AUTHTOK empty → wallet may still prompt (see docs).
+# The guards are requisite so nothing after pam_deny runs unless every earlier
+# step succeeded: a remembered "required" failure would still reach it.
+# install-howdy-kwallet-tpm.py (held, explicit opt-in) adds a TPM token
+# supplier right after pam_deny; this file never loads it.
 
-auth       required                     pam_securetty.so
+auth       requisite                    pam_securetty.so
 auth       requisite                    pam_nologin.so
 auth       [success=2 default=ignore]   pam_unix.so          try_first_pass nullok
 auth       [success=1 default=ignore]   pam_howdy.so

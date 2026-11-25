@@ -3,9 +3,24 @@
 # Usage: bash scripts/link-home.sh [laptop|desktop|homelab-dev] [--dry-run|--check]
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-home_root="$repo_root/home"
-target_home="${CONFIG_LINK_HOME:-$HOME}"
+# Store a canonical path in REPLY. Command substitution alone strips trailing
+# newlines, which could redirect writes to a sibling directory.
+canonical_path() {
+  local path
+  path="$(realpath -m -- "$1" && printf .)"
+  REPLY="${path%$'\n.'}"
+}
+canonical_path "$(dirname -- "${BASH_SOURCE[0]}")/.."; repo_root="$REPLY"
+canonical_path "$repo_root/home"; home_root="$REPLY"
+canonical_path "${CONFIG_LINK_HOME:-$HOME}"; target_home="$REPLY"
+# The SSH and agent-kit helpers cannot keep such paths exact; refuse them,
+# whether the newline is in the configured spelling or the resolved path.
+for root in "$repo_root" "$target_home" "${BASH_SOURCE[0]}" "${CONFIG_LINK_HOME:-$HOME}"; do
+  if [[ "$root" == *$'\n'* ]]; then
+    echo "Refusing a path that contains a newline: ${root@Q}" >&2
+    exit 1
+  fi
+done
 mode=install
 machine=""
 for arg in "$@"; do
@@ -99,6 +114,45 @@ done
 
 backup_root=""
 failures=0
+ensure_local_destination() {
+  canonical_path "${1%/*}/"
+  case "$REPLY/" in
+    "$repo_root/"*|"$home_root/"*) echo "Destination parent points into shared repo: $1" >&2; exit 1 ;;
+  esac
+  # Backing up a real directory moves everything inside it, including the checkout.
+  if [[ -e "$1" && ! -L "$1" ]]; then
+    canonical_path "$1"
+    case "$repo_root/" in
+      "$REPLY/"*) echo "Destination contains the config checkout: $1" >&2; exit 1 ;;
+    esac
+  fi
+}
+
+# Reject shared parents, backup aliases and checkout ancestors before changing
+# any existing links. Installers run the preview before package changes.
+if [[ "$mode" != --check ]]; then
+  for rel in "${links[@]}"; do ensure_local_destination "$target_home/$rel"; done
+  if [[ "$machine" == homelab-dev ]]; then
+    ensure_local_destination "$target_home/.zshenv"
+    ensure_local_destination "$target_home/.config/mise/config.toml"
+  else
+    ensure_local_destination "$target_home/.config/alacritty/machine.toml"
+  fi
+  ensure_local_destination "$target_home/.config/systemd/user/t3code.service.d/path.conf"
+  ensure_local_destination "$target_home/.ssh/config"
+  ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
+  # Backups (here and in configure-ssh.py) must not live inside a path this
+  # run replaces: moving it would fail midway, and replacing a link the backup
+  # alias passes through would redirect later backups, e.g. into the checkout.
+  canonical_path "$target_home/.local/share/config-link-backups"; backup_dir="$REPLY"
+  for rel in "${links[@]}"; do
+    canonical_path "$target_home/$rel"
+    case "$backup_dir/" in
+      "$REPLY/"*) echo "Backup directory $backup_dir is inside managed path $target_home/$rel" >&2; exit 1 ;;
+    esac
+  done
+fi
+
 link_file() {
   local rel="$1" src="${2:-$home_root/$1}" dst="$target_home/$1"
   if [[ -L "$dst" && "$(readlink -- "$dst")" == "$src" ]]; then
@@ -109,17 +163,16 @@ link_file() {
     --check) echo "MISSING or different link: $rel"; failures=$((failures + 1)); return ;;
     --dry-run) echo "LINK $dst -> $src (back up existing destination)"; return ;;
   esac
-  # A parent link into home/ would write machine-local files into the shared repo.
-  local parent
-  parent="$(realpath -m -- "$(dirname -- "$dst")")"
-  case "$parent/" in
-    "$home_root/"*) echo "Destination parent points into shared home/: $dst" >&2; exit 1 ;;
-  esac
-  mkdir -p -- "$(dirname -- "$dst")"
+  ensure_local_destination "$dst"
+  mkdir -p -- "${dst%/*}/"
   if [[ -e "$dst" || -L "$dst" ]]; then
     if [[ -z "$backup_root" ]]; then
+      ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
       mkdir -p -- "$target_home/.local/share/config-link-backups"
       backup_root="$(mktemp -d "$target_home/.local/share/config-link-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+      # Keep the physical path: replacing a link that the backup path passes
+      # through must not redirect later backups (e.g. into the checkout).
+      canonical_path "$backup_root"; backup_root="$REPLY"
     fi
     mkdir -p -- "$backup_root/$(dirname -- "$rel")"
     mv -- "$dst" "$backup_root/$rel"
