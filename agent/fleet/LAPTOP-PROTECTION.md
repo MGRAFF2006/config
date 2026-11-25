@@ -211,12 +211,18 @@ ones that `nvme list-ns` shows: `nvme list-ns --all` lists all allocated
 namespaces, including inactive ones (`nn` in `nvme id-ctrl` is the highest
 possible ID). Record each NSID with its size (`nvme id-ns --force -n <nsid>`
 also reads an inactive one) and the controller's `tnvmcap` and `unvmcap`.
+These allocated-namespace commands are optional on drives without namespace
+management (`oacs` bit 3 clear) and may be rejected. Then record independent
+evidence of a single namespace instead: `nn` is 1, or `nvme list-ns` shows only
+NSID 1, NSID 1's size (`nsze` × LBA size) equals `tnvmcap` and `unvmcap` is 0.
+Without a successful inventory or that evidence, do not authorize the erase.
 
 Then record the erase scope: which namespaces the chosen method affects.
-Sanitize affects every namespace in the subsystem. A format affects every
-namespace when `fna` bit 0 is set, and a secure-erase format (`--ses=1` or
-`2`) also when bit 1 is set (`nvme id-ctrl -H` decodes them). Otherwise its
-scope depends on the NSID: an explicit NSID affects only that namespace,
+Sanitize affects every namespace in the subsystem. A format without secure
+erase (`--ses=0`) affects every namespace when `fna` bit 0 is set; a
+secure-erase format (`--ses=1` or `2`) affects every namespace when `fna`
+bit 1 is set (`nvme id-ctrl -H` decodes them). Otherwise its scope depends on
+the NSID: an explicit NSID affects only that namespace,
 which may be an inactive allocated one, while the broadcast NSID
 `0xffffffff` can affect others too; do not use the broadcast then, format
 each namespace in scope by its explicit NSID. The
@@ -231,8 +237,17 @@ comparison in those steps. Otherwise the maintenance record must name each
 namespace or region that is not covered (including space outside the
 partitions) and record that Mathis explicitly accepts discarding its
 contents. The erase authorization names the method, the affected NSIDs and
-that record. Check this before any Sanitize or format runs. Then use the
-first supported method and verify that method, not another one.
+that record. Check this before any Sanitize or format runs.
+
+Before the erase, release the drive. Unmount every filesystem on it,
+including the read-only source mounts and the scratch trial from step 5 and
+the ESP. Close any device-mapper or LUKS mapping on it and turn off swap on
+it. Then confirm that nothing holds it: `findmnt` lists nothing from the
+drive, `lsblk -o NAME,MOUNTPOINTS` shows no mount points for it, and
+`/sys/block/<disk>/<partition>/holders` is empty for every partition.
+Otherwise the erase can run under live mounts and recreating the partition
+table fails with the device busy. Then use the first supported method and
+verify that method, not another one.
 
 1. NVMe sanitize: crypto erase, or block erase if crypto erase is unsupported.
    Check `sanicap` in `nvme id-ctrl`. Sanitize is device-wide and reaches
@@ -266,7 +281,13 @@ Sanitize and format also erase the ESP and partition table; recreate both and
 restore the ESP from the backup. After any method, raw reads at several
 offsets, including some within the old data range, are a spot check only.
 
-Then create the partition layout and LUKS2 container, make the Btrfs filesystem,
+Then create the partition layout and LUKS2 container. Recovery material for
+the old disk does not open the new container, so before restoring data,
+enroll its recovery key (`systemd-cryptenroll --recovery-key`) and save a
+header backup (`cryptsetup luksHeaderBackup`). Store both off-device (the
+recovery key in Bitwarden, the header backup with the encrypted backup), read
+both back from there, and unlock the container once with the passphrase alone
+and once with the recovery key alone. Then make the Btrfs filesystem,
 and restore all six subvolumes as subvolumes, not plain directories, then
 assemble the writable layout exactly as in the step 5 trial. The new
 filesystem and LUKS UUIDs differ from the old ones. Update `fstab`, the
