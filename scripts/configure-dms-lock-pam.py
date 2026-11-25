@@ -4,16 +4,23 @@
 Usage: configure-dms-lock-pam.py [--check] CONFIG_HOME
 CONFIG_HOME is the user's XDG config directory (usually ~/.config). DMS 2.1
 reads CONFIG_HOME/dms/settings.json; ~/.config/DankMaterialShell is a legacy
-path that DMS no longer reads, so it is never edited here. DMS merges
-CONFIG_HOME/dms/config.d/*.json over settings.json, then the administrator's
-lock_settings policy over both; those are read for the checks but never edited.
---check only reports a refusal and never writes.
-Exit status: 0 done (or would be), 2 refused because DMS requires a security
-key as a second factor, 3 the settings file does not exist yet. 2 and 3 change
-nothing; any other status is an error, and the settings file is then unchanged.
+path that DMS no longer reads, so it is never edited here.
+
+Before any change, every input that could give DMS a security-key setting is
+read: settings.json, every file in CONFIG_HOME/dms/config.d, the packaged and
+administrator cli-policy.json, DMS_POLICY_LOCK_SETTINGS in this environment,
+and the launch environment of the user's running DMS/Quickshell processes.
+The check does not reproduce how DMS merges them. It refuses when any of them,
+at any level and in any letter case, has a security-key setting that is not
+clearly off, so it can refuse more often than DMS would require a key, but it
+never lets the migration drop one.
+--check only runs that check and never writes.
+Exit status: 0 done (or would be); 2 refused because of a security-key setting;
+3 the settings file does not exist yet (2 and 3 change nothing); 1 an error:
+an input could not be read or parsed (nothing changed), or the write failed,
+and the message says whether settings.json was changed.
 """
 
-from fnmatch import fnmatchcase
 import json
 import os
 from pathlib import Path
@@ -22,130 +29,195 @@ import tempfile
 
 MANAGED_LOCK = "/etc/pam.d/dankshell"
 EXTERNAL_FLAGS = ("greeterPamExternallyManaged", "lockPamExternallyManaged")
-# DMS 2.1.2 core/internal/clipolicy: packaged first, the administrator's file over it.
+# DMS 2.1.2 core/internal/clipolicy: the only policy files it reads.
 POLICY_PATHS = (Path("/usr/share/dms/cli-policy.json"), Path("/etc/dms/cli-policy.json"))
 POLICY_ENV = "DMS_POLICY_LOCK_SETTINGS"
-# clipolicy's lockSettingKeys: the only keys lock_settings may manage.
-LOCK_SETTING_KEYS = frozenset((
-    "customPowerActionLock", "lockBeforeSuspend", "loginctlLockIntegration", "lockAtStartup",
-    "acLockTimeout", "batteryLockTimeout", "fadeToLockEnabled", "fadeToLockGracePeriod",
-    "enableFprint", "maxFprintTries", "enableU2f", "u2fMode",
-))
-# The shell drops a managed value whose JSON type differs from the setting's
-# default (Common/settings/ManagedSettings.js); these are the ones read here.
-SETTING_TYPES = {"enableU2f": bool, "enableFprint": bool, "u2fMode": str}
+# `dms run` starts the shell as qs/quickshell with POLICY_ENV in its environment.
+PROC = Path("/proc")
+# The security-key settings of DMS 2.1.2 (Common/settings/SettingsSpec.js and
+# Common/SettingsData.qml) and the only values that leave each clearly off.
+# None (JSON null) never turns one on. Any other value, including 0, "" for a
+# switch or "OR", counts as possibly on.
+SECURITY_KEY_OFF = {
+    "enableU2f": (False,),
+    "u2fMode": ("or",),
+    "greeterEnableU2f": (False,),
+    "lockPamInlineU2f": (False,),
+    "lockU2fPamPath": ("",),
+}
 
 
 class SettingsError(Exception):
     pass
 
 
-def js_truthy(value):
-    # QML converts a JSON value to a bool property with JavaScript truthiness.
-    return value not in (None, False, 0, "")
+def reject_constant(name):
+    raise ValueError(f"{name} is not JSON")
 
 
-def requires_dms_security_key(settings):
-    # DMS runs its own security-key step after the password only while it
-    # manages the lock PAM. With lockPamExternallyManaged it skips that step
-    # (Modules/Lock/Pam.qml u2fSuppressedByPrimaryPam), and the managed
-    # dankshell stack has no pam_u2f. u2fMode defaults to "or" in DMS.
-    return js_truthy(settings.get("enableU2f")) and settings.get("u2fMode", "or") == "and"
+def reject_duplicates(pairs):
+    keys = [key for key, _ in pairs]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        raise ValueError(f"duplicate key {duplicates[0]!r}")
+    return dict(pairs)
 
 
-def read_object(path, empty_ok):
+def parse_strict(label, raw):
+    """Strict JSON: valid UTF-8 without a BOM, no NaN/Infinity, no duplicate
+    keys. An empty or blank file holds no settings."""
     try:
-        text = path.read_text(encoding="utf-8")
-        value = json.loads(text) if text.strip() or not empty_ok else {}
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SettingsError(f"{label} is not valid UTF-8: {error}") from error
+    if not text.strip():
+        return {}
+    try:
+        return json.loads(text, parse_constant=reject_constant, object_pairs_hook=reject_duplicates)
+    except (ValueError, RecursionError) as error:
+        raise SettingsError(f"cannot parse {label}: {error}") from error
+
+
+def read_file(path):
+    if not path.is_file():
+        raise SettingsError(f"{path} is not a regular file")
+    try:
+        return parse_strict(str(path), path.read_bytes())
+    except OSError as error:
         raise SettingsError(f"cannot read {path}: {error}") from error
-    if not isinstance(value, dict):
-        raise SettingsError(f"{path} is not a JSON object")
-    return value
 
 
-def overlay_files(directory):
-    """config.d files as DMS 2.1.2 loads them (Common/SettingsData.qml): a
-    FolderListModel with nameFilters ["*.json"] (case-sensitive), showDirs false
-    and showHidden false, applied in the JavaScript string order of their paths,
-    which compares UTF-16 code units."""
+def overlay_inputs(directory):
+    """Every entry of config.d except subdirectories: hidden files and any name
+    count, whether or not DMS would load them."""
     if not directory.is_dir():
         return []
-    found = [entry for entry in directory.iterdir()
-             if not entry.name.startswith(".") and fnmatchcase(entry.name, "*.json") and entry.is_file()]
-    return sorted(found, key=lambda entry: entry.name.encode("utf-16-be", "surrogatepass"))
-
-
-def policy_lock_settings():
-    """lock_settings from the packaged and administrator policy, merged per key
-    as `dms run` passes them to the shell. DMS ignores every lock setting when a
-    policy file is unreadable; this refuses instead of guessing."""
-    settings, sources = {}, {}
-    for path in POLICY_PATHS:
-        if not path.exists():
-            continue
-        policy = read_object(path, empty_ok=False)
-        values = policy.get("lock_settings")
-        if values is None:
-            values = {}
-        if not isinstance(values, dict):
-            raise SettingsError(f"{path}: lock_settings is not a JSON object")
-        for key, value in values.items():
-            if key in LOCK_SETTING_KEYS and value is not None:
-                settings[key], sources[key] = value, f"policy {path} (lock_settings)"
-    return settings, sources
-
-
-def env_lock_settings():
-    """The shell applies DMS_POLICY_LOCK_SETTINGS from its environment. `dms run`
-    always sets it from the policy files, but a shell started another way keeps
-    an inherited value, so a value set here counts as well."""
-    text = os.environ.get(POLICY_ENV)
-    if not text:
-        return None
     try:
-        value = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise SettingsError(f"cannot read {POLICY_ENV}: {error}") from error
-    if not isinstance(value, dict):
-        raise SettingsError(f"{POLICY_ENV} is not a JSON object")
-    return value
+        entries = sorted(directory.iterdir())
+    except OSError as error:
+        raise SettingsError(f"cannot list {directory}: {error}") from error
+    return [(str(entry), read_file(entry)) for entry in entries if not entry.is_dir()]
 
 
-def apply_lock_settings(settings, sources, managed, managed_sources):
-    effective, origin = dict(settings), dict(sources)
-    for key, value in managed.items():
-        expected = SETTING_TYPES.get(key)
-        if expected is not None and type(value) is not expected:
+def policy_inputs():
+    return [(str(path), read_file(path)) for path in POLICY_PATHS if path.exists()]
+
+
+def dms_process_name(pid_dir):
+    """The process name if it looks like DMS or Quickshell (comm or argv[0]), else None."""
+    argv0 = (pid_dir / "cmdline").read_bytes().split(b"\0")[0]
+    names = ((pid_dir / "comm").read_text(errors="replace").strip(),
+             os.path.basename(argv0.decode(errors="replace")))
+    return next((name for name in names if name in ("qs", "dms") or "quickshell" in name.lower()), None)
+
+
+def process_uids(pid_dir):
+    for line in (pid_dir / "status").read_text().splitlines():
+        if line.startswith("Uid:"):
+            return {int(field) for field in line.split()[1:]}
+    return set()
+
+
+def environment_inputs(uids):
+    """POLICY_ENV here and in the launch environment of each running DMS or
+    Quickshell process of the target user. A shell keeps the value it was
+    started with, whatever the policy files say now."""
+    inputs = []
+    value = os.environb.get(POLICY_ENV.encode())
+    if value is not None:
+        inputs.append((f"${POLICY_ENV}", parse_strict(f"${POLICY_ENV}", value)))
+    for pid_dir in sorted(PROC.iterdir(), key=lambda entry: entry.name):
+        if not pid_dir.name.isdigit():
             continue
-        effective[key], origin[key] = value, managed_sources[key]
-    return effective, origin
+        try:
+            name = process_uids(pid_dir) & uids and dms_process_name(pid_dir)
+            if not name:
+                continue
+            environment = (pid_dir / "environ").read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
+            continue  # exited meanwhile
+        except OSError as error:
+            raise SettingsError(f"cannot inspect running process {pid_dir.name}, which may be DMS: "
+                                f"{error}") from error
+        label = f"${POLICY_ENV} of running {name} (pid {pid_dir.name})"
+        for entry in environment.split(b"\0"):
+            if entry.startswith(POLICY_ENV.encode() + b"="):
+                inputs.append((label, parse_strict(label, entry.split(b"=", 1)[1])))
+    return inputs
 
 
-def effective_settings(settings_path):
-    """settings.json, then config.d overlays (shallow, as DMS merges them), then
-    each lock_settings policy that may apply. Returns the user's own settings and
-    one (settings, sources) pair per policy view."""
-    data = read_object(settings_path, empty_ok=True) if settings_path.is_file() else {}
-    merged, sources = dict(data), dict.fromkeys(data, settings_path)
-    for overlay in overlay_files(settings_path.parent / "config.d"):
-        values = read_object(overlay, empty_ok=True)
-        merged.update(values)
-        sources.update(dict.fromkeys(values, overlay))
-    views = [apply_lock_settings(merged, sources, *policy_lock_settings())]
-    env_policy = env_lock_settings()
-    if env_policy is not None:
-        views.append(apply_lock_settings(merged, sources, env_policy, dict.fromkeys(env_policy, f"${POLICY_ENV}")))
-    return data, views
+def target_uids(config_home):
+    """The user whose DMS this configures: the owner of CONFIG_HOME and the
+    invoking user (the sudo caller when run through sudo)."""
+    uids = {int(os.environ.get("SUDO_UID", os.getuid())) if os.getuid() == 0 else os.getuid()}
+    if config_home.exists():
+        uids.add(config_home.stat().st_uid)
+    return uids
+
+
+def keys_anywhere(value):
+    """Every (key, value) pair at any nesting level."""
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, dict):
+            for key, child in item.items():
+                yield key, child
+                pending.append(child)
+        elif isinstance(item, list):
+            pending.extend(item)
+
+
+def clearly_off(value, off_values):
+    return value is None or any(type(value) is type(off) and value == off for off in off_values)
+
+
+def security_key_settings(inputs):
+    off_values = {name.casefold(): off for name, off in SECURITY_KEY_OFF.items()}
+    found = []
+    for label, value in inputs:
+        for key, setting in keys_anywhere(value):
+            off = off_values.get(key.casefold())
+            if off is not None and not clearly_off(setting, off):
+                found.append(f"{label}: {key} = {json.dumps(setting)}")
+    return found
+
+
+def refuse(path, found, settings):
+    print(f"[ERROR] DMS may require a security key, which the managed lock would drop. "
+          "These security-key settings are not clearly off:", file=sys.stderr)
+    for line in found:
+        print(f"[ERROR]   {line}", file=sys.stderr)
+    print(f"[ERROR] The managed lock sets lockPamExternallyManaged=true in {path}, which makes "
+          f"DMS skip its own security-key step, and {MANAGED_LOCK} has no pam_u2f. This check "
+          "does not work out how DMS combines its settings; it refuses on any of these "
+          "settings anywhere: off means enableU2f, greeterEnableU2f and lockPamInlineU2f "
+          'false, u2fMode "or" and lockU2fPamPath empty. Nothing was changed.', file=sys.stderr)
+    if isinstance(settings, dict) and settings.get("lockPamExternallyManaged") is True:
+        print("[ERROR] lockPamExternallyManaged is already true, so DMS may be skipping "
+              "the key now; set it to false to restore the key.", file=sys.stderr)
+    print("[ERROR] To use the managed password/face lock, remove these settings or set them "
+          "off, restart DMS if a running process is listed, then re-run.", file=sys.stderr)
+    return 2
+
+
+class WriteError(Exception):
+    def __init__(self, error, replaced):
+        super().__init__(str(error))
+        self.replaced = replaced
 
 
 def write_atomically(path, data):
     """Replace the file as DMS itself saves it (QSaveFile): a temporary file in the
-    same directory, flushed to disk, then renamed over it. A failure leaves the
-    original untouched. Mode and owner are kept; a symlink keeps pointing at it."""
+    same directory, flushed to disk, then renamed over it. Mode and owner are
+    kept; a symlink keeps pointing at it. WriteError.replaced says whether the
+    rename happened, i.e. whether the new settings are in place."""
     target = Path(os.path.realpath(path))
-    status = target.stat()
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    try:
+        status = target.stat()
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    except OSError as error:
+        raise WriteError(error, replaced=False) from error
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(data, stream, indent=2)
@@ -155,30 +227,20 @@ def write_atomically(path, data):
             os.fchown(stream.fileno(), status.st_uid, status.st_gid)
             os.fsync(stream.fileno())
         os.replace(temporary, target)
+    except OSError as error:
+        Path(temporary).unlink(missing_ok=True)
+        raise WriteError(error, replaced=False) from error
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
-    directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
-
-
-def refuse(path, effective, origin):
-    sources = sorted({str(origin[key]) for key in ("enableU2f", "u2fMode")})
-    print(f"[ERROR] {path}: DMS requires a security key after the password "
-          "(Lock Screen > Security key mode: Second factor (AND)), set by "
-          f"{' and '.join(sources)}. The managed lock sets lockPamExternallyManaged=true, "
-          f"which makes DMS skip that step, and {MANAGED_LOCK} has no pam_u2f, so the key "
-          "would silently stop being required. Nothing was changed.", file=sys.stderr)
-    if effective.get("lockPamExternallyManaged") is True:
-        print("[ERROR] lockPamExternallyManaged is already true, so DMS is "
-              "skipping the key now; set it to false to restore the key.", file=sys.stderr)
-    print("[ERROR] To use the managed password/face lock instead, switch the "
-          "security key to Alternative (OR) or turn it off where it is set, then re-run.",
-          file=sys.stderr)
-    return 2
+        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as error:
+        raise WriteError(error, replaced=True) from error
 
 
 def main():
@@ -188,57 +250,68 @@ def main():
         args = args[1:]
     if len(args) != 1:
         raise SystemExit(__doc__)
-    path = Path(args[0]) / "dms/settings.json"
+    config_home = Path(args[0])
+    path = config_home / "dms/settings.json"
     try:
-        data, views = effective_settings(path)
-    except SettingsError as error:
+        exists = path.is_file()
+        settings = read_file(path) if exists else None
+        overlays = overlay_inputs(path.parent / "config.d")
+        inputs = [(str(path), settings)] if exists else []
+        inputs += overlays + policy_inputs() + environment_inputs(target_uids(config_home))
+    except (SettingsError, OSError) as error:
         print(f"[ERROR] {error}; cannot tell whether DMS requires a security key. "
               "Nothing was changed.", file=sys.stderr)
         return 1
-    for effective, origin in views:
-        if requires_dms_security_key(effective):
-            return refuse(path, effective, origin)
-    if not path.is_file():
+    found = security_key_settings(inputs)
+    if found:
+        return refuse(path, found, settings)
+    if not exists:
         if not check_only:
             print(f"[WARN]  {path} not found; start DMS once, then re-run so the lock "
                   f"uses {MANAGED_LOCK} and the greeter keeps the managed PAM.", file=sys.stderr)
         return 3
+    if not isinstance(settings, dict):
+        print(f"[ERROR] {path} is not a JSON object. Nothing was changed.", file=sys.stderr)
+        return 1
     if check_only:
         return 0
-    effective, origin = views[0]
     changed = False
     # Stop DMS from rewriting /etc/pam.d/greetd (would drop Howdy) and its lock stack.
     for key in EXTERNAL_FLAGS:
-        if data.get(key) is not True:
-            data[key] = True
+        if settings.get(key) is not True:
+            settings[key] = True
             changed = True
     # DMS 2.1 otherwise uses the distro login stack. Never replace a custom stack:
     # it may enforce more than this one (e.g. a second factor).
-    lock_path = data.get("lockPamPath") or ""
+    lock_path = settings.get("lockPamPath") or ""
     if not lock_path:
-        data["lockPamPath"] = MANAGED_LOCK
+        settings["lockPamPath"] = MANAGED_LOCK
         changed = True
     elif lock_path != MANAGED_LOCK:
         print(f"[WARN]  kept custom lockPamPath={lock_path}; the DMS lock does not use "
               f"{MANAGED_LOCK} or start Howdy automatically. Change it in DMS "
               "settings only if that stack should be replaced.", file=sys.stderr)
-    for key in (*EXTERNAL_FLAGS, "lockPamPath"):
-        if origin.get(key) not in (None, path) and effective[key] != data[key]:
-            print(f"[WARN]  {origin[key]} sets {key}={effective[key]!r}, which DMS uses "
-                  "instead of settings.json.", file=sys.stderr)
-    # Alternatives (not second factors) that the external stack also turns off.
-    dropped = [name for name, on in (("fingerprint", js_truthy(effective.get("enableFprint"))),
-                                     ("security key (OR)", js_truthy(effective.get("enableU2f")))) if on]
-    if dropped:
-        print(f"[WARN]  DMS's own {' and '.join(dropped)} unlock is not offered while "
-              "the lock PAM is externally managed.", file=sys.stderr)
+    for label, value in overlays:
+        if isinstance(value, dict):
+            for key in sorted(set(value) & {*EXTERNAL_FLAGS, "lockPamPath"}):
+                print(f"[WARN]  {label} sets {key}, which DMS may apply over settings.json.", file=sys.stderr)
+    # An alternative (not a second factor) that the external stack also turns off.
+    if any(key.casefold() == "enablefprint" and not clearly_off(value, (False,))
+           for _, input_value in inputs for key, value in keys_anywhere(input_value)):
+        print("[WARN]  DMS's own fingerprint unlock is not offered while the lock PAM is "
+              "externally managed.", file=sys.stderr)
     if not changed:
         print(f"[OK]    already set {path}")
         return 0
     try:
-        write_atomically(path, data)
-    except OSError as error:
-        print(f"[ERROR] could not write {path}: {error}. The file is unchanged.", file=sys.stderr)
+        write_atomically(path, settings)
+    except WriteError as error:
+        if error.replaced:
+            print(f"[ERROR] {path} WAS changed to use the managed lock, but flushing its "
+                  f"directory failed: {error}. It may revert after a crash; re-run once the "
+                  "cause is fixed.", file=sys.stderr)
+        else:
+            print(f"[ERROR] could not write {path}: {error}. The file is unchanged.", file=sys.stderr)
         return 1
     print(f"[OK]    updated {path}")
     return 0
