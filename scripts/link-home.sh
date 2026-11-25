@@ -141,6 +141,16 @@ if [[ "$mode" != --check ]]; then
   ensure_local_destination "$target_home/.config/systemd/user/t3code.service.d/path.conf"
   ensure_local_destination "$target_home/.ssh/config"
   ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
+  # Backups (here and in configure-ssh.py) must not live inside a path this
+  # run replaces: moving it would fail midway, and replacing a link the backup
+  # alias passes through would redirect later backups, e.g. into the checkout.
+  canonical_path "$target_home/.local/share/config-link-backups"; backup_dir="$REPLY"
+  for rel in "${links[@]}"; do
+    canonical_path "$target_home/$rel"
+    case "$backup_dir/" in
+      "$REPLY/"*) echo "Backup directory $backup_dir is inside managed path $target_home/$rel" >&2; exit 1 ;;
+    esac
+  done
 fi
 
 link_file() {

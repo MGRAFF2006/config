@@ -143,26 +143,34 @@ def main():
             assert "contains a newline" in result.stderr
             assert (snapshot(sibling), snapshot(requested)) == before
 
-        # A backup alias through a managed link must keep using the original
-        # directory after that link is replaced by one into the checkout.
-        moving = root / "moving backups"
-        editor = root / "local editor"
-        editor.mkdir()
-        (moving / ".config").mkdir(parents=True)
-        (moving / ".config/nvim").symlink_to(editor, target_is_directory=True)
-        (moving / ".local/share").mkdir(parents=True)
-        (moving / ".local/share/config-link-backups").symlink_to(moving / ".config/nvim", target_is_directory=True)
-        (moving / ".zshrc").write_text("local shell\n")
-        (moving / ".zshenv").write_text("local env\n")
-        result = subprocess.run(
-            ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"],
-            env=dict(env, CONFIG_LINK_HOME=str(moving)), capture_output=True, text=True,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert snapshot(repo) == shared_before, "a backup was redirected into the checkout"
-        (backup_run,) = editor.iterdir()
-        assert (backup_run / ".zshrc").read_text() == "local shell\n"
-        assert (backup_run / ".zshenv").read_text() == "local env\n"
+        # A backup directory inside a managed path (directly or through an
+        # alias) is refused before any change: replacing that path would move
+        # the backups or redirect later ones, e.g. the SSH helper's, into the checkout.
+        for name, real_editor in (("backups via editor link", False), ("backups in editor dir", True)):
+            moving = root / name
+            editor = root / f"{name} editor"
+            editor.mkdir()
+            (moving / ".config").mkdir(parents=True)
+            if real_editor:
+                (moving / ".config/nvim").mkdir()
+                editor = moving / ".config/nvim"
+            else:
+                (moving / ".config/nvim").symlink_to(editor, target_is_directory=True)
+            (moving / ".local/share").mkdir(parents=True)
+            (moving / ".local/share/config-link-backups").symlink_to(moving / ".config/nvim", target_is_directory=True)
+            (moving / ".zshrc").write_text("local shell\n")
+            (moving / ".ssh").mkdir()
+            (moving / ".ssh/config").write_text("Host example\n")
+            before = (snapshot(moving), snapshot(editor))
+            for args in (["--dry-run"], []):
+                result = subprocess.run(
+                    ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev", *args],
+                    env=dict(env, CONFIG_LINK_HOME=str(moving)), capture_output=True, text=True,
+                )
+                assert result.returncode == 1, name + result.stdout + result.stderr
+                assert "is inside managed path" in result.stderr, name
+                assert (snapshot(moving), snapshot(editor)) == before, name
+                assert snapshot(repo) == shared_before, name
 
         # A configured home whose spelling ends in a newline, through a symlink
         # to a normal directory, is refused before the resolved path hides it.
