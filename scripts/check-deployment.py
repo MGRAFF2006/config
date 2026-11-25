@@ -56,6 +56,161 @@ def main():
             assert result.returncode == expected, result.stdout + result.stderr
             return result
 
+        def snapshot(directory):
+            result = {}
+            for path in directory.rglob("*"):
+                if path.is_symlink():
+                    value = ("link", str(path.readlink()))
+                elif path.is_file():
+                    value = ("file", path.read_bytes())
+                else:
+                    value = ("directory",)
+                result[str(path.relative_to(directory))] = value
+            return result
+
+        alias = root / "checkout alias"
+        alias.symlink_to(repo, target_is_directory=True)
+        shared_before = snapshot(repo)
+        for name, destination, shared in (
+            ("shared-config", ".config", "home/.config"),
+            ("shared-outside-home", ".config", "agent"),
+            ("shared-headless", ".config/mise", "headless"),
+            ("shared-units", ".config/systemd/user", "systemd/user"),
+            ("shared-ssh", ".ssh", "ssh"),
+            ("shared-backups", ".local/share/config-link-backups", "agent"),
+            ("shared-backup-parent", ".local/share", "agent"),
+        ):
+            isolated = root / name
+            isolated.mkdir()
+            (isolated / ".zshrc").write_text("original shell\n")
+            target = isolated / destination
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(repo / shared, target_is_directory=True)
+            before = snapshot(isolated)
+            safety_env = dict(env, CONFIG_LINK_HOME=str(isolated))
+            command = ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"]
+            # Installers use the preview before package changes, so it must refuse too.
+            result = subprocess.run(command + ["--dry-run"], env=safety_env, capture_output=True, text=True)
+            assert result.returncode == 1, name + result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr, name
+            subprocess.run(command + ["--check"], env=safety_env, capture_output=True, text=True)
+            assert snapshot(isolated) == before, name
+            assert snapshot(repo) == shared_before, name
+            result = subprocess.run(command, env=safety_env, capture_output=True, text=True)
+            assert result.returncode == 1, name + result.stdout + result.stderr
+            assert "Destination parent points into shared repo" in result.stderr, name
+            assert snapshot(isolated) == before, name
+            assert snapshot(repo) == shared_before, name
+
+        safety_env = dict(env, CONFIG_LINK_HOME=str(alias / "home"))
+        result = subprocess.run(
+            ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"],
+            env=safety_env, capture_output=True, text=True,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert snapshot(repo) == shared_before
+
+        # A managed directory that is or contains the checkout must not be moved.
+        for name, location in (("checkout-is-managed", ".config/nvim"), ("checkout-in-managed", ".config/nvim/checkout")):
+            nested = root / name
+            checkout = nested / location
+            shutil.copytree(repo, checkout, symlinks=True)
+            (nested / ".zshrc").write_text("original shell\n")
+            before = snapshot(nested)
+            nested_env = dict(env, CONFIG_LINK_HOME=str(nested))
+            command = ["bash", str(checkout / "scripts/link-home.sh"), "homelab-dev"]
+            for args in (["--dry-run"], []):
+                result = subprocess.run(command + args, env=nested_env, capture_output=True, text=True)
+                assert result.returncode == 1, name + result.stdout + result.stderr
+                assert "Destination contains the config checkout" in result.stderr, name
+                assert snapshot(nested) == before, name
+
+        # Command substitutions drop trailing newlines, so a home ending in one
+        # could be handled as its sibling. Refuse it before any change.
+        sibling = root / "newline home"
+        requested = root / "newline home\n"
+        for home in (sibling, requested):
+            home.mkdir()
+            (home / ".zshrc").write_text("original shell\n")
+        before = (snapshot(sibling), snapshot(requested))
+        newline_env = dict(env, CONFIG_LINK_HOME=str(requested))
+        for args in (["--dry-run"], []):
+            result = subprocess.run(
+                ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev", *args],
+                env=newline_env, capture_output=True, text=True,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "contains a newline" in result.stderr
+            assert (snapshot(sibling), snapshot(requested)) == before
+
+        # A backup directory inside a managed path (directly or through an
+        # alias) is refused before any change: replacing that path would move
+        # the backups or redirect later ones, e.g. the SSH helper's, into the checkout.
+        for name, real_editor in (("backups via editor link", False), ("backups in editor dir", True)):
+            moving = root / name
+            editor = root / f"{name} editor"
+            editor.mkdir()
+            (moving / ".config").mkdir(parents=True)
+            if real_editor:
+                (moving / ".config/nvim").mkdir()
+                editor = moving / ".config/nvim"
+            else:
+                (moving / ".config/nvim").symlink_to(editor, target_is_directory=True)
+            (moving / ".local/share").mkdir(parents=True)
+            (moving / ".local/share/config-link-backups").symlink_to(moving / ".config/nvim", target_is_directory=True)
+            (moving / ".zshrc").write_text("local shell\n")
+            (moving / ".ssh").mkdir()
+            (moving / ".ssh/config").write_text("Host example\n")
+            before = (snapshot(moving), snapshot(editor))
+            for args in (["--dry-run"], []):
+                result = subprocess.run(
+                    ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev", *args],
+                    env=dict(env, CONFIG_LINK_HOME=str(moving)), capture_output=True, text=True,
+                )
+                assert result.returncode == 1, name + result.stdout + result.stderr
+                assert "is inside managed path" in result.stderr, name
+                assert (snapshot(moving), snapshot(editor)) == before, name
+                assert snapshot(repo) == shared_before, name
+
+        # A configured home whose spelling ends in a newline, through a symlink
+        # to a normal directory, is refused before the resolved path hides it.
+        plain = root / "plain home"
+        plain.mkdir()
+        (plain / ".zshrc").write_text("original shell\n")
+        newline_alias = root / "plain alias\n"
+        newline_alias.symlink_to(plain, target_is_directory=True)
+        before = snapshot(plain)
+        for args in (["--dry-run"], []):
+            result = subprocess.run(
+                ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev", *args],
+                env=dict(env, CONFIG_LINK_HOME=str(newline_alias)), capture_output=True, text=True,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "contains a newline" in result.stderr
+            assert snapshot(plain) == before
+
+        # Local aliases and relative paths remain supported, including backups.
+        custom = root / "custom home"
+        custom.mkdir()
+        local_config = root / "local config"
+        local_config.mkdir()
+        local_backups = root / "local backups"
+        local_backups.mkdir()
+        (custom / ".config").symlink_to(local_config, target_is_directory=True)
+        (custom / ".local/share").mkdir(parents=True)
+        (custom / ".local/share/config-link-backups").symlink_to(local_backups, target_is_directory=True)
+        (custom / ".zshrc").write_text("local shell\n")
+        custom_env = dict(env, CONFIG_LINK_HOME="missing/../custom home")
+        command = ["bash", str(alias / "scripts/link-home.sh"), "homelab-dev"]
+        for args in ([], ["--check"], []):
+            result = subprocess.run(command + args, cwd=root, env=custom_env, capture_output=True, text=True)
+            assert result.returncode == 0, result.stdout + result.stderr
+        assert (custom / ".zshrc").resolve() == repo / "home/.zshrc"
+        backups = list(local_backups.iterdir())
+        assert len(backups) == 1
+        assert (backups[0] / ".zshrc").read_text() == "local shell\n"
+        assert snapshot(repo) == shared_before
+
         for machine in ("laptop", "desktop"):
             home = root / f"{machine} home"
             home.mkdir()
@@ -189,7 +344,7 @@ def main():
         run("link-home.sh", "laptop", expected=1)
         run("install.sh", "laptop", expected=1)
         assert list(untouched.iterdir()) == []
-    print("PASS: workstation/headless/system profiles, preview/check, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
+    print("PASS: workstation/headless/system profiles, preview/check, shared-parent/backup/checkout safety, newline paths, local aliases, invalid input, backups, broken links, idempotency, missing sources, no service changes, package failures stop installation")
 
 
 if __name__ == "__main__":

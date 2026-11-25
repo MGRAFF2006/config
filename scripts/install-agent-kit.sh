@@ -136,6 +136,8 @@ for skill in "$repo_root"/agent/skills/*; do
   for legacy in "$agent_home/.cursor/skills/$name" "$codex_root/skills/$name"; do
     # An ancestor may alias the shared tree; this is the source, not a copy.
     [[ ! -L "$legacy" && "$legacy" -ef "$skill" ]] && continue
+    # CODEX_HOME may be ~/.claude; then this is the Claude link made above.
+    [[ "${legacy%/*}" -ef "$agent_home/.claude/skills" ]] && continue
     if [[ -L "$legacy" && "$(readlink -- "$legacy")" == "$skill" ]] || \
       { [[ -d "$legacy" && ! -L "$legacy" ]] && diff -qr -- "$legacy" "$skill" >/dev/null; }; then
       case "$mode" in
