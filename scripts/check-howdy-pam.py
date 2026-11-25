@@ -633,9 +633,16 @@ def main():
         # "stall" stands in for a camera that never returns.
         module.write_text(STUB)
         module.chmod(0o755)
-        for service in ("greetd", "dankshell"):
+        # greetd as the held TPM opt-in installs it: the token supplier after pam_deny.
+        spec = importlib.util.spec_from_file_location("enrollment", ROOT / "scripts/install-howdy-kwallet-tpm.py")
+        enrollment = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(enrollment)
+        stacks = {service: (args.pam_root / service).read_text() for service in ("greetd", "dankshell")}
+        stacks["greetd with TPM token"] = enrollment.token_stack(
+            stacks["greetd"].encode(), "howdy-test", Path("/nonexistent.cred"), "howdy-test").decode()
+        for service, text in stacks.items():
             lines = []
-            for line in (args.pam_root / service).read_text().splitlines():
+            for line in text.splitlines():
                 match = re.match(r"(-?auth)\s+(\[[^]]+\]|\S+)\s+(\S+)", line)
                 if match:
                     lines.append(match.groups())
@@ -670,13 +677,21 @@ def main():
                 assert methods == (["pam_unix.so"] if password else ["pam_unix.so", "pam_howdy.so"]), (service, "order", methods)
                 assert time.monotonic() - started < 10, (service, "password waited for a stalled camera")
                 if expected:
-                    continuation = "pam_kwallet5.so" if service == "greetd" else "pam_env.so"
-                    assert continuation in reached, (service, "skipped continuation", reached)
-            # A successful face cannot bypass existing prerequisite failures.
-            guards = ("pam_securetty.so", "pam_nologin.so") if service == "greetd" else ("pam_nologin.so", "pam_shells.so")
+                    continuation = ["pam_kwallet5.so"] if service == "greetd" else ["pam_env.so"]
+                    if service == "greetd with TPM token":
+                        continuation = ["pam_howdy_tpm.so", "pam_kwallet5.so"]
+                    assert reached[-len(continuation):] == continuation, (service, "skipped continuation", reached)
+            # A successful password or face cannot bypass existing prerequisite
+            # failures. At greetd the wallet token supplier and KWallet must not
+            # even run then: they would unseal and take the wallet password.
+            greetd = service.startswith("greetd")
+            guards = ("pam_securetty.so", "pam_nologin.so") if greetd else ("pam_nologin.so", "pam_shells.so")
             for guard in guards:
-                success, reached = authenticate(True, False, guard)
-                assert not success, (service, "bypassed guard", guard, reached)
+                for face, password in ((True, False), (False, True)):
+                    success, reached = authenticate(face, password, guard)
+                    assert not success, (service, "bypassed guard", guard, reached)
+                    if greetd:
+                        assert not {"pam_howdy_tpm.so", "pam_kwallet5.so"} & set(reached), (service, guard, reached)
             print(f"PASS: {service}: password first (independent of a stalled camera), Howdy fallback, deny both failures, continuation and prerequisite guards")
     check_real_unix(args.pam_root)
     check_settings_editor()

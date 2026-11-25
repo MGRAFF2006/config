@@ -276,8 +276,14 @@ on the next shell start. Unknown DMS versions use the packaged UI and require
 reviewing the patch again; manual Submit still starts PAM.
 
 **Typed login password** unlocks `kdewallet` only if the wallet password equals
-the login password. **Face-only login** cannot unlock the wallet (no AUTHTOK) —
-blank wallet password or a TPM bridge (howdy-tpm) if you want zero prompts.
+the login password. **Face-only login** needs the optional account-bound TPM
+bridge to supply that token. It is held until boot and storage protection is
+verified, and only `scripts/install-howdy-kwallet-tpm.py --apply
+--boot-protection-verified` adds its step to greetd; the routine PAM install
+below never does, and removes it again. The wallet remains encrypted;
+missing/unavailable credentials retain manual password fallback. See
+[hold, setup, security tradeoff and recovery](../packages/aur-builds/howdy-tpm/README.md).
+This does not unlock independent application vaults such as Bitwarden.
 
 Re-apply PAM after greeter/package changes:
 
