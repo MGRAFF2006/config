@@ -19,7 +19,8 @@ BINARY_SHA256 = "805a67cdc4d2137cf4ceaeb4361f72a229a3198d106354d8dd2c922579424cb
 SOURCE_SHA256 = "cd423624a7b5679d4c767b296b11e24f40007e6c868dd0d324e7fad1cafbe0d8"
 PATCHED_SHA256 = "d63b97f68811eeac307e38be7f7c84569ad33243f889e54bb01a457ce0f6fe91"
 MANIFEST = "greeter-appearance.json"
-PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/greeter-appearance.patch"
+# guarded/ keeps this greeter patch away from the legacy 1.5.x shell installer.
+PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/guarded/greeter-appearance.patch"
 
 
 def digest(path):

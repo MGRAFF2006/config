@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # install-pam-keyring-howdy.sh — greetd/SDDM/DMS-lock PAM for Howdy + KWallet unlock
 #
-# Password/PIN first, Howdy fallback for login/lock; Howdy first for sudo.
+# Password/PIN first, Howdy fallback for greetd, SDDM and the DMS lock; Howdy
+# first for sudo. The DMS lock patch starts the fallback on wake.
 # Polkit stays password-only because graphical agents do not reliably handle
 # Howdy's separate PAM conversation before their password prompt.
 # Also: howdy-test numpy fix, DMS greeterPamExternallyManaged.
@@ -24,9 +25,36 @@ for required in greetd sddm dankshell sudo polkit-1; do
   fi
 done
 
+# Refuse before changing anything when the DMS settings cannot be switched to
+# the managed lock stack safely: any DMS security-key setting that is not
+# clearly off (an externally managed lock would skip the key), or an input the
+# check cannot read. 3 = no settings yet.
+check_dms_settings() {
+  local status=0
+  python3 "$repo_root/scripts/configure-dms-lock-pam.py" --check "$1" || status=$?
+  if [[ "$status" -ne 0 && "$status" -ne 3 ]]; then
+    printf 'DMS settings check failed (see above); no PAM or Howdy file was changed\n' >&2
+    exit 1
+  fi
+}
+
 if [[ "${EUID}" -ne 0 ]]; then
-  exec sudo bash "$0" "$@"
+  # sudo drops XDG_CONFIG_HOME, and DMS_POLICY_LOCK_SETTINGS, which a shell not
+  # started by `dms run` inherits: check with the caller's environment first.
+  check_dms_settings "${XDG_CONFIG_HOME:-$HOME/.config}"
+  exec sudo bash "$0" "${XDG_CONFIG_HOME:-$HOME/.config}"
 fi
+dms_config_home="${1:-}"
+if [[ -z "$dms_config_home" && -n "${SUDO_USER:-}" ]]; then
+  dms_config_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config"
+fi
+# Without a user (e.g. a root login shell) the security-key check has nothing
+# to read, so refuse instead of replacing greetd and dankshell unchecked.
+if [[ -z "$dms_config_home" ]]; then
+  printf 'No DMS user: run this from your user shell, or pass the config home (sudo bash %s /home/<user>/.config); nothing was changed\n' "$0" >&2
+  exit 1
+fi
+check_dms_settings "$dms_config_home"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 install_pam() {
@@ -49,17 +77,32 @@ if ! python3 -c 'import dlib'; then
   exit 1
 fi
 
+if [[ ! -e /usr/lib/security/pam_kwallet5.so ]]; then
+  printf 'pam_kwallet5.so not found — install kwallet-pam\n' >&2
+  exit 1
+fi
+
+# Stop DMS from rewriting the greeter PAM (would drop Howdy) and select the
+# managed lock stack in the settings file DMS 2.1 reads. This runs before any
+# PAM or Howdy file changes, so a failed settings step leaves them all as they
+# were; the editor says whether settings.json itself was replaced. A later
+# failure leaves the settings pointing at /etc/pam.d/dankshell with whatever
+# content it had; PAM files are not rolled back, and the .backup-* copies stay.
+dms_status=0
+python3 "$repo_root/scripts/configure-dms-lock-pam.py" "$dms_config_home" || dms_status=$?
+if [[ "$dms_status" -eq 3 ]]; then
+  warn "DMS greeter/lock PAM settings not updated"
+elif [[ "$dms_status" -ne 0 ]]; then
+  printf 'DMS settings step failed (see above); no PAM or Howdy file was changed\n' >&2
+  exit 1
+fi
+
 # howdy test.py: sum(hist)[0] breaks on numpy 2.x (scalar). Match compare.py.
 howdy_test="/usr/lib/howdy/cli/test.py"
 if [[ -f "$howdy_test" ]] && grep -q 'hist_total = int(sum(hist)\[0\])' "$howdy_test"; then
   cp -a "$howdy_test" "${howdy_test}.backup-${stamp}"
   sed -i 's/hist_total = int(sum(hist)\[0\])/hist_total = int(np.sum(hist))/' "$howdy_test"
   ok "Patched howdy test.py numpy hist sum"
-fi
-
-if [[ ! -e /usr/lib/security/pam_kwallet5.so ]]; then
-  printf 'pam_kwallet5.so not found — install kwallet-pam\n' >&2
-  exit 1
 fi
 
 install_pam greetd
@@ -84,34 +127,7 @@ if [[ -f "$howdy_cfg" ]]; then
   ok "Installed /etc/howdy/config.ini"
 fi
 
-# Stop DMS greeter from rewriting /etc/pam.d/greetd (would drop Howdy).
-dms_settings="${SUDO_USER:+/home/$SUDO_USER}/.config/DankMaterialShell/settings.json"
-if [[ -z "${SUDO_USER:-}" ]]; then
-  dms_settings=""
-fi
-if [[ -n "$dms_settings" && -f "$dms_settings" ]]; then
-  python3 - "$dms_settings" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path, encoding="utf-8") as f:
-    data = json.load(f)
-changed = False
-for key in ("greeterPamExternallyManaged", "lockPamExternallyManaged"):
-    if data.get(key) is not True:
-        data[key] = True
-        changed = True
-if changed:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    print("updated", path)
-else:
-    print("already set", path)
-PY
-  ok "DMS greeter/lock PAM marked externally managed"
-fi
-
 ok "PAM stacks updated (backups: *.backup-${stamp})"
 warn "Wallet unlock on typed password requires kdewallet password == login password."
-warn "Face-only login cannot unlock KWallet without a sealed secret (blank wallet or howdy-tpm)."
+warn "greetd has no TPM wallet token step; face-only KWallet unlock needs the held opt-in install-howdy-kwallet-tpm.py."
 ok "Done. Fully log out and back in for greetd/session PAM to apply."

@@ -19,10 +19,12 @@ GUARDED = ROOT / "home/.config/DankMaterialShell/shell-patches/guarded"
 
 # Each supported DMS version has its own reviewed patches and source hashes.
 VERSION_PATCHES = {
-    "v2.1.2": (GUARDED / "launcher-text-bounds-2.1.patch", GUARDED / "clipboard-history-text-bounds-2.1.patch"),
+    "v2.1.2": (GUARDED / "launcher-text-bounds-2.1.patch", GUARDED / "clipboard-history-text-bounds-2.1.patch",
+               GUARDED / "howdy-lock-2.1.patch"),
 }
 VERSION_FILES = {
     "v2.1.2": {
+        Path("Modules/Lock/Pam.qml"): "8af68f3011e5ddd4a369a6a9da82b2ea03e1ffb93f9e39e81ce2f08fbdd8ae50",
         Path("Modals/Clipboard/ClipboardEntry.qml"): "1afbf598bc440460098df744a89874aa0f93d18e3e1b89151cd4880bbad11433",
         Path("Modals/DLauncherV2/TileItem.qml"): "6679c676251188b12e93b513738f0ed450348445b1f456f81d3a775f31e772d7",
         Path("Modals/DLauncherV2/Components/LauncherRow.qml"): "b0cc430c1a42ce99e100a2a34be1febacdbf144209aab7265204de752ad22247",
