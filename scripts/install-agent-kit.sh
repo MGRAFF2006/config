@@ -2,16 +2,37 @@
 # Symlink shared instructions and skills; leave authentication and runtime state local.
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# The trailing "." keeps a newline at the end of the checkout path visible.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P && printf .)"
+repo_root="${repo_root%$'\n.'}"
 agent_home="${AGENT_KIT_HOME:-$HOME}"
 codex_root="${CODEX_HOME:-$agent_home/.codex}"
 config_root="${XDG_CONFIG_HOME:-$agent_home/.config}"
+backup_base="$agent_home/.local/share/agent-kit-backups"
 mode="${1:-install}"
 case "$mode" in
   install|--dry-run|--check) ;;
   *) echo "Usage: $0 [--dry-run|--check]" >&2; exit 2 ;;
 esac
 [[ $# -le 1 ]] || { echo "Expected at most one argument" >&2; exit 2; }
+
+# Refuse unusual roots before any change instead of handling them. Command
+# substitutions such as dirname drop trailing newlines, so a guard could check
+# a sibling path.
+for root in "$repo_root" "$agent_home" "$codex_root" "$config_root"; do
+  if [[ "$root" == *$'\n'* ]]; then
+    echo "Refusing a path that contains a newline: ${root@Q}" >&2
+    exit 1
+  fi
+done
+# Backups must stay in one real directory for the whole run. Through a link,
+# replacing a managed link later in the run could redirect them.
+for path in "$agent_home/.local" "$agent_home/.local/share" "$backup_base"; do
+  if [[ -L "$path" ]]; then
+    echo "Refusing a symlinked backup directory: $path" >&2
+    exit 1
+  fi
+done
 
 backup_root=""
 failures=0
@@ -24,16 +45,43 @@ guard_destination() {
   fi
 }
 
+backup_name_is_contained() {
+  local rest="$1" path="$backup_root" part
+  while [[ -n "$rest" ]]; do
+    part="${rest%%/*}"
+    [[ "$rest" == */* ]] && rest="${rest#*/}" || rest=""
+    case "$part" in ""|.|..) return 1 ;; esac
+    path="$path/$part"
+    if [[ -n "$rest" ]]; then
+      if [[ -L "$path" ]] || { [[ -e "$path" ]] && [[ ! -d "$path" ]]; }; then return 1; fi
+    fi
+  done
+  [[ ! -e "$path" && ! -L "$path" ]]
+}
+
 backup_path() {
   local dst="$1" relative
   guard_destination "$dst"
   if [[ -z "$backup_root" ]]; then
-    mkdir -p -- "$agent_home/.local/share/agent-kit-backups"
-    backup_root="$(mktemp -d "$agent_home/.local/share/agent-kit-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+    # A home inside the checkout must not receive local files as backups.
+    guard_destination "$backup_base/new-backup"
+    mkdir -p -- "$backup_base"
+    backup_root="$(mktemp -d "$backup_base/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
   fi
   relative="${dst#"$agent_home"/}"
   [[ "$relative" != "$dst" ]] || relative="external$dst"
-  mkdir -p -- "$(dirname -- "$backup_root/$relative")"
+  # Configured roots may be relative or contain `..` and symlinks, and earlier
+  # backups in this run may be symlinks. Keep the readable path only when it
+  # stays a fresh entry below real directories of this run's backup directory.
+  if ! backup_name_is_contained "$relative"; then
+    local extra=1
+    while [[ -e "$backup_root/other-$extra" || -L "$backup_root/other-$extra" ]]; do
+      extra=$((extra + 1))
+    done
+    relative="other-$extra/${dst##*/}"
+    [[ "$relative" != "other-$extra/" && "$relative" != "other-$extra/." && "$relative" != "other-$extra/.." ]] || relative="other-$extra/entry"
+  fi
+  [[ "$relative" != */* ]] || mkdir -p -- "$backup_root/${relative%/*}"
   mv -- "$dst" "$backup_root/$relative"
   echo "BACKUP $dst -> $backup_root/$relative"
 }

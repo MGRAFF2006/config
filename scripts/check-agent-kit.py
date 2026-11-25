@@ -114,10 +114,10 @@ def main():
         env.pop("CODEX_HOME", None)
         env.pop("XDG_CONFIG_HOME", None)
 
-        def run(*arguments, expected=0):
+        def run(*arguments, expected=0, cwd=None):
             result = subprocess.run(
                 ["bash", str(scripts / source.name), *arguments],
-                env=env, capture_output=True, text=True,
+                env=env, capture_output=True, text=True, cwd=cwd,
             )
             assert result.returncode == expected, result.stdout + result.stderr
             return result
@@ -205,7 +205,128 @@ def main():
         result = run(expected=1)
         assert "inside the source repo" in result.stderr
         assert (agent / "AGENTS.md").read_bytes() == original_root
-    print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates and readiness checks")
+        # A backup directory linked into the checkout must not receive local files.
+        linked_backups = root / "linked backups home"
+        (linked_backups / ".local/share").mkdir(parents=True)
+        (linked_backups / ".local/share/agent-kit-backups").symlink_to(agent, target_is_directory=True)
+        (linked_backups / "AGENTS.md").write_text("Keep local instructions\n")
+        env["AGENT_KIT_HOME"] = str(linked_backups)
+        source_entries = sorted(path.name for path in agent.iterdir())
+        result = run(expected=1)
+        assert "symlinked backup directory" in result.stderr
+        assert sorted(path.name for path in agent.iterdir()) == source_entries
+        assert (linked_backups / "AGENTS.md").read_text() == "Keep local instructions\n"
+        # A relative Codex root outside the home is backed up inside the backup directory.
+        env["AGENT_KIT_HOME"] = str(home)
+        deep = root / "a/b/c"
+        deep.mkdir(parents=True)
+        external = root / "relative codex"
+        external.mkdir()
+        (external / "AGENTS.md").write_text("Keep external instructions\n")
+        env["CODEX_HOME"] = "../../../relative codex"
+        run(cwd=deep)
+        assert (external / "AGENTS.md").resolve() == agent / "AGENTS.md"
+        saved = home / ".local/share/agent-kit-backups"
+        kept = [path for path in saved.glob("*/**/AGENTS.md")
+                if not path.is_symlink() and path.read_text() == "Keep external instructions\n"]
+        assert len(kept) == 1 and kept[0].resolve().is_relative_to(saved.resolve())
+        assert not any(path.name == "external.." for path in root.rglob("external.."))
+        # A root through a symlink and `..` follows the filesystem, not lexical
+        # normalization: aliases/current/.. is intended/, not aliases/.
+        def saved_texts(base):
+            return sorted(path.read_text() for path in base.glob(".local/share/agent-kit-backups/*/**/AGENTS.md")
+                          if path.is_file() and not path.is_symlink())
+        (root / "intended/profile").mkdir(parents=True)
+        (root / "intended/config").mkdir()
+        (root / "aliases").mkdir()
+        (root / "aliases/current").symlink_to(root / "intended/profile", target_is_directory=True)
+        (root / "aliases/config").mkdir()
+        (root / "aliases/config/AGENTS.md").write_text("Unrelated file\n")
+        (root / "intended/config/AGENTS.md").write_text("Old intended file\n")
+        env["CODEX_HOME"] = str(root / "aliases/current/../config")
+        run()
+        assert (root / "intended/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert (root / "aliases/config/AGENTS.md").read_text() == "Unrelated file\n"
+        assert "Old intended file\n" in saved_texts(home)
+        # Two live files whose backup names coincide must both be kept. Here the
+        # home itself is aliases/config, the lexical spelling of the Codex root.
+        (root / "intended/config/AGENTS.md").unlink()
+        (root / "intended/config/AGENTS.md").write_text("Old codex file\n")
+        (root / "aliases/config/AGENTS.md").write_text("Old home file\n")
+        env["AGENT_KIT_HOME"] = str(root / "aliases/config")
+        run()
+        assert (root / "aliases/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert (root / "intended/config/AGENTS.md").resolve() == agent / "AGENTS.md"
+        assert saved_texts(root / "aliases/config") == ["Old codex file\n", "Old home file\n"]
+        # A legacy skill-root link archived earlier in the run must not become
+        # the parent of a later backup and redirect it into the checkout.
+        skill_home = root / "skill alias home"
+        (skill_home / ".claude").mkdir(parents=True)
+        (skill_home / ".claude/skills").symlink_to(agent / "skills", target_is_directory=True)
+        (skill_home / "current").symlink_to(root / "intended/profile", target_is_directory=True)
+        (root / "intended/.claude/skills").mkdir(parents=True)
+        (root / "intended/.claude/skills/AGENTS.md").write_text("Old skill-path codex file\n")
+        (root / "out").mkdir()
+        env["AGENT_KIT_HOME"] = str(skill_home)
+        env["CODEX_HOME"] = str(root / "out/../skill alias home/current/../.claude/skills")
+        source_entries = sorted(path.name for path in (agent / "skills").iterdir())
+        run()
+        assert sorted(path.name for path in (agent / "skills").iterdir()) == source_entries
+        assert "Old skill-path codex file\n" in saved_texts(skill_home)
+        env["AGENT_KIT_HOME"] = str(home)
+        # Unusual roots are refused before any change, in preview and install.
+        def snapshot(*bases):
+            state = {}
+            for base in bases:
+                for path in [base, *base.rglob("*")]:
+                    state[path] = (os.readlink(path) if path.is_symlink()
+                                   else path.read_bytes() if path.is_file() else "directory")
+            return state
+
+        def refused(message, *bases, script=scripts / source.name):
+            before = snapshot(*bases)
+            for arguments in (["--dry-run"], []):
+                result = subprocess.run(["bash", str(script), *arguments],
+                                        env=env, capture_output=True, text=True)
+                assert result.returncode == 1, result.stdout + result.stderr
+                assert message in result.stderr, result.stderr
+                assert snapshot(*bases) == before, f"Refused run changed files: {message}"
+
+        # A backup directory reached through a link can change during the run:
+        # here ~/.agents/skills is replaced with a link into the checkout, so
+        # later backups would follow it into agent/skills.
+        for linked in (".local/share/agent-kit-backups", ".local/share"):
+            moving = root / f"moving backups {linked.count('/')}"
+            local_skills = moving / "local skills"
+            local_skills.mkdir(parents=True)
+            (moving / ".agents").mkdir()
+            (moving / ".agents/skills").symlink_to(local_skills, target_is_directory=True)
+            (moving / linked).parent.mkdir(parents=True, exist_ok=True)
+            (moving / linked).symlink_to(moving / ".agents/skills", target_is_directory=True)
+            (moving / "AGENTS.md").write_text("Keep local instructions\n")
+            (moving / ".claude/skills/example").mkdir(parents=True)
+            (moving / ".claude/skills/example/LOCAL.md").write_text("Keep local skill\n")
+            env["AGENT_KIT_HOME"] = str(moving)
+            refused("symlinked backup directory", moving, agent)
+        # Command substitutions drop trailing newlines, so a root ending in one
+        # can be checked under a sibling's name. A Codex root `codex\n` that
+        # links to agent/ would let the guard check `codex` instead.
+        env["AGENT_KIT_HOME"] = str(home)
+        (root / "codex\n").symlink_to(agent, target_is_directory=True)
+        env["CODEX_HOME"] = str(root / "codex\n")
+        refused("newline", home, agent)
+        env.pop("CODEX_HOME")
+        newline_home = root / "newline home\n"
+        newline_home.mkdir()
+        (root / "newline home").mkdir()
+        env["AGENT_KIT_HOME"] = str(newline_home)
+        refused("newline", newline_home, root / "newline home")
+        env["AGENT_KIT_HOME"] = str(home)
+        # A checkout ending in a newline would take sources from a sibling checkout.
+        newline_repo = root / "repo with spaces\n"
+        shutil.copytree(repo, newline_repo, symlinks=True)
+        refused("newline", home, repo, newline_repo, script=newline_repo / "scripts" / source.name)
+    print("PASS: provenance coverage, catalogue aliases, local file links, dry run, backups, idempotency, migration, skill updates, linked backup and relative-root safety, unusual-root refusal, and readiness checks")
 
 
 if __name__ == "__main__":
