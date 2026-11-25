@@ -265,8 +265,11 @@ def write_atomically(path, data, original):
     """Replace the file as DMS itself saves it (QSaveFile): a temporary file in the
     same directory, flushed to disk, then renamed over it. Mode and owner are
     kept; a symlink keeps pointing at it. If the file no longer holds
-    `original` (DMS saved meanwhile), nothing is replaced. WriteError.replaced
-    says whether the rename happened, i.e. whether the new settings are in place."""
+    `original` (DMS saved meanwhile), nothing is replaced. DMS does not lock
+    the file, so a save between that comparison and the rename can still be
+    overwritten; the comparison only narrows that window to the rename itself.
+    WriteError.replaced says whether the rename happened, i.e. whether the new
+    settings are in place."""
     target = Path(os.path.realpath(path))
     try:
         status = target.stat()
