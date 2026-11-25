@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Enroll a TPM-protected KWallet password and install the managed greetd stack.
+"""Enroll a TPM-protected KWallet password and add its token step to greetd.
+
+This is the only way the token step reaches greetd: routine PAM maintenance
+(install-pam-keyring-howdy.sh) installs greetd without it. --apply is held
+until boot and storage protection is verified (see the howdy-tpm README) and
+refuses without --boot-protection-verified.
 
 Only encrypted credentials are saved. Existing wallet/password authentication
 is unchanged. This does not restart the display manager or the desktop.
@@ -7,6 +12,7 @@ is unchanged. This does not restart the display manager or the desktop.
 
 import argparse
 from datetime import datetime
+import fcntl
 import getpass
 import hmac
 import os
@@ -22,6 +28,10 @@ STORE = Path("/etc/howdy-tpm")
 PAM = Path("/etc/pam.d/greetd")
 MODULE = Path("/usr/lib/security/pam_howdy_tpm.so")
 MAX_PASSWORD = 4096
+HOLD = ("The TPM wallet handoff is held until encrypted storage, Secure Boot and "
+        "off-device recovery are verified (#39, agent/fleet/LAPTOP-PROTECTION.md): until then a "
+        "modified OS booted on this laptop can recover the sealed password. Pass "
+        "--boot-protection-verified only once they are.")
 
 
 def command(arguments, **kwargs):
@@ -98,8 +108,34 @@ def seal(password, target, name):
         temporary.unlink(missing_ok=True)
 
 
+def token_stack(base, user, target, name):
+    """The managed greetd stack with the token supplier inserted directly after
+    its pam_deny line, which only success of every earlier auth step passes,
+    and directly before pam_kwallet5, which reads the supplied token."""
+    lines = base.decode().splitlines(keepends=True)
+    words = [line.split() for line in lines]
+    deny = [index for index, line in enumerate(words) if line == ["auth", "requisite", "pam_deny.so"]]
+    if len(deny) != 1 or words[deny[0] + 1:deny[0] + 2] != [["-auth", "optional", "pam_kwallet5.so"]]:
+        raise ValueError("Managed greetd stack has no single pam_deny line directly before pam_kwallet5")
+    supplier = (f"-auth      optional                     pam_howdy_tpm.so user={user} service=greetd "
+                f"cred={target} name={name}\n")
+    return "".join(lines[:deny[0] + 1] + [supplier] + lines[deny[0] + 1:]).encode()
+
+
 def enroll(password, target, name, source, backup):
-    """Replace the credential, then greetd PAM; undo only what was replaced."""
+    """Replace the credential, then greetd PAM; undo only what was replaced.
+    An exclusive lock on the credential directory serializes enrollments from
+    the backup through replacement or rollback, so a failing enrollment never
+    restores a credential that an overlapping one has replaced since."""
+    lock = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        replace_locked(password, target, name, source, backup)
+    finally:
+        os.close(lock)
+
+
+def replace_locked(password, target, name, source, backup):
     backup.mkdir(parents=True, mode=0o700)
     # Preserve the old credential and PAM before either replacement.
     shutil.copy2(PAM, backup / PAM.name)
@@ -129,19 +165,24 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--check", action="store_true")
+    parser.add_argument("--boot-protection-verified", action="store_true",
+                        help="Required with --apply: encrypted storage, Secure Boot and off-device "
+                             "recovery are verified")
     args = parser.parse_args()
+    if args.apply and not args.boot_protection_verified:
+        parser.error(HOLD)
     account = pwd.getpwnam(args.user)
     if account.pw_uid == 0:
         parser.error("Select the desktop account with --user")
-    source = (ROOT / "system/pam.d/greetd").read_bytes()
     target = STORE / f"{account.pw_name}.cred"
     name = f"howdy-kwallet-{account.pw_name}"
-    expected = f"pam_howdy_tpm.so user={account.pw_name} service=greetd cred={target} name={name}"
-    if expected.encode() not in source:
-        parser.error("Managed greetd stack does not match the requested account/credential")
+    source = token_stack((ROOT / "system/pam.d/greetd").read_bytes(), account.pw_name, target, name)
     if not args.apply and not args.check:
-        print(f"Plan: enroll host+TPM2 credential {target}, bound to PCR 7; install {PAM}")
-        print("Requires the local howdy-tpm package. Use --apply; no services are restarted.")
+        print(f"Plan: enroll host+TPM2 credential {target}, bound to PCR 7; install {PAM} "
+              "with the token step")
+        print("Requires the local howdy-tpm package. Use --apply --boot-protection-verified; "
+              "no services are restarted.")
+        print(f"Hold: {HOLD}")
         return
     if os.geteuid() != 0:
         parser.error("Run --apply/--check through sudo")
@@ -153,8 +194,9 @@ def main():
         if not decrypt(target, name):
             raise ValueError("The enrolled credential is empty")
         if PAM.read_bytes() != source:
-            raise ValueError("Live greetd PAM differs from the managed source")
-        print("PASS: account-bound credential unseals; installed greetd matches the source")
+            raise ValueError("Live greetd PAM differs from the managed source with the token step "
+                             "(routine PAM maintenance removes it; re-enroll to restore it)")
+        print("PASS: account-bound credential unseals; installed greetd matches the source with the token step")
         return
 
     os.umask(0o077)

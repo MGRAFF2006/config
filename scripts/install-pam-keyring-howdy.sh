@@ -129,5 +129,5 @@ fi
 
 ok "PAM stacks updated (backups: *.backup-${stamp})"
 warn "Wallet unlock on typed password requires kdewallet password == login password."
-warn "Face-only KWallet unlock requires separate TPM enrollment via install-howdy-kwallet-tpm.py."
+warn "greetd has no TPM wallet token step; face-only KWallet unlock needs the held opt-in install-howdy-kwallet-tpm.py."
 ok "Done. Fully log out and back in for greetd/session PAM to apply."

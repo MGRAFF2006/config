@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from unittest.mock import patch
 
@@ -191,25 +192,96 @@ def check_enrollment(enrollment, root):
     print("PASS: enrollment leaves PAM untouched on seal failure and restores only replaced files")
 
 
-def check_token_scope():
+def check_concurrent_enrollment(enrollment, root):
+    """A failing enrollment must not roll back a credential that an overlapping,
+    successful enrollment installed in the meantime."""
+    pam = root / "concurrent/pam.d/greetd"
+    store = root / "concurrent/howdy-tpm"
+    pam.parent.mkdir(parents=True)
+    store.mkdir(mode=0o700)
+    pam.write_bytes(b"old managed pam\n")
+    target = store / "user.cred"
+    target.write_bytes(b"sealed:old-dummy-password")
+    target.chmod(0o600)
+    first_at_pam, release_first = threading.Event(), threading.Event()
+    real_install = enrollment.atomic_install
+
+    def install(content, path, mode):
+        if path == pam and content == b"first pam\n":
+            first_at_pam.set()
+            release_first.wait(10)
+            raise OSError("simulated PAM write failure")
+        return real_install(content, path, mode)
+
+    def fake_command(arguments, **kwargs):
+        Path(arguments[-1]).write_bytes(b"sealed:" + kwargs["input"])
+        return subprocess.CompletedProcess(arguments, 0, b"", b"")
+
+    results = {}
+
+    def enroll(label):
+        try:
+            enrollment.enroll(label.encode(), target, "test", f"{label} pam\n".encode(), root / "concurrent/backups" / label)
+        except OSError:
+            results[label] = "failed"
+        else:
+            results[label] = "ok"
+
+    with patch.object(enrollment, "PAM", pam), patch.object(enrollment, "command", fake_command), \
+            patch.object(enrollment, "decrypt", lambda path, name: Path(path).read_bytes().removeprefix(b"sealed:")), \
+            patch.object(enrollment, "atomic_install", install):
+        first = threading.Thread(target=enroll, args=("first",))
+        first.start()
+        assert first_at_pam.wait(10), "first enrollment never reached its PAM step"
+        second = threading.Thread(target=enroll, args=("second",))
+        second.start()
+        second.join(1)  # Without serialization the second enrollment completes here.
+        release_first.set()
+        first.join(10)
+        second.join(10)
+    assert results == {"first": "failed", "second": "ok"}, results
+    assert target.read_bytes() == b"sealed:second", f"Overlapping enrollment lost: {target.read_bytes()!r}"
+    assert pam.read_bytes() == b"second pam\n"
+    print("PASS: enrollments are serialized; a failing one cannot undo an overlapping successful one")
+
+
+def check_token_scope(enrollment):
     # The unsealed wallet password becomes PAM_AUTHTOK; any stack that loads the
     # module after a face match would hand that password to its later modules.
-    # Only greetd, after its own successful authentication, may use it.
+    # Routine PAM maintenance installs system/pam.d as it is, so no managed file
+    # may load it; only the held opt-in adds it to greetd.
     users = sorted(path.name for path in (ROOT / "system/pam.d").iterdir()
                    if "pam_howdy_tpm" in path.read_text())
-    assert users == ["greetd"], f"pam_howdy_tpm outside greetd: {users}"
-    print("PASS: only the managed greetd stack loads the TPM token module (not sudo, polkit-1 or the lock)")
+    assert users == [], f"Routine PAM maintenance would install pam_howdy_tpm: {users}"
+    base = (ROOT / "system/pam.d/greetd").read_bytes()
+    stack = enrollment.token_stack(base, "someone", Path("/etc/howdy-tpm/someone.cred"), "howdy-kwallet-someone")
+    added = [line for line in stack.decode().splitlines() if line not in base.decode().splitlines()]
+    assert len(added) == 1 and added[0].split()[2:] == [
+        "pam_howdy_tpm.so", "user=someone", "service=greetd", "cred=/etc/howdy-tpm/someone.cred",
+        "name=howdy-kwallet-someone"], added
+    print("PASS: no managed PAM file loads the TPM token module; only the opt-in adds it to greetd")
+
+
+def check_hold():
+    """--apply refuses without the explicit acknowledgment, before any lookup or write."""
+    result = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/install-howdy-kwallet-tpm.py"),
+                             "--user", "nobody-such-account", "--apply"], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 2 and "--boot-protection-verified" in result.stderr, result
+    assert "held until" in result.stderr, result.stderr
+    print("PASS: --apply is held without --boot-protection-verified")
 
 
 def main():
     if os.geteuid() != 0:
         os.execvp("unshare", ["unshare", "-r", sys.executable, *sys.argv])
-    check_token_scope()
     enrollment = load_installer()
+    check_token_scope(enrollment)
+    check_hold()
     with tempfile.TemporaryDirectory(prefix="howdy-kwallet-enroll-check-") as directory:
         root = Path(directory)
         check_secret_file(enrollment, root)
         check_enrollment(enrollment, root)
+        check_concurrent_enrollment(enrollment, root)
 
 
 if __name__ == "__main__":
