@@ -26,8 +26,9 @@ for required in greetd sddm dankshell sudo polkit-1; do
 done
 
 # Refuse before changing anything when the DMS settings cannot be switched to
-# the managed lock stack safely (e.g. DMS requires a security key as a second
-# factor, which an externally managed lock would skip). 3 = no settings yet.
+# the managed lock stack safely: any DMS security-key setting that is not
+# clearly off (an externally managed lock would skip the key), or an input the
+# check cannot read. 3 = no settings yet.
 check_dms_settings() {
   local status=0
   python3 "$repo_root/scripts/configure-dms-lock-pam.py" --check "$1" || status=$?
@@ -79,10 +80,10 @@ fi
 
 # Stop DMS from rewriting the greeter PAM (would drop Howdy) and select the
 # managed lock stack in the settings file DMS 2.1 reads. This runs before any
-# PAM or Howdy file changes, so a failed settings write leaves them all as they
-# were (the editor replaces the settings file atomically). A later failure
-# leaves the settings pointing at /etc/pam.d/dankshell with whatever content it
-# had; PAM files are not rolled back, and the .backup-* copies stay.
+# PAM or Howdy file changes, so a failed settings step leaves them all as they
+# were; the editor says whether settings.json itself was replaced. A later
+# failure leaves the settings pointing at /etc/pam.d/dankshell with whatever
+# content it had; PAM files are not rolled back, and the .backup-* copies stay.
 if [[ -z "$dms_config_home" ]]; then
   warn "Unknown invoking user; run configure-dms-lock-pam.py ~/.config as that user"
 else
@@ -91,7 +92,7 @@ else
   if [[ "$dms_status" -eq 3 ]]; then
     warn "DMS greeter/lock PAM settings not updated"
   elif [[ "$dms_status" -ne 0 ]]; then
-    printf 'DMS settings were not updated (see above); no PAM or Howdy file was changed\n' >&2
+    printf 'DMS settings step failed (see above); no PAM or Howdy file was changed\n' >&2
     exit 1
   fi
 fi
