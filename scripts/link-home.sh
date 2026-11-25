@@ -13,8 +13,9 @@ canonical_path() {
 canonical_path "$(dirname -- "${BASH_SOURCE[0]}")/.."; repo_root="$REPLY"
 canonical_path "$repo_root/home"; home_root="$REPLY"
 canonical_path "${CONFIG_LINK_HOME:-$HOME}"; target_home="$REPLY"
-# The SSH and agent-kit helpers cannot keep such paths exact; refuse them.
-for root in "$repo_root" "$target_home"; do
+# The SSH and agent-kit helpers cannot keep such paths exact; refuse them,
+# whether the newline is in the configured spelling or the resolved path.
+for root in "$repo_root" "$target_home" "${BASH_SOURCE[0]}" "${CONFIG_LINK_HOME:-$HOME}"; do
   if [[ "$root" == *$'\n'* ]]; then
     echo "Refusing a path that contains a newline: ${root@Q}" >&2
     exit 1
@@ -159,6 +160,9 @@ link_file() {
       ensure_local_destination "$target_home/.local/share/config-link-backups/new-backup"
       mkdir -p -- "$target_home/.local/share/config-link-backups"
       backup_root="$(mktemp -d "$target_home/.local/share/config-link-backups/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+      # Keep the physical path: replacing a link that the backup path passes
+      # through must not redirect later backups (e.g. into the checkout).
+      canonical_path "$backup_root"; backup_root="$REPLY"
     fi
     mkdir -p -- "$backup_root/$(dirname -- "$rel")"
     mv -- "$dst" "$backup_root/$rel"
