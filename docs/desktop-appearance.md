@@ -7,8 +7,7 @@ quickly with tiny scale/position changes, short fades and no spring overshoot.
 Workspace transitions combine a short slide with a fade, so outgoing windows
 fade away smoothly when the next workspace is empty.
 Hover/press feedback remains enabled. Acrylic blur, shadows and a narrow inner
-glow add depth without continuous animation. Volume/brightness level smoothing
-is provided separately through a user-local DMS slider override.
+glow add depth without continuous animation.
 
 DMS's dynamic theme derives the shell and generated app colors from the
 wallpaper. The compositor keeps generated colors instead of overriding them

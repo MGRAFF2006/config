@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage guarded DMS refinements: sliders, quick-access pages and launcher text."""
+"""Stage guarded DMS UI refinements: launcher and clipboard-history text bounds."""
 
 import argparse
 import hashlib
@@ -14,26 +14,15 @@ import tempfile
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SLIDER = Path("DCommon/Widgets/DSlider.qml")
-SUPPORTED_VERSION = "v2.0.0"
-SUPPORTED_SLIDER = "0888dce6b3c9c1e7b748ee47470bd978700a8878793f071bf0641ccc63cc3adb"
-PATCH = ROOT / "home/.config/DankMaterialShell/shell-patches/guarded/smooth-slider-level.patch"
-PATCHES = (PATCH, PATCH.with_name("control-center-pages.patch"), PATCH.with_name("launcher-text-bounds.patch"))
-SUPPORTED_FILES = {
-    SLIDER: SUPPORTED_SLIDER,
-    Path("Modules/ControlCenter/Components/CcDetailPage.qml"): "dcf3d2e82ccdd5920b11d7b245d3b3b0c1876326b7e4a431fbb0753816e328d5",
-    Path("Modules/ControlCenter/ControlCenterContent.qml"): "cd62fce37d92706a1f9db61edf1ba65e4af6071a72b59a8114fcedc82c3fe6ce",
-    Path("Modals/DLauncherV2/Components/LauncherRow.qml"): "0c9498f52c259fc02834d713eb326995302d2c49681304ffedfb4057b7b48b56",
-}
+GUARDED = ROOT / "home/.config/DankMaterialShell/shell-patches/guarded"
 
 
-# 2.1 changed slider/control-center internals; keep its text fixes separate.
+# Each supported DMS version has its own reviewed patches and source hashes.
 VERSION_PATCHES = {
-    SUPPORTED_VERSION: PATCHES,
-    "v2.1.2": (PATCH.with_name("launcher-text-bounds-2.1.patch"), PATCH.with_name("clipboard-history-text-bounds-2.1.patch"), PATCH.with_name("howdy-lock-2.1.patch")),
+    "v2.1.2": (GUARDED / "launcher-text-bounds-2.1.patch", GUARDED / "clipboard-history-text-bounds-2.1.patch",
+               GUARDED / "howdy-lock-2.1.patch"),
 }
 VERSION_FILES = {
-    SUPPORTED_VERSION: SUPPORTED_FILES,
     "v2.1.2": {
         Path("Modules/Lock/Pam.qml"): "8af68f3011e5ddd4a369a6a9da82b2ea03e1ffb93f9e39e81ce2f08fbdd8ae50",
         Path("Modals/Clipboard/ClipboardEntry.qml"): "1afbf598bc440460098df744a89874aa0f93d18e3e1b89151cd4880bbad11433",
@@ -49,11 +38,11 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def patch_digest(version=SUPPORTED_VERSION):
+def patch_digest(version):
     return hashlib.sha256(b"".join(bytes.fromhex(digest(path)) for path in VERSION_PATCHES[version])).hexdigest()
 
 
-def patched_files(root, version=SUPPORTED_VERSION):
+def patched_files(root, version):
     return {str(path): digest(root / path) for path in VERSION_FILES[version]}
 
 
