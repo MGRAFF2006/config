@@ -1,0 +1,37 @@
+--- a/DCommon/Widgets/DMonthGrid.qml
++++ b/DCommon/Widgets/DMonthGrid.qml
+@@ -181,6 +181,7 @@
+             border.color: Style.primary
+ 
+             StyledText {
++                id: dayLabel
+                 anchors.top: parent.top
+                 anchors.topMargin: Style.spacingXS
+                 anchors.horizontalCenter: parent.horizontalCenter
+@@ -202,7 +203,8 @@
+             Row {
+                 anchors.bottom: parent.bottom
+                 anchors.horizontalCenter: parent.horizontalCenter
+-                anchors.bottomMargin: Style.spacingXS
++                anchors.bottomMargin: Style.spacingXXS
++                height: extraLabel.visible ? extraLabel.implicitHeight : Style.spacingXS
+                 spacing: Style.spacingXXS
+                 visible: cell.dotColors.length > 0
+ 
+@@ -221,12 +223,14 @@
+                 }
+ 
+                 StyledText {
++                    id: extraLabel
+                     anchors.verticalCenter: parent.verticalCenter
+                     text: "+" + cell.extraCount
+-                    font.pixelSize: Style.fontSizeSmall
++                    font.pixelSize: Style.fontSizeXSmall
+                     font.weight: Style.fontWeightMedium
+                     color: cell.isSelected ? Style.onPrimary : Style.primary
+-                    visible: cell.extraCount > 0
++                    // Short cells have no room under the day number; the day's event list still shows every event.
++                    visible: cell.extraCount > 0 && cell.height - Style.spacingXXS - implicitHeight >= dayLabel.y + dayLabel.height
+                 }
+             }
+ 

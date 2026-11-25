@@ -84,6 +84,26 @@ descenders, and the original previews must stay unchanged. `--evidence
 /absolute/path.png` saves a synthetic rendering. The check does not exercise
 the clipboard backend or touch the desktop clipboard.
 
+The 2.1.2 calendar patch keeps the Dash calendar's event dots and `+N` count
+below the day number. Upstream's `+N` label grows the dot row to a full text
+line, so in short cells (about 29-36 px, a small calendar card) it covered the
+day number. The dot row now keeps the dot height, the count uses the extra-small
+font, and the count appears only where it fits below the number; up to three
+dots always remain, and the day's event list still shows every event.
+`DMonthGrid.qml` is included in the source and launch fingerprints.
+
+```bash
+python3 scripts/check-dms-calendar-extra-events.py --source-dir PRISTINE_DMS_2.1.2_UI
+python3 scripts/check-dms-calendar-extra-events.py --source-dir PRISTINE_DMS_2.1.2_UI --unpatched  # reproduces the overlap
+```
+
+The check renders the actual month grid from 300x220 to 520x420 px at 100% and
+115% text scale with 0-12 synthetic events per day, and requires dots and
+counts to stay clear of the day number and inside their cell, with the count
+still shown in roomy cells. `--evidence /absolute/path.png` saves a rendering
+(`--evidence-phase 2` for roomy cells). As of 2026-11-25 upstream
+`dux-qml-common` still has the overlapping label.
+
 As of 2026-11-13 the upstream history renderer is identical to the installed
 2.1.2 renderer; the separate launcher fix has landed on upstream `master`.
 The history patch can be submitted independently against
@@ -102,6 +122,7 @@ python3 scripts/configure-dms-smooth-sliders.py --apply
 python3 scripts/check-dms-smooth-sliders.py
 python3 scripts/check-dms-launcher-text.py
 python3 scripts/check-dms-clipboard-history-text.py  # DMS 2.1.2 only
+python3 scripts/check-dms-calendar-extra-events.py  # DMS 2.1.2 only
 ```
 
 On DMS 2.0.0 only, also check the slider patch. On other versions `--ui` stops
