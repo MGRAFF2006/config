@@ -1,5 +1,40 @@
 # Laptop
 
+## Howdy login and lock — verified 2026-11-14
+
+The laptop's greetd and dankshell PAM stacks now try Howdy first, then password.
+DMS 2.1 explicitly selects `/etc/pam.d/dankshell` via `lockPamPath`; its
+externally-managed default otherwise selects the distro `login` stack. The
+guarded shell patch starts one face attempt when the secured screen wakes,
+retains password fallback and retries after display-off/sleep when no secret was
+typed. Sudo, camera configuration and enrolled faces are unchanged.
+
+The installed PAM files pass libpam control-flow checks for face success,
+password fallback, failed authentication and prerequisite guards. Fifteen
+headless checks of the production lock controller pass, including wake retry
+and its stalled-PAM watchdog. The staged controller is loaded in the current
+session; physical lock/unlock with the final settings remains untested.
+System-file backups: `/var/backups/howdy-login-lock-20261114-163020/`.
+Face-only login leaves the encrypted KWallet locked and can prompt separately.
+See [authentication setup](../../../docs/hyprland-dms.md#keyring--howdy).
+
+Review on 2026-11-24 found that this Howdy-first order lets a stalled camera
+block password login and that a manual lock with the display on could unlock
+at once. The repository now keeps both stacks password-first and the lock patch
+starts face authentication only after a wake or lock-screen input. Typing
+abandons a running face attempt, and the lock stack no longer accepts a blank
+Unix password (`nullok` removed). The installer now edits
+`~/.config/dms/settings.json`, which DMS 2.1 reads, and refuses when DMS
+requires a security key as a second factor.
+
+Interim live state since 2026-11-24 17:54 Berlin time (approved by Mathis): `greetd` and
+`dankshell` are password-only (the `pam_howdy` line removed), and the
+hand-added leading `auth sufficient pam_unix.so … likeauth nullok` line is gone
+from `system-auth`, which is back to the pambase order. Backups:
+`/etc/pam.d/{system-auth,greetd,dankshell}.backup-20261124-175457`. `sudo`
+still tries Howdy first (the managed file). Face unlock returns only when the
+installer and the lock patch staging are deliberately reapplied.
+
 ## Power and sleep — verified 2026-11-13
 
 DMS now dims the built-in panel to 20% after 2 minutes idle, turns displays off
