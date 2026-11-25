@@ -84,6 +84,16 @@ The AUR has since moved to tagged releases (`1:2026.47.7-1`). The recipe now
 targets `1:2026.47.7-1.1` with the Rust patch carried forward; that build has
 not been run or installed yet (2026-11-24).
 
+## PDFium AUR upgrade hold — verified 2026-11-09
+
+Pacman includes `/etc/pacman.d/pypdfium2-hold.conf` in its options, holding only
+`python-pypdfium2` at the working bundled 5.14.0-1 build. The AUR 5.15.1-1
+system-library dependency stops yay resolution without this hold. With it,
+yay reaches build selection; no upgrades were installed during verification.
+Import, a small PDF-page render and pacman's database check pass. This remains
+a workaround that defers updates to this package and its bundled PDFium.
+See [installation and recovery](../../../docs/pypdfium2-hold.md).
+
 ## Wispr overlay repair — verified 2026-11-05
 
 Local `wispr-flow-appimage` release 7 restores the normal popup canvas and
